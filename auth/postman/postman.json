@@ -1,0 +1,59 @@
+{
+  "info": {
+    "name": "Auth",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Auth API. Request OTP, Verify OTP."
+  },
+  "item": [
+    {
+      "name": "Request OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone_number\": \"\"\n}"
+        },
+        "url": "{{baseUrl}}/api/auth/request-otp/",
+        "description": "Request OTP for the given phone number. In DEBUG mode, response includes debug_note."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\",\n  \"token\": \"\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Verify OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"\",\n  \"otp_code\": \"\"\n}"
+        },
+        "url": "{{baseUrl}}/api/auth/verify-otp/",
+        "description": "Verify OTP with token from request-otp and otp_code sent to user."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\",\n  \"data\": {\n    \"id\": 0,\n    \"username\": \"\",\n    \"email\": \"\",\n    \"first_name\": \"\",\n    \"last_name\": \"\",\n    \"phone_number\": \"\"\n  },\n  \"token\": \"\"\n}"
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8000"},
+    {"key": "token", "value": ""}
+  ]
+}

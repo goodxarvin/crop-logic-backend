@@ -1,0 +1,74 @@
+---
+alwaysApply: false
+---
+# Backend API Architecture & Postman
+
+## 1. URL / Routing Architecture
+
+- **Root (config/urls.py):** API mounts under `api/<app-prefix>/` via `include()`.
+  - Example: `path("api/auth/", include("auth.urls"))`, `path("api/sensor-hub/", include("sensor_hub.urls"))`.
+  - App prefix: kebab-case (e.g. `sensor-hub`).
+
+- **App URLs (each app’s urls.py):** Only endpoint definitions with `path()`.
+  - Same view can be used for several paths; distinguish by path or `kwargs` (e.g. `kwargs={"action": "active"}`).
+  - Order matters: more specific paths first (e.g. `active/`, `deactive/`), then path-param routes (e.g. `<uuid:uuid>/`), then base `""` for list.
+  - Example pattern:
+    - `path("active/", View.as_view(), kwargs={"action": "active"})`
+    - `path("deactive/", View.as_view(), kwargs={"action": "deactive"})`
+    - `path("<uuid:uuid>/", View.as_view(), name="...-detail")`
+    - `path("", View.as_view(), name="...-list")`
+
+- **Views:** One `APIView` per resource (or per flow, e.g. auth). Dispatch by HTTP method and optionally by `request.path` or `kwargs` (e.g. `uuid`, `action`). No business logic in views; orchestration only.
+
+---
+
+## 2. Postman Collection Layout
+
+- **Placement:** One collection per app: `<app_name>/postman/<collection_name>.json` (e.g. `sensor_hub/postman/sensor_hub.json`, `auth/postman/postman.json`).
+
+- **Structure:**
+  - `info`: `name`, `schema` (v2.1.0), optional `description`.
+  - `item`: array of requests (one per endpoint variant/method).
+  - `variable`: at least `baseUrl` (e.g. `http://localhost:8000`); add `token`, `uuid` etc. when needed.
+
+- **Request style:**
+  - One base URL per resource; multiple requests for different methods or path params (e.g. list vs `{{uuid}}/`).
+  - URL: `{{baseUrl}}/api/<app-prefix>/...` (e.g. `{{baseUrl}}/api/sensor-hub/`, `{{baseUrl}}/api/sensor-hub/{{uuid}}/`).
+  - Auth: where required, header `Authorization: Bearer {{token}}`.
+  - No random/dynamic values in body or response examples.
+
+---
+
+## 3. Postman Request Generator (when I give you routes)
+
+Your task is to take the API routes I provide and convert them into a valid Postman collection JSON (as above).
+
+ROUTE STYLE:
+- When routes are defined as a single URL with different HTTP methods, generate one base URL and multiple requests (one per method/variant). Use the same URL for all; use path params (e.g. `<uuid>/`) or query for GET detail vs list when applicable.
+
+RULES:
+
+1. For each route (or each method/variant on the same URL), generate:
+   - Name: A descriptive, concise name for the request based on the route and HTTP method.
+   - Method: The HTTP method (GET, POST, PUT, DELETE, etc.).
+   - URL: The route URL.
+   - Body: If the endpoint accepts input, provide a JSON body example with appropriate keys; otherwise, leave it empty.
+   - Response: Provide a sample JSON response in the following format:
+     - If the endpoint returns no data:
+       {
+         "status": "success"
+       }
+     - If the endpoint returns data:
+       {
+         "status": "success",
+         "data": {}
+       }
+   - All responses must use HTTP status 200.
+2. Do NOT generate random or dynamic values in the body or response.
+3. Output must be a valid Postman collection JSON structure:
+   - Include "info" with collection name.
+   - Include "item" array with all requests.
+4. Keep the JSON fully compatible with Postman import.
+5. Do NOT include explanations outside the JSON.
+
+Wait for me to provide the route definitions.

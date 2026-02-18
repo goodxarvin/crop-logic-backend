@@ -1,0 +1,96 @@
+---
+alwaysApply: true
+---
+
+## 2. Django App (Module) Naming
+
+| Item   | Convention | Example                    |
+|--------|------------|----------------------------|
+| App name | snake_case, **بدون** پسوند `_api` | `account`, `auth`, `sensor_hub` |
+
+- نام اپ‌ها را با `_api` تمام **نکنید**. مثلاً به‌جای `account_api` از `account` استفاده کنید.
+- برای ماژول‌های فقط API، همان نام دامنه کافی است (مثلاً `auth`، `account`).
+
+---
+
+## 3. Model and Database Field Naming
+
+| Item              | Convention              | Example                                      |
+|-------------------|-------------------------|----------------------------------------------|
+| Model             | PascalCase              | `UserProfile`                                |
+| Fields            | snake_case              | `first_name`, `email_address`                |
+| Boolean           | `is_` / `has_` + name   | `is_active`, `has_paid`                      |
+| Date/Time         | `created_at` / `updated_at` | `created_at`, `updated_at`               |
+| ForeignKey / M2M  | snake_case, often model name | `author = ForeignKey(UserProfile)`     |
+| Choices / Enum    | UPPER_SNAKE_CASE values | `role = CharField(choices=(("ADMIN","Admin"), ("USER","User")))` |
+
+---
+
+## 4. DRF Conventions
+
+- **Serializer:** Validation + data transformation. Use PascalCase names.
+- **Service layer:** All business logic lives here.
+- **View:** Orchestration only — call services and return responses. No business logic in views.
+- **URLs:** Define endpoints only. Use kebab-case for URL paths.
+
+---
+
+## 5. API Response Format
+
+همه پاسخ‌های API باید فیلد `code` را برگردانند؛ مقدار آن برابر **HTTP status code** درخواست است (مثلاً 200، 201، 400، 404).
+
+| فیلد  | توضیح                                  |
+|-------|----------------------------------------|
+| `code` | کد وضعیت HTTP (مثلاً 200، 404، 500)   |
+| `msg`  | پیام (مثلاً "success" برای 2xx)       |
+| `data` | دادهٔ برگشتی (اختیاری)                |
+
+مثال:
+```json
+{"code": 200, "msg": "success", "data": {...}}
+```
+
+---
+
+## 6. Simple Example: How the Layers Connect (users app)
+
+```python
+# models.py
+class UserProfile(models.Model):
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    email_address = models.EmailField(unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+# serializers.py
+class UserCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ["first_name", "last_name", "email_address"]
+
+
+# services.py
+def create_user(first_name, last_name, email_address):
+    return UserProfile.objects.create(
+        first_name=first_name,
+        last_name=last_name,
+        email_address=email_address,
+    )
+
+
+# views.py
+class UserCreateAPIView(APIView):
+    def post(self, request):
+        serializer = UserCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = create_user(**serializer.validated_data)
+        return Response({"code": 201, "msg": "success", "data": {"id": user.id}}, status=201)
+```
+
+- All names follow the conventions above.
+- Business logic is in `services.py`.
+- Serializer only validates and serializes.
+- View only orchestrates (calls service, returns response).

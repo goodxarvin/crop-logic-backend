@@ -1,0 +1,145 @@
+{
+  "info": {
+    "name": "Account",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Account API. GET list, GET by uuid (detail), POST add, PATCH update, DELETE delete, PATCH profile. Authenticated user required."
+  },
+  "item": [
+    {
+      "name": "Update profile",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"\",\n  \"last_name\": \"\",\n  \"email\": \"\"\n}"
+        },
+        "url": "{{baseUrl}}/api/account/profile/",
+        "description": "Update current user profile (first_name, last_name, email). Returns UpdateProfileResponse."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\",\n  \"data\": {\n    \"id\": 0,\n    \"username\": \"\",\n    \"email\": \"\",\n    \"first_name\": \"\",\n    \"last_name\": \"\",\n    \"phone_number\": \"\"\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "List accounts",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "url": "{{baseUrl}}/api/account/",
+        "description": "Get list of accounts. GET on base route."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\",\n  \"data\": {}\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get account detail (by uuid)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "url": "{{baseUrl}}/api/account/{{uuid}}/",
+        "description": "Get one account by uuid in path."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\",\n  \"data\": {}\n}"
+        }
+      ]
+    },
+    {
+      "name": "Add account",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"\",\n  \"last_name\": \"\",\n  \"phones\": []\n}"
+        },
+        "url": "{{baseUrl}}/api/account/",
+        "description": "Add a new account. POST on base route."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Update account",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"\",\n  \"last_name\": \"\",\n  \"phones\": []\n}"
+        },
+        "url": "{{baseUrl}}/api/account/{{uuid}}/",
+        "description": "Update account by uuid in path. PATCH."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Delete account",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "url": "{{baseUrl}}/api/account/{{uuid}}/",
+        "description": "Delete account by uuid in path."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\"\n}"
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8000"},
+    {"key": "token", "value": ""},
+    {"key": "uuid", "value": "550e8400-e29b-41d4-a716-446655440000"}
+  ]
+}
