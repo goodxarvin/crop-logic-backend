@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "auth.apps.AuthConfig",
     "account",
     "sensor_hub",
+    "dashboard",
     "rest_framework",
     "corsheaders",
 ]
