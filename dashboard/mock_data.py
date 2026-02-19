@@ -20,7 +20,7 @@ CONFIG = {
         "ndviRecommendations",
         "economic",
     ],
-    "enable_drag_reorder": True,
+    "enable_drag_reorder": False,
 }
 
 # 4.1 farmOverviewKpis
@@ -28,29 +28,29 @@ FARM_OVERVIEW_KPIS = {
     "kpis": [
         {
             "id": "farm_health_score",
-            "title": "Farm Health Score",
-            "subtitle": "AI Analysis",
+            "title": "امتیاز سلامت مزرعه",
+            "subtitle": "تحلیل هوشمند",
             "stats": "87%",
             "avatarColor": "success",
             "avatarIcon": "tabler-heartbeat",
-            "chipText": "Good",
+            "chipText": "خوب",
             "chipColor": "success",
         },
         {
             "id": "water_stress_index",
-            "title": "Water Stress Index",
-            "subtitle": "Current",
+            "title": "شاخص تنش آبی",
+            "subtitle": "فعلی",
             "stats": "12%",
             "avatarColor": "info",
             "avatarIcon": "tabler-droplet",
-            "chipText": "Low",
+            "chipText": "پایین",
             "chipColor": "success",
         },
         {
             "id": "disease_risk",
-            "title": "Disease Risk",
-            "subtitle": "Last 7 Days",
-            "stats": "Low",
+            "title": "ریسک بیماری",
+            "subtitle": "۷ روز اخیر",
+            "stats": "پایین",
             "avatarColor": "success",
             "avatarIcon": "tabler-bug",
             "chipText": "5%",
@@ -58,19 +58,19 @@ FARM_OVERVIEW_KPIS = {
         },
         {
             "id": "avg_soil_moisture",
-            "title": "Avg Soil Moisture",
-            "subtitle": "Field-wide",
+            "title": "میانگین رطوبت خاک",
+            "subtitle": "کل مزرعه",
             "stats": "65%",
             "avatarColor": "primary",
             "avatarIcon": "tabler-plant-2",
-            "chipText": "Optimal",
+            "chipText": "بهینه",
             "chipColor": "success",
         },
         {
             "id": "yield_prediction",
-            "title": "Yield Prediction",
-            "subtitle": "This Season",
-            "stats": "42 ton",
+            "title": "پیش‌بینی عملکرد",
+            "subtitle": "این فصل",
+            "stats": "42 تن",
             "avatarColor": "secondary",
             "avatarIcon": "tabler-chart-bar",
             "chipText": "+8%",
@@ -78,12 +78,12 @@ FARM_OVERVIEW_KPIS = {
         },
         {
             "id": "pest_risk",
-            "title": "Pest Risk",
-            "subtitle": "AI Forecast",
+            "title": "ریسک آفات",
+            "subtitle": "پیش‌بینی هوشمند",
             "stats": "15%",
             "avatarColor": "warning",
             "avatarIcon": "tabler-bug-off",
-            "chipText": "Monitor",
+            "chipText": "تحت نظر",
             "chipColor": "warning",
         },
     ]
@@ -91,14 +91,14 @@ FARM_OVERVIEW_KPIS = {
 
 # 4.2 farmWeatherCard
 FARM_WEATHER_CARD = {
-    "condition": "Clear",
+    "condition": "صاف",
     "temperature": 24,
     "unit": "°C",
     "humidity": 45,
     "windSpeed": 12,
     "windUnit": "km/h",
     "chartData": {
-        "labels": ["6am", "9am", "12pm", "3pm", "6pm", "9pm", "12am"],
+        "labels": ["۶ صبح", "۹ صبح", "۱۲ ظهر", "۳ بعدازظهر", "۶ عصر", "۹ شب", "۱۲ شب"],
         "series": [[18, 22, 26, 28, 25, 20, 18]],
     },
 }
@@ -109,19 +109,19 @@ FARM_ALERTS_TRACKER = {
     "radialBarValue": 30,
     "alertStats": [
         {
-            "title": "Water Shortage",
+            "title": "کمبود آب",
             "count": "2",
             "avatarColor": "error",
             "avatarIcon": "tabler-droplet-half-2",
         },
         {
-            "title": "Fungal Risk",
+            "title": "ریسک قارچی",
             "count": "1",
             "avatarColor": "warning",
             "avatarIcon": "tabler-mushroom",
         },
         {
-            "title": "Frost Alert",
+            "title": "هشدار یخبندان",
             "count": "0",
             "avatarColor": "info",
             "avatarIcon": "tabler-snowflake",
@@ -134,56 +134,56 @@ SENSOR_VALUES_LIST = {
     "sensors": [
         {
             "title": "28°C",
-            "subtitle": "Air Temperature",
+            "subtitle": "دمای هوا",
             "trendNumber": 2.1,
             "trend": "positive",
             "unit": "°C",
         },
         {
             "title": "24°C",
-            "subtitle": "Soil Temperature",
+            "subtitle": "دمای خاک",
             "trendNumber": -0.5,
             "trend": "negative",
             "unit": "°C",
         },
         {
             "title": "65%",
-            "subtitle": "Air Humidity",
+            "subtitle": "رطوبت هوا",
             "trendNumber": 3.2,
             "trend": "positive",
             "unit": "%",
         },
         {
             "title": "42%",
-            "subtitle": "Soil Moisture (10cm)",
+            "subtitle": "رطوبت خاک (۱۰ سانتی‌متر)",
             "trendNumber": -1.8,
             "trend": "negative",
             "unit": "%",
         },
         {
             "title": "6.8",
-            "subtitle": "Soil pH",
+            "subtitle": "pH خاک",
             "trendNumber": 0.2,
             "trend": "positive",
             "unit": "pH",
         },
         {
             "title": "1.2",
-            "subtitle": "EC (dS/m)",
+            "subtitle": "هدایت الکتریکی (dS/m)",
             "trendNumber": 0.1,
             "trend": "positive",
             "unit": "dS/m",
         },
         {
             "title": "850",
-            "subtitle": "Light Intensity (lux)",
+            "subtitle": "شدت نور (لوکس)",
             "trendNumber": 15.3,
             "trend": "positive",
             "unit": "lux",
         },
         {
             "title": "12",
-            "subtitle": "Wind Speed (km/h)",
+            "subtitle": "سرعت باد (کیلومتر/ساعت)",
             "trendNumber": -2.4,
             "trend": "negative",
             "unit": "km/h",
@@ -193,10 +193,10 @@ SENSOR_VALUES_LIST = {
 
 # 4.5 sensorRadarChart
 SENSOR_RADAR_CHART = {
-    "labels": ["Temp", "Humidity", "pH", "EC", "Light", "Wind"],
+    "labels": ["دما", "رطوبت", "pH", "هدایت الکتریکی", "نور", "باد"],
     "series": [
-        {"name": "Today", "data": [75, 65, 80, 70, 85, 60]},
-        {"name": "Ideal", "data": [80, 70, 75, 75, 90, 50]},
+        {"name": "امروز", "data": [75, 65, 80, 70, 85, 60]},
+        {"name": "ایده‌آل", "data": [80, 70, 75, 75, 90, 50]},
     ],
 }
 
@@ -205,10 +205,10 @@ SENSOR_COMPARISON_CHART = {
     "currentValue": 48,
     "vsLastWeek": "+5%",
     "vsLastWeekValue": 5,
-    "categories": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "categories": ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه", "شنبه", "یکشنبه"],
     "series": [
-        {"name": "Today", "data": [42, 45, 48, 52, 50, 48, 46]},
-        {"name": "Last Week", "data": [38, 40, 42, 45, 43, 40, 38]},
+        {"name": "امروز", "data": [42, 45, 48, 52, 50, 48, 46]},
+        {"name": "هفته قبل", "data": [38, 40, 42, 45, 43, 40, 38]},
     ],
 }
 
@@ -216,14 +216,14 @@ SENSOR_COMPARISON_CHART = {
 ANOMALY_DETECTION_CARD = {
     "anomalies": [
         {
-            "sensor": "Soil Moisture Z3",
+            "sensor": "رطوبت خاک زون ۳",
             "value": "38%",
             "expected": "45-65%",
             "deviation": "-12%",
             "severity": "warning",
         },
         {
-            "sensor": "pH Sector 2",
+            "sensor": "pH بخش ۲",
             "value": "5.2",
             "expected": "6.0-7.0",
             "deviation": "-0.8",
@@ -236,27 +236,27 @@ ANOMALY_DETECTION_CARD = {
 FARM_ALERTS_TIMELINE = {
     "alerts": [
         {
-            "title": "Water Shortage Risk",
-            "description": "Soil moisture at 10cm depth (42%) is below optimal. AI predicts stress in 2-3 days if no irrigation. Recommended: irrigate within 24h.",
-            "time": "15 min ago",
+            "title": "ریسک کمبود آب",
+            "description": "رطوبت خاک در عمق ۱۰ سانتی‌متر (۴۲٪) کمتر از حد بهینه است. پیش‌بینی: در صورت عدم آبیاری، تنش طی ۲ تا ۳ روز. توصیه: آبیاری ظرف ۲۴ ساعت.",
+            "time": "۱۵ دقیقه پیش",
             "color": "warning",
         },
         {
-            "title": "Fungal Disease Risk",
-            "description": "High humidity (65%) + temp 24°C creates favorable conditions for fungal growth. Consider preventive fungicide or reduce irrigation.",
-            "time": "1 hour ago",
+            "title": "ریسک بیماری قارچی",
+            "description": "رطوبت بالا (۶۵٪) و دمای ۲۴ درجه شرایط مساعد برای رشد قارچ. استفاده از قارچ‌کش پیشگیرانه یا کاهش آبیاری را در نظر بگیرید.",
+            "time": "۱ ساعت پیش",
             "color": "error",
         },
         {
-            "title": "Irrigation Suggestion",
-            "description": "Optimal watering window: 6:00-8:00 AM. Suggested amount: 450 m³ for Zone A. Expected efficiency gain: 12%.",
-            "time": "2 hours ago",
+            "title": "پیشنهاد آبیاری",
+            "description": "بازه بهینه آبیاری: ۶:۰۰ تا ۸:۰۰ صبح. حجم پیشنهادی: ۴۵۰ مترمکعب برای زون آ. بهبود راندمان مورد انتظار: ۱۲٪.",
+            "time": "۲ ساعت پیش",
             "color": "info",
         },
         {
-            "title": "Soil Salinity Check",
-            "description": "EC reading 1.2 dS/m is within range. No action needed. Next check recommended in 5 days.",
-            "time": "4 hours ago",
+            "title": "بررسی شوری خاک",
+            "description": "مقدار هدایت الکتریکی ۱/۲ dS/m در محدوده مجاز است. نیازی به اقدام نیست. بررسی بعدی توصیه می‌شود ظرف ۵ روز.",
+            "time": "۴ ساعت پیش",
             "color": "success",
         },
     ]
@@ -266,38 +266,38 @@ FARM_ALERTS_TIMELINE = {
 WATER_NEED_PREDICTION = {
     "totalNext7Days": 3290,
     "unit": "m³",
-    "categories": ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7"],
-    "series": [{"name": "Water Need", "data": [420, 450, 480, 460, 490, 510, 480]}],
+    "categories": ["روز ۱", "روز ۲", "روز ۳", "روز ۴", "روز ۵", "روز ۶", "روز ۷"],
+    "series": [{"name": "نیاز آبی", "data": [420, 450, 480, 460, 490, 510, 480]}],
 }
 
 # 4.10 harvestPredictionCard
 HARVEST_PREDICTION_CARD = {
     "date": "2025-10-15",
-    "dateFormatted": "Oct 15, 2025",
+    "dateFormatted": "۱۵ اکتبر ۲۰۲۵",
     "daysUntil": 58,
-    "description": "Based on current GDD accumulation and weather forecast. Optimal harvest window: Oct 12-18.",
+    "description": "بر اساس تجمع GDD فعلی و پیش‌بینی آب و هوا. بازه بهینه برداشت: ۱۲ تا ۱۸ اکتبر.",
     "optimalWindowStart": "2025-10-12",
     "optimalWindowEnd": "2025-10-18",
 }
 
 # 4.11 yieldPredictionChart
 YIELD_PREDICTION_CHART = {
-    "categories": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    "categories": ["ژانویه", "فوریه", "مارس", "آوریل", "می", "ژوئن", "ژوئیه", "آگوست", "سپتامبر", "اکتبر", "نوامبر", "دسامبر"],
     "series": [
-        {"name": "This Year", "data": [35, 38, 40, 42, 45, 48, 50, 48, 46, 44, 42, 42]},
-        {"name": "Last Year", "data": [32, 34, 36, 38, 40, 42, 44, 42, 40, 38, 36, 38]},
+        {"name": "امسال", "data": [35, 38, 40, 42, 45, 48, 50, 48, 46, 44, 42, 42]},
+        {"name": "سال گذشته", "data": [32, 34, 36, 38, 40, 42, 44, 42, 40, 38, 36, 38]},
     ],
     "summary": [
         {
-            "title": "Predicted Yield",
-            "subtitle": "This Season",
-            "amount": "42 ton",
+            "title": "عملکرد پیش‌بینی‌شده",
+            "subtitle": "این فصل",
+            "amount": "42 تن",
             "avatarColor": "primary",
             "avatarIcon": "tabler-chart-bar",
         },
         {
-            "title": "Harvest Date",
-            "subtitle": "Est. Oct 15",
+            "title": "تاریخ برداشت",
+            "subtitle": "حدود ۱۵ اکتبر",
             "amount": "+8%",
             "avatarColor": "success",
             "avatarIcon": "tabler-calendar",
@@ -307,31 +307,31 @@ YIELD_PREDICTION_CHART = {
 
 # 4.12 soilMoistureHeatmap
 SOIL_MOISTURE_HEATMAP = {
-    "zones": ["Z1", "Z2", "Z3", "Z4", "Z5", "Z6", "Z7"],
-    "hours": ["6h", "8h", "10h", "12h", "14h", "16h", "18h"],
+    "zones": ["زون ۱", "زون ۲", "زون ۳", "زون ۴", "زون ۵", "زون ۶", "زون ۷"],
+    "hours": ["۶ ص", "۸ ص", "۱۰ ص", "۱۲ ظ", "۱۴ ع", "۱۶ ع", "۱۸ ع"],
     "series": [
         {
-            "name": "Z1",
+            "name": "زون ۱",
             "data": [
-                {"x": "6h", "y": 52},
-                {"x": "8h", "y": 48},
-                {"x": "10h", "y": 55},
-                {"x": "12h", "y": 60},
-                {"x": "14h", "y": 58},
-                {"x": "16h", "y": 54},
-                {"x": "18h", "y": 50},
+                {"x": "۶ ص", "y": 52},
+                {"x": "۸ ص", "y": 48},
+                {"x": "۱۰ ص", "y": 55},
+                {"x": "۱۲ ظ", "y": 60},
+                {"x": "۱۴ ع", "y": 58},
+                {"x": "۱۶ ع", "y": 54},
+                {"x": "۱۸ ع", "y": 50},
             ],
         },
         {
-            "name": "Z2",
+            "name": "زون ۲",
             "data": [
-                {"x": "6h", "y": 45},
-                {"x": "8h", "y": 42},
-                {"x": "10h", "y": 48},
-                {"x": "12h", "y": 52},
-                {"x": "14h", "y": 50},
-                {"x": "16h", "y": 47},
-                {"x": "18h", "y": 44},
+                {"x": "۶ ص", "y": 45},
+                {"x": "۸ ص", "y": 42},
+                {"x": "۱۰ ص", "y": 48},
+                {"x": "۱۲ ظ", "y": 52},
+                {"x": "۱۴ ع", "y": 50},
+                {"x": "۱۶ ع", "y": 47},
+                {"x": "۱۸ ع", "y": 44},
             ],
         },
     ],
@@ -341,8 +341,8 @@ SOIL_MOISTURE_HEATMAP = {
 NDVI_HEALTH_CARD = {
     "ndviIndex": 0.78,
     "healthData": [
-        {"title": "Nitrogen Stress", "value": "Low", "color": "success", "icon": "tabler-leaf"},
-        {"title": "Crop Health", "value": "Good", "color": "success", "icon": "tabler-plant"},
+        {"title": "تنش نیتروژن", "value": "پایین", "color": "success", "icon": "tabler-leaf"},
+        {"title": "سلامت محصول", "value": "خوب", "color": "success", "icon": "tabler-plant"},
     ],
 }
 
@@ -350,26 +350,26 @@ NDVI_HEALTH_CARD = {
 RECOMMENDATIONS_LIST = {
     "recommendations": [
         {
-            "title": "Irrigation: 6:00-8:00 AM",
-            "subtitle": "450 m³ for Zone A. Without irrigation, yield may drop ~8%.",
+            "title": "آبیاری: ۶:۰۰ تا ۸:۰۰ صبح",
+            "subtitle": "۴۵۰ مترمکعب برای زون آ. بدون آبیاری، عملکرد ممکن است حدود ۸٪ کاهش یابد.",
             "avatarIcon": "tabler-droplet",
             "avatarColor": "primary",
         },
         {
-            "title": "Fertilizer: NPK 20-20-20",
-            "subtitle": "Apply 25 kg/ha in 7 days. Current N deficiency in sector 2.",
+            "title": "کود: NPK 20-20-20",
+            "subtitle": "اعمال ۲۵ کیلوگرم در هکتار ظرف ۷ روز. کمبود نیتروژن فعلی در بخش ۲.",
             "avatarIcon": "tabler-leaf",
             "avatarColor": "success",
         },
         {
-            "title": "Fungicide: Preventive",
-            "subtitle": "Humidity + temp favor fungi. Consider copper-based spray.",
+            "title": "قارچ‌کش: پیشگیرانه",
+            "subtitle": "رطوبت و دما مساعد قارچ. سمپاشی بر پایه مس را در نظر بگیرید.",
             "avatarIcon": "tabler-mushroom",
             "avatarColor": "warning",
         },
         {
-            "title": "Harvest Window: Oct 12-18",
-            "subtitle": "Peak ripeness expected Oct 15. Plan labor accordingly.",
+            "title": "بازه برداشت: ۱۲ تا ۱۸ اکتبر",
+            "subtitle": "اوج رسیدگی حدود ۱۵ اکتبر. نیروی کار را متناسب برنامه‌ریزی کنید.",
             "avatarIcon": "tabler-calendar-event",
             "avatarColor": "info",
         },
@@ -380,39 +380,39 @@ RECOMMENDATIONS_LIST = {
 ECONOMIC_OVERVIEW = {
     "economicData": [
         {
-            "title": "Water Cost",
+            "title": "هزینه آب",
             "value": "€720",
-            "subtitle": "This month",
+            "subtitle": "این ماه",
             "avatarIcon": "tabler-droplet",
             "avatarColor": "primary",
         },
         {
-            "title": "AI Water Savings",
+            "title": "صرفه‌جویی آب هوشمند",
             "value": "€156",
-            "subtitle": "18% saved",
+            "subtitle": "۱۸٪ صرفه‌جویی شده",
             "avatarIcon": "tabler-bulb",
             "avatarColor": "success",
         },
         {
-            "title": "Platform ROI",
+            "title": "بازده سرمایه پلتفرم",
             "value": "127%",
-            "subtitle": "vs last year",
+            "subtitle": "نسبت به سال گذشته",
             "avatarIcon": "tabler-chart-line",
             "avatarColor": "info",
         },
         {
-            "title": "Income Forecast",
+            "title": "پیش‌بینی درآمد",
             "value": "€42k",
-            "subtitle": "This season",
+            "subtitle": "این فصل",
             "avatarIcon": "tabler-currency-euro",
             "avatarColor": "success",
         },
     ],
     "chartSeries": [
-        {"name": "Water Cost", "data": [120, 115, 110, 125, 118, 122]},
-        {"name": "Fertilizer", "data": [80, 85, 90, 75, 82, 78]},
+        {"name": "هزینه آب", "data": [120, 115, 110, 125, 118, 122]},
+        {"name": "کود", "data": [80, 85, 90, 75, 82, 78]},
     ],
-    "chartCategories": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+    "chartCategories": ["ژانویه", "فوریه", "مارس", "آوریل", "می", "ژوئن"],
 }
 
 # Unified response for GET /api/farm-dashboard (section 5)
