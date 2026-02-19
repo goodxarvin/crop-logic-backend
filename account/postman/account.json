@@ -4,6 +4,7 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Account API. GET list, GET by uuid (detail), POST add, PATCH update, DELETE delete, PATCH profile. Authenticated user required."
   },
+  
   "item": [
     {
       "name": "Update profile",

@@ -69,7 +69,8 @@ class SensorHubView(APIView):
     - POST "active/"    → Activate: no input. Returns code 200, msg "success". No data field.
     - POST "deactive/"  → Deactivate: no input. Returns code 200, msg "success". No data field.
     """
-
+    authentication_classes = []  # No authentication
+    permission_classes = [] # No permission
     # permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
