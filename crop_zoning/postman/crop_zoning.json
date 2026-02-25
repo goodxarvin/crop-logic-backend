@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "Crop Zoning",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Crop Zoning API. POST optimize (GeoJSON FeatureCollection). GET initial-region (GeoJSON Feature). Static mock only. No database."
+  },
+  "item": [
+    {
+      "name": "Optimize zoning (POST)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"Feature\",\n  \"geometry\": {\n    \"type\": \"Polygon\",\n    \"coordinates\": [[[51.38, 35.68], [51.40, 35.68], [51.40, 35.70], [51.38, 35.70], [51.38, 35.68]]]\n  }\n}"
+        },
+        "url": "{{baseUrl}}/api/crop-zoning/optimize/",
+        "description": "POST with GeoJSON Polygon (region). Returns static FeatureCollection. Input not processed."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"type\": \"FeatureCollection\",\n    \"features\": [\n      {\n        \"type\": \"Feature\",\n        \"geometry\": {\n          \"type\": \"Polygon\",\n          \"coordinates\": [[[51.38, 35.68], [51.381, 35.68], [51.381, 35.681], [51.38, 35.681], [51.38, 35.68]]]\n        },\n        \"properties\": {\n          \"zoneId\": \"zone-0\",\n          \"crop\": \"wheat\",\n          \"matchPercent\": 78,\n          \"waterNeed\": \"۴۵۰۰-۵۵۰۰ m³/ha\",\n          \"estimatedProfit\": \"۱۵-۲۵ میلیون/هکتار\",\n          \"reason\": \"دمای مناسب، خاک حاصلخیز، دسترسی به آب کافی\",\n          \"criteria\": [{\"name\": \"دما\", \"value\": 85}, {\"name\": \"بارش\", \"value\": 72}, {\"name\": \"خاک\", \"value\": 80}, {\"name\": \"آب\", \"value\": 65}]\n        }\n      },\n      {\n        \"type\": \"Feature\",\n        \"geometry\": {\n          \"type\": \"Polygon\",\n          \"coordinates\": [[[51.381, 35.68], [51.382, 35.68], [51.382, 35.681], [51.381, 35.681], [51.381, 35.68]]]\n        },\n        \"properties\": {\n          \"zoneId\": \"zone-1\",\n          \"crop\": \"canola\",\n          \"matchPercent\": 82,\n          \"waterNeed\": \"۳۵۰۰-۴۵۰۰ m³/ha\",\n          \"estimatedProfit\": \"۲۰-۳۰ میلیون/هکتار\",\n          \"reason\": \"بارش کافی، خاک با بافت مناسب\",\n          \"criteria\": [{\"name\": \"دما\", \"value\": 70}, {\"name\": \"بارش\", \"value\": 88}, {\"name\": \"خاک\", \"value\": 75}, {\"name\": \"آب\", \"value\": 90}]\n        }\n      },\n      {\n        \"type\": \"Feature\",\n        \"geometry\": {\n          \"type\": \"Polygon\",\n          \"coordinates\": [[[51.382, 35.68], [51.40, 35.68], [51.40, 35.681], [51.382, 35.681], [51.382, 35.68]]]\n        },\n        \"properties\": {\n          \"zoneId\": \"zone-2\",\n          \"crop\": \"saffron\",\n          \"matchPercent\": 65,\n          \"waterNeed\": \"۲۵۰۰-۳۵۰۰ m³/ha\",\n          \"estimatedProfit\": \"۸۰-۱۲۰ میلیون/هکتار\",\n          \"reason\": \"آب و هوای خشک و سرد مناسب زعفران\",\n          \"criteria\": [{\"name\": \"دما\", \"value\": 60}, {\"name\": \"بارش\", \"value\": 55}, {\"name\": \"خاک\", \"value\": 85}, {\"name\": \"آب\", \"value\": 50}]\n        }\n      }\n    ]\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get initial region (GET)",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "url": "{{baseUrl}}/api/crop-zoning/initial-region/",
+        "description": "GET initial map region as GeoJSON Feature with Polygon. Static mock only."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"type\": \"Feature\",\n    \"properties\": {},\n    \"geometry\": {\n      \"type\": \"Polygon\",\n      \"coordinates\": [[[51.38, 35.68], [51.40, 35.68], [51.40, 35.70], [51.38, 35.70], [51.38, 35.68]]]\n    }\n  }\n}"
+        }
+      ]
+    }
+  ],
+  "variable": [{"key": "baseUrl", "value": "http://localhost:8000"}]
+}

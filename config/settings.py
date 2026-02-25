@@ -22,6 +22,12 @@ INSTALLED_APPS = [
     "account",
     "sensor_hub",
     "dashboard",
+    "crop_zoning",
+    "plant_simulator",
+    "pest_detection",
+    "irrigation_recommendation",
+    "fertilization_recommendation",
+    "farm_ai_assistant",
     "rest_framework",
     "corsheaders",
 ]

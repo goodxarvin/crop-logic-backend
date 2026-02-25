@@ -8,4 +8,10 @@ urlpatterns = [
     path("api/sensor-hub/", include("sensor_hub.urls")),
     path("api/farm-dashboard-config/", include("dashboard.urls_config")),
     path("api/farm-dashboard/", include("dashboard.urls")),
+    path("api/crop-zoning/", include("crop_zoning.urls")),
+    path("api/plant-simulator/", include("plant_simulator.urls")),
+    path("api/pest-detection/", include("pest_detection.urls")),
+    path("api/irrigation-recommendation/", include("irrigation_recommendation.urls")),
+    path("api/fertilization-recommendation/", include("fertilization_recommendation.urls")),
+    path("api/farm-ai-assistant/", include("farm_ai_assistant.urls")),
 ]

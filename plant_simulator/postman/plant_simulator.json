@@ -1,0 +1,101 @@
+  {
+    "info": {
+      "name": "Plant Simulator",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      "description": "Plant Simulator API. GET config (sliders only), GET state, POST start (body: environment + growth_speed per serializers), stop/reset/environment. Static mock only."
+    },
+    "item": [
+      {
+        "name": "Get config (GET)",
+        "request": {
+          "method": "GET",
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "url": "{{baseUrl}}/api/plant-simulator/config/",
+          "description": "ورود: فقط اسلایدرها. Returns sliders only (key, label, min, max, step, unit_type, default_value, icon)."
+        },
+        "response": [
+          {
+            "name": "Success",
+            "status": "OK",
+            "code": 200,
+            "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"sliders\": [\n      {\"key\": \"light\", \"label\": \"نور\", \"min\": 0, \"max\": 100, \"step\": 5, \"unit_type\": \"percent\", \"default_value\": 75, \"icon\": \"☀️\"},\n      {\"key\": \"water\", \"label\": \"آب\", \"min\": 0, \"max\": 100, \"step\": 5, \"unit_type\": \"percent\", \"default_value\": 65, \"icon\": \"💧\"},\n      {\"key\": \"soil_ph\", \"label\": \"pH خاک\", \"min\": 4, \"max\": 9, \"step\": 0.5, \"unit_type\": \"number\", \"unit\": \"\", \"default_value\": 6.5},\n      {\"key\": \"growth_speed\", \"label\": \"سرعت رشد\", \"min\": 0.5, \"max\": 5, \"step\": 0.5, \"unit_type\": \"number\", \"unit\": \"×\", \"default_value\": 1.5}\n    ]\n  }\n}"
+          }
+        ]
+      },
+      {
+        "name": "Get state (GET)",
+        "request": {
+          "method": "GET",
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "url": "{{baseUrl}}/api/plant-simulator/state/",
+          "description": "Returns static plant state, progress, and chart history (plant, progress, chart)."
+        },
+        "response": [
+          {
+            "name": "Success",
+            "status": "OK",
+            "code": 200,
+            "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"plant\": {\"height\": 142, \"leaves_count\": 5, \"branches_count\": 2, \"fruits_count\": 0, \"yield\": 12.4, \"yield_rate\": 0.087, \"tick\": 520, \"is_healthy\": true, \"can_continue\": true},\n    \"progress\": {\"growth_progress\": 50, \"light_status\": 75, \"water_status\": 65, \"yield_progress\": 2.5, \"yield_current\": 12.4, \"yield_rate_current\": 0.087},\n    \"chart\": {\n      \"labels\": [\"0s\", \"1s\", \"2s\", \"3s\", \"4s\", \"5s\", \"6s\", \"7s\", \"8s\", \"9s\", \"10s\"],\n      \"height_history\": [0, 5, 12, 28, 45, 68, 92, 110, 125, 135, 142],\n      \"leaf_history\": [0, 0, 1, 2, 3, 4, 4, 5, 5, 5, 5],\n      \"yield_history\": [0, 0, 0, 0.1, 0.5, 1.2, 3.2, 5.8, 8.2, 10.1, 12.4],\n      \"yield_rate_history\": [0, 0, 0, 0.01, 0.03, 0.05, 0.06, 0.07, 0.08, 0.085, 0.087]\n    }\n  }\n}"
+          }
+        ]
+      },
+      {
+        "name": "Start simulation (POST)",
+        "request": {
+          "method": "POST",
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"environment\": {\n    \"light\": 75,\n    \"water\": 65,\n    \"soil_ph\": 6.5\n  },\n  \"growth_speed\": 1.5\n}"
+          },
+          "url": "{{baseUrl}}/api/plant-simulator/start/",
+          "description": "Body per serializers.START_REQUEST_EXAMPLE_STATIC: environment (light, water, soil_ph) + growth_speed. Returns constants, chart, plant, progress, chart_history."
+        },
+        "response": [
+          {
+            "name": "Success",
+            "status": "OK",
+            "code": 200,
+            "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"constants\": {\"max_height\": 280, \"max_leaves\": 14, \"max_branches\": 6, \"max_yield\": 500, \"yield_unit\": \"g\", \"yield_rate_unit\": \"g/s\", \"height_unit\": \"px\"},\n    \"chart\": {\"title\": \"پیشرفت رشد\", \"x_axis_label\": \"زمان (ثانیه)\", \"series\": [{\"key\": \"height\", \"label\": \"ارتفاع (px)\", \"y_axis_id\": \"yHeight\", \"min\": 0, \"max\": 280, \"unit\": \"px\"}, {\"key\": \"leaves\", \"label\": \"تعداد برگ\", \"y_axis_id\": \"yLeaf\", \"min\": 0, \"max\": 14}, {\"key\": \"yield\", \"label\": \"محصول (g)\", \"y_axis_id\": \"yYield\", \"min\": 0, \"max\": 500, \"unit\": \"g\"}, {\"key\": \"yield_rate\", \"label\": \"نرخ محصول (g/s)\", \"y_axis_id\": \"yYieldRate\", \"min\": 0, \"unit\": \"g/s\"}]},\n    \"plant\": {\"height\": 142, \"leaves_count\": 5, \"branches_count\": 2, \"fruits_count\": 0, \"yield\": 12.4, \"yield_rate\": 0.087, \"tick\": 520, \"is_healthy\": true, \"can_continue\": true},\n    \"progress\": {\"growth_progress\": 50, \"light_status\": 75, \"water_status\": 65, \"yield_progress\": 2.5, \"yield_current\": 12.4, \"yield_rate_current\": 0.087},\n    \"chart_history\": {\"labels\": [\"0.0s\", \"0.2s\", \"0.4s\", \"1.0s\", \"2.0s\", \"5.0s\", \"10.0s\"], \"height_history\": [0, 2, 5, 18, 45, 110, 142], \"leaf_history\": [0, 0, 0, 0, 0, 1, 5], \"yield_history\": [0, 0, 0, 0.2, 1.5, 6.2, 12.4], \"yield_rate_history\": [0, 0, 0, 0.01, 0.03, 0.06, 0.087]}\n  }\n}"
+          }
+        ]
+      },
+      {
+        "name": "Stop simulation (POST)",
+        "request": {
+          "method": "POST",
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": {"mode": "raw", "raw": "{}"},
+          "url": "{{baseUrl}}/api/plant-simulator/stop/",
+          "description": "Empty body. Returns success only."
+        },
+        "response": [{"name": "Success", "status": "OK", "code": 200, "body": "{\n  \"status\": \"success\"\n}"}]
+      },
+      {
+        "name": "Reset simulation (POST)",
+        "request": {
+          "method": "POST",
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": {"mode": "raw", "raw": "{}"},
+          "url": "{{baseUrl}}/api/plant-simulator/reset/",
+          "description": "Empty body. Returns success only."
+        },
+        "response": [{"name": "Success", "status": "OK", "code": 200, "body": "{\n  \"status\": \"success\"\n}"}]
+      },
+      {
+        "name": "Update environment (PATCH)",
+        "request": {
+          "method": "PATCH",
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"environment\": {\n    \"light\": 80,\n    \"water\": 70,\n    \"soil_ph\": 6.5\n  },\n  \"growth_speed\": 2\n}"
+          },
+          "url": "{{baseUrl}}/api/plant-simulator/environment/",
+          "description": "Body: environment (same keys as sliders) + optional growth_speed. Returns success only."
+        },
+        "response": [{"name": "Success", "status": "OK", "code": 200, "body": "{\n  \"status\": \"success\"\n}"}]
+      }
+    ],
+    "variable": [{"key": "baseUrl", "value": "http://localhost:8000"}]
+  }

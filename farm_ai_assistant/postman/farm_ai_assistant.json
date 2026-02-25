@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "Farm AI Assistant",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Farm AI Assistant API. GET context (farm bar data). POST chat (user message + optional farm_context/images). Static JSON only."
+  },
+  "item": [
+    {
+      "name": "Get farm context (GET)",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "url": "{{baseUrl}}/api/farm-ai-assistant/context/",
+        "description": "Returns static farm context: soilType, waterEC, selectedCrop, growthStage, lastIrrigationStatus for the context bar."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"soilType\": \"Loamy\",\n    \"waterEC\": \"1.2 dS/m\",\n    \"selectedCrop\": \"Tomato\",\n    \"growthStage\": \"Flowering\",\n    \"lastIrrigationStatus\": \"2 days ago\"\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Chat (POST)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"برنامه آبیاری برای گوجه در مرحله گلدهی چطور باشد؟\",\n  \"farm_context\": {\n    \"soilType\": \"Loamy\",\n    \"waterEC\": \"1.2 dS/m\",\n    \"selectedCrop\": \"Tomato\",\n    \"growthStage\": \"Flowering\",\n    \"lastIrrigationStatus\": \"2 days ago\"\n  }\n}"
+        },
+        "url": "{{baseUrl}}/api/farm-ai-assistant/chat/",
+        "description": "Body: content (required), optional images, conversation_id, farm_context. Returns static message with sections (recommendation, list, warning). Input not processed."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"message_id\": \"a-1739123456789\",\n    \"conversation_id\": \"conv-abc123\",\n    \"content\": \"\",\n    \"sections\": [\n      {\n        \"type\": \"recommendation\",\n        \"title\": \"Irrigation recommendation\",\n        \"icon\": \"droplet\",\n        \"frequency\": \"3 times per week\",\n        \"amount\": \"15–20 L per plant\",\n        \"timing\": \"Early morning (05:00–07:00)\",\n        \"expandableExplanation\": \"Your loamy soil holds moisture well...\"\n      },\n      {\n        \"type\": \"list\",\n        \"title\": \"Key points\",\n        \"icon\": \"leaf\",\n        \"items\": [\n          \"Avoid midday watering to reduce evaporation\",\n          \"Drip irrigation preferred for root zone targeting\"\n        ]\n      },\n      {\n        \"type\": \"warning\",\n        \"title\": \"Weather advisory\",\n        \"icon\": \"warning\",\n        \"content\": \"High temps forecasted next week. Consider increasing frequency.\"\n      }\n    ]\n  }\n}"
+        }
+      ]
+    }
+  ],
+  "variable": [{"key": "baseUrl", "value": "http://localhost:8000"}]
+}
