@@ -1,0 +1,120 @@
+name: Backend Service CI/CD
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - '**'
+      - '.gitea/workflows/backend.yml'
+
+  pull_request:
+    branches: [production]
+    paths:
+      - '**'
+      - '.gitea/workflows/backend.yml'
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: self-hosted
+    container:
+      image: mirror2.chabokan.net/ubuntu:22.04
+      options: --add-host gitea:172.17.0.1
+
+    steps:
+    
+
+      - name: Setup Ubuntu apt mirrors
+        run: |
+          tee /etc/apt/sources.list > /dev/null <<'EOF'
+          deb https://mirror-linux.runflare.com/ubuntu/ noble main restricted universe multiverse
+          deb https://mirror-linux.runflare.com/ubuntu/ noble-updates main restricted universe multiverse
+          deb https://mirror-linux.runflare.com/ubuntu/ noble-backports main restricted universe multiverse
+          deb https://mirror-linux.runflare.com/ubuntu/ noble-security main restricted universe multiverse
+
+          deb [trusted=yes] https://mirror2.chabokan.net/ubuntu focal main universe
+          deb [trusted=yes] https://mirror2.chabokan.net/ubuntu focal-updates main universe
+          deb [trusted=yes] https://mirror2.chabokan.net/ubuntu focal-security main universe
+
+
+
+
+          deb http://mirror.iranserver.com/ubuntu/ jammy main restricted
+          deb-src http://mirror.iranserver.com/ubuntu/ jammy main restricted
+
+
+          deb http://mirror.iranserver.com/ubuntu/ jammy-updates main restricted
+          deb-src http://mirror.iranserver.com/ubuntu/ jammy-updates main restricted
+
+
+          deb http://mirror.iranserver.com/ubuntu/ jammy universe
+          deb-src http://mirror.iranserver.com/ubuntu/ jammy universe
+          deb http://mirror.iranserver.com/ubuntu/ jammy-updates universe
+
+
+ 
+          deb http://mirror.iranserver.com/ubuntu/ jammy multiverse
+          deb-src http://mirror.iranserver.com/ubuntu/ jammy multiverse
+          deb http://mirror.iranserver.com/ubuntu/ jammy-updates multiverse
+          deb-src http://mirror.iranserver.com/ubuntu/ jammy-updates multiverse
+
+
+          deb http://mirror.iranserver.com/ubuntu/ jammy-backports main restricted universe multiverse
+          deb-src http://mirror.iranserver.com/ubuntu/ jammy-backports main restricted universe multiverse
+
+      
+          EOF
+          apt-get update
+      - name: Install git
+        run: |
+          apt-get install -y git
+
+      - name: Checkout repository
+        run: |
+          git clone http://gitea:3000/sajad-dev/Backend.git .
+
+      - name: Install Python
+        run: |
+          apt-get install -y python3 python3-pip python3-venv git
+
+      - name: Setup Python pip mirrors
+        run: |
+          pip3 config --user set global.index-url https://package-mirror.liara.ir/repository/pypi/simple
+          pip3 config --user set global.extra-index-url https://mirror.cdn.ir/repository/pypi/simple
+          pip3 config --user set global.trusted-host "package-mirror.liara.ir mirror.cdn.ir mirror2.chabokan.net"
+      - name: Install system dependencies
+        run: |
+          apt-get install -y \
+            python3 \
+            python3-pip \
+            python3-venv \
+            pkg-config \
+            build-essential \
+            default-libmysqlclient-dev
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
+          pip3 install pytest flake8
+
+      - name: Run lint
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p ${{secrets.SERVER_SSH_PORT}}  -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} -p ${{secrets.SERVER_SSH_PORT}}<< 'EOF'
+          cd application/Backend
+          git pull origin production
+          docker-compose -f docker-compose-prod.yaml down
+          docker-compose -f docker-compose-prod.yaml up -d
+          EOF

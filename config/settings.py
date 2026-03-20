@@ -11,6 +11,8 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dev-only")
 DEBUG = os.environ.get("DEBUG", "0") == "1"
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+AUTH_USER_MODEL = "account.User"
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -19,7 +21,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "auth.apps.AuthConfig",
-    "account",
+    "account.apps.AccountConfig",
     "sensor_hub",
     "dashboard",
     "crop_zoning",
@@ -108,5 +110,9 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
 }
+
+
+SMS_IR_API_KEY = os.environ.get("SMS_IR_API_KEY", "")
+SMS_IR_LINE_NUMBER = int(os.environ.get("SMS_IR_LINE_NUMBER", "300000000000"))
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG

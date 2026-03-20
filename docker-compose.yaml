@@ -1,7 +1,7 @@
 # Development: volumes mount source so code updates apply without rebuild
 services:
   db:
-    image: mysql:8.0
+    image: docker-mirror.liara.ir/mysql:8.0
     environment:
       MYSQL_DATABASE: ${DB_NAME:-croplogic}
       MYSQL_USER: ${DB_USER:-croplogic}
@@ -16,7 +16,7 @@ services:
       retries: 5
 
   phpmyadmin:
-    image: phpmyadmin:latest
+    image: docker-mirror.liara.ir/phpmyadmin:latest
     environment:
       PMA_HOST: db
       PMA_PORT: 3306

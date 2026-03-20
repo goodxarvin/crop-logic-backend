@@ -1,7 +1,6 @@
 """
 Account API module.
-CRUD endpoints for user account profile (first name, last name, phone numbers).
-Profile update endpoint returns UpdateProfileResponse (code, msg, data: AuthUser).
+CRUD endpoints for user account profile.
 """
 
 from rest_framework import status
@@ -16,21 +15,13 @@ def _auth_user_to_data(user):
     """Build AuthUser-shaped dict from Django User."""
     if user is None or not getattr(user, "pk", None):
         return None
-    # return {
-    #     "id": user.id,
-    #     "username": getattr(user, "username", "") or "",
-    #     "email": getattr(user, "email", "") or "",
-    #     "first_name": getattr(user, "first_name", "") or "",
-    #     "last_name": getattr(user, "last_name", "") or "",
-    #     "phone_number": getattr(user, "phone_number", "") or "",
-    # }
     return {
-        "id": 1,
-        "username": "testuser",
-        "email": "testuser@example.com",
-        "first_name": "Test",
-        "last_name": "User",
-        "phone_number": "09123456789",
+        "id": user.id,
+        "username": getattr(user, "username", "") or "",
+        "email": getattr(user, "email", "") or "",
+        "first_name": getattr(user, "first_name", "") or "",
+        "last_name": getattr(user, "last_name", "") or "",
+        "phone_number": getattr(user, "phone_number", "") or "",
     }
 
 
@@ -46,8 +37,16 @@ class ProfileView(APIView):
     def patch(self, request):
         serializer = UpdateProfileSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        # TODO: persist first_name, last_name, email via service layer
+
         user = request.user
+        for field in ("first_name", "last_name", "email"):
+            if field in serializer.validated_data:
+                setattr(user, field, serializer.validated_data[field])
+        user.save(update_fields=[
+            f for f in ("first_name", "last_name", "email")
+            if f in serializer.validated_data
+        ])
+
         data = _auth_user_to_data(user)
         if data is None:
             data = {
