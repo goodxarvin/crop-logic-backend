@@ -1,15 +1,22 @@
 import secrets
 
+from django.contrib.auth import authenticate
 from django.conf import settings
 from django.core.cache import cache
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
+from django.db import IntegrityError
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from account.models import User
-from .serializers import RequestOTPSerializer, VerifyOTPSerializer
+from .serializers import (
+    LoginSerializer,
+    RegisterSerializer,
+    RequestOTPSerializer,
+    VerifyOTPSerializer,
+)
 from .sms_service import send_otp_sms
 
 
@@ -29,6 +36,99 @@ def _auth_user_to_data(user):
         "last_name": getattr(user, "last_name", "") or "",
         "phone_number": getattr(user, "phone_number", "") or "",
     }
+
+
+class RegisterView(APIView):
+    """
+    POST /api/auth/register/
+    Creates a new user with username, email, phone_number, and password.
+    All fields are required (first_name, last_name optional).
+    Returns JWT tokens and user data on success.
+    """
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            user = User.objects.create_user(
+                username=data["username"],
+                email=data["email"],
+                phone_number=data["phone_number"],
+                password=data["password"],
+                first_name=data.get("first_name", ""),
+                last_name=data.get("last_name", ""),
+            )
+        except IntegrityError as exc:
+            msg = str(exc).lower()
+            if "username" in msg:
+                detail = "A user with this username already exists."
+            elif "email" in msg:
+                detail = "A user with this email already exists."
+            elif "phone_number" in msg:
+                detail = "A user with this phone number already exists."
+            else:
+                detail = "A user with these credentials already exists."
+            return Response(
+                {"code": 400, "msg": detail},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        refresh = RefreshToken.for_user(user)
+        user_data = _auth_user_to_data(user)
+
+        return Response(
+            {
+                "code": 201,
+                "msg": "success",
+                "data": user_data,
+                "token": {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class LoginView(APIView):
+    """
+    POST /api/auth/login/
+    Accepts identifier (username, email, or phone_number) + password.
+    Returns JWT tokens and user data on success.
+    """
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        identifier = serializer.validated_data["identifier"]
+        password = serializer.validated_data["password"]
+
+        user = authenticate(request, username=identifier, password=password)
+
+        if user is None:
+            return Response(
+                {"code": 401, "msg": "Invalid credentials."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        refresh = RefreshToken.for_user(user)
+        user_data = _auth_user_to_data(user)
+
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": user_data,
+                "token": {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class AuthenticationView(APIView):
@@ -91,7 +191,10 @@ class AuthenticationView(APIView):
 
         user, created = User.objects.get_or_create(
             phone_number=phone_number,
-            defaults={"username": phone_number},
+            defaults={
+                "username": phone_number,
+                "email": f"{phone_number}@otp.local",
+            },
         )
 
         refresh = RefreshToken.for_user(user)

@@ -1,97 +1,102 @@
-"""
-Sensor Hub module.
-All endpoints require authenticated user (must be registered).
-All responses are static; no processing or validation on inputs.
-"""
-
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import SensorStoreResponseSerializer
-
-# Static sensor payload for store (list/get) response.
-STORE_DATA = {
-    "name": "sensor-hub-static",
-    "uuid_sensor": "550e8400-e29b-41d4-a716-446655440000",
-    "last_updated": "2025-02-18T12:00:00Z",
-    "specifications": {
-        "model": "SH-1",
-        "firmware": "1.0.0",
-        "capabilities": ["temperature", "humidity", "light"],
-    },
-    "power_source": {
-        "type": "battery",
-        "voltage": 3.3,
-        "backup": "solar",
-    },
-    "customized_sensors": {
-        "thresholds": {"temperature_min": 10, "temperature_max": 35},
-        "report_interval_sec": 300,
-    },
-}
-
-
-# Static payload for single-sensor detail response (same shape as store).
-SENSOR_DETAIL_DATA = {
-    "name": "sensor-hub-static",
-    "uuid_sensor": "550e8400-e29b-41d4-a716-446655440000",
-    "last_updated": "2025-02-18T12:00:00Z",
-    "specifications": {
-        "model": "SH-1",
-        "firmware": "1.0.0",
-        "capabilities": ["temperature", "humidity", "light"],
-    },
-    "power_source": {
-        "type": "battery",
-        "voltage": 3.3,
-        "backup": "solar",
-    },
-    "customized_sensors": {
-        "thresholds": {"temperature_min": 10, "temperature_max": 35},
-        "report_interval_sec": 300,
-    },
-}
+from .models import Sensor
+from .serializers import SensorCreateSerializer, SensorSerializer
 
 
 class SensorHubView(APIView):
     """
-    Sensor-hub endpoints. Behavior depends on URL and HTTP method.
-    No processing or validation is performed on inputs; responses are static.
+    Sensor-hub CRUD endpoints connected to the database.
 
     Routes:
-    - GET  ""           → List: returns code 200, msg "success", data with static sensor list.
-    - GET  "<uuid>/"    → Detail: uuid (path). Returns code 200, msg "success", data with static sensor payload.
-    - POST ""           → Add: body/query may be sent but not used. Returns code 200, msg "success". No data field.
-    - PATCH "<uuid>/"   → Update: uuid (path), body/query may be sent but not used. Returns code 200, msg "success". No data field.
-    - DELETE "<uuid>/"  → Delete: uuid (path). Returns code 200, msg "success". No data field.
-    - POST "active/"    → Activate: no input. Returns code 200, msg "success". No data field.
-    - POST "deactive/"  → Deactivate: no input. Returns code 200, msg "success". No data field.
+    - GET  ""           → List sensors for authenticated user.
+    - GET  "<uuid>/"    → Detail of a single sensor.
+    - POST ""           → Create a new sensor.
+    - PATCH "<uuid>/"   → Update an existing sensor.
+    - DELETE "<uuid>/"  → Delete a sensor.
+    - POST "active/"    → Activate a sensor (requires uuid_sensor in body).
+    - POST "deactive/"  → Deactivate a sensor (requires uuid_sensor in body).
     """
-    authentication_classes = []  # No authentication
-    permission_classes = [] # No permission
-    # permission_classes = [IsAuthenticated]
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_sensor(self, request, uuid):
+        try:
+            return Sensor.objects.get(uuid_sensor=uuid, owner=request.user)
+        except Sensor.DoesNotExist:
+            return None
 
     def get(self, request, *args, **kwargs):
         uuid = kwargs.get("uuid")
         if uuid is not None:
-            data = SensorStoreResponseSerializer(SENSOR_DETAIL_DATA).data
-        else:
-            data = SensorStoreResponseSerializer(STORE_DATA).data
+            sensor = self._get_sensor(request, uuid)
+            if sensor is None:
+                return Response(
+                    {"code": 404, "msg": "Sensor not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            data = SensorSerializer(sensor).data
+            return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+
+        sensors = Sensor.objects.filter(owner=request.user)
+        data = SensorSerializer(sensors, many=True).data
         return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
         action = kwargs.get("action")
-        if action == "active":
-            return Response({"code": 200, "msg": "success"}, status=status.HTTP_200_OK)
-        if action == "deactive":
-            return Response({"code": 200, "msg": "success"}, status=status.HTTP_200_OK)
-        # POST without action = add
-        return Response({"code": 200, "msg": "success"}, status=status.HTTP_200_OK)
+        if action in ("active", "deactive"):
+            return self._toggle_active(request, is_active=(action == "active"))
+
+        serializer = SensorCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sensor = serializer.save(owner=request.user)
+        data = SensorSerializer(sensor).data
+        return Response(
+            {"code": 201, "msg": "success", "data": data},
+            status=status.HTTP_201_CREATED,
+        )
 
     def patch(self, request, *args, **kwargs):
-        return Response({"code": 200, "msg": "success"}, status=status.HTTP_200_OK)
+        uuid = kwargs.get("uuid")
+        sensor = self._get_sensor(request, uuid)
+        if sensor is None:
+            return Response(
+                {"code": 404, "msg": "Sensor not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = SensorCreateSerializer(sensor, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        data = SensorSerializer(sensor).data
+        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
 
     def delete(self, request, *args, **kwargs):
+        uuid = kwargs.get("uuid")
+        sensor = self._get_sensor(request, uuid)
+        if sensor is None:
+            return Response(
+                {"code": 404, "msg": "Sensor not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        sensor.delete()
+        return Response({"code": 200, "msg": "success"}, status=status.HTTP_200_OK)
+
+    def _toggle_active(self, request, is_active):
+        uuid_sensor = request.data.get("uuid_sensor")
+        if not uuid_sensor:
+            return Response(
+                {"code": 400, "msg": "uuid_sensor is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sensor = self._get_sensor(request, uuid_sensor)
+        if sensor is None:
+            return Response(
+                {"code": 404, "msg": "Sensor not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        sensor.is_active = is_active
+        sensor.save(update_fields=["is_active", "updated_at"])
         return Response({"code": 200, "msg": "success"}, status=status.HTTP_200_OK)

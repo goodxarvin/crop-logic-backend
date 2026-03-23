@@ -417,10 +417,10 @@ ECONOMIC_OVERVIEW = {
 
 # Unified response for GET /api/farm-dashboard (section 5)
 ALL_CARDS = {
-    "farmOverviewKpis": FARM_OVERVIEW_KPIS,
-    "farmWeatherCard": FARM_WEATHER_CARD,
-    "farmAlertsTracker": FARM_ALERTS_TRACKER,
-    "sensorValuesList": SENSOR_VALUES_LIST,
+    "farmOverviewKpis": FARM_OVERVIEW_KPIS , # این باید سه روز یکبار محتواش محاسبه بشه
+    "farmWeatherCard": FARM_WEATHER_CARD, # هروز
+    "farmAlertsTracker": FARM_ALERTS_TRACKER, #هروز
+    "sensorValuesList": SENSOR_VALUES_LIST,#هروز
     "sensorRadarChart": SENSOR_RADAR_CHART,
     "sensorComparisonChart": SENSOR_COMPARISON_CHART,
     "anomalyDetectionCard": ANOMALY_DETECTION_CARD,
@@ -430,6 +430,6 @@ ALL_CARDS = {
     "yieldPredictionChart": YIELD_PREDICTION_CHART,
     "soilMoistureHeatmap": SOIL_MOISTURE_HEATMAP,
     "ndviHealthCard": NDVI_HEALTH_CARD,
-    "recommendationsList": RECOMMENDATIONS_LIST,
+    "recommendationsList": RECOMMENDATIONS_LIST, # این باید حتما از recommendetion ها گرفته بشه 
     "economicOverview": ECONOMIC_OVERVIEW,
 }

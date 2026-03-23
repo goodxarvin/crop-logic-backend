@@ -13,6 +13,10 @@ ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(","
 
 AUTH_USER_MODEL = "account.User"
 
+AUTHENTICATION_BACKENDS = [
+    "account.backends.MultiFieldBackend",
+]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -22,7 +26,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "auth.apps.AuthConfig",
     "account.apps.AccountConfig",
-    "sensor_hub",
+    "sensor_hub.apps.SensorHubConfig",
     "dashboard",
     "crop_zoning",
     "plant_simulator",
