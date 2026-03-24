@@ -5,13 +5,17 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db import IntegrityError
+from rest_framework import serializers
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from account.models import User
+from config.swagger import code_response
 from .serializers import (
+    AuthUserSerializer,
     LoginSerializer,
     RegisterSerializer,
     RequestOTPSerializer,
@@ -38,6 +42,16 @@ def _auth_user_to_data(user):
     }
 
 
+@extend_schema_view(
+    post=extend_schema(
+        tags=["Authentication"],
+        request=RegisterSerializer,
+        responses={
+            201: code_response("RegisterResponse", data=AuthUserSerializer(), token=True),
+            400: code_response("RegisterErrorResponse"),
+        },
+    ),
+)
 class RegisterView(APIView):
     """
     POST /api/auth/register/
@@ -92,6 +106,16 @@ class RegisterView(APIView):
         )
 
 
+@extend_schema_view(
+    post=extend_schema(
+        tags=["Authentication"],
+        request=LoginSerializer,
+        responses={
+            200: code_response("LoginResponse", data=AuthUserSerializer(), token=True),
+            401: code_response("LoginErrorResponse"),
+        },
+    ),
+)
 class LoginView(APIView):
     """
     POST /api/auth/login/
@@ -131,6 +155,23 @@ class LoginView(APIView):
         )
 
 
+@extend_schema_view(
+    post=extend_schema(
+        tags=["Authentication"],
+        request=RequestOTPSerializer,
+        responses={
+            200: code_response(
+                "RequestOtpResponse",
+                extra_fields={
+                    "token": serializers.CharField(),
+                    "sms_warning": serializers.CharField(required=False),
+                    "debug_otp": serializers.CharField(required=False),
+                },
+            ),
+            400: code_response("RequestOtpErrorResponse"),
+        },
+    ),
+)
 class AuthenticationView(APIView):
     """
     Single view for auth flows: request-otp and verify-otp.

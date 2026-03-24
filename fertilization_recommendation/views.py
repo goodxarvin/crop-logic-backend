@@ -1,20 +1,21 @@
 """
 Fertilization Recommendation API views.
-Plain Django only; no DRF. No database. All responses are static mock data.
+No database. All responses are static mock data.
 Response format: {"status": "success", "data": <payload>}. HTTP 200 only.
 No processing, validation, or use of input parameters in responses.
-CSRF exempt on POST so frontend can call without token.
 """
 
-from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views import View
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework import serializers, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 
+from config.swagger import status_response
 from .mock_data import CONFIG_RESPONSE_DATA, RECOMMEND_RESPONSE_DATA
 
 
-class ConfigView(View):
+class ConfigView(APIView):
     """
     GET endpoint for fertilization config (farm data, growth stages, crop options).
 
@@ -34,15 +35,18 @@ class ConfigView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Fertilization Recommendation"],
+        responses={200: status_response("FertilizationConfigResponse", data=serializers.JSONField())},
+    )
     def get(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": CONFIG_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class RecommendView(View):
+class RecommendView(APIView):
     """
     POST endpoint for fertilization recommendation.
 
@@ -64,8 +68,13 @@ class RecommendView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Fertilization Recommendation"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("FertilizationRecommendResponse", data=serializers.JSONField())},
+    )
     def post(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": RECOMMEND_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )

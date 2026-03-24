@@ -1,0 +1,9 @@
+{
+  "code": 400,
+  "msg": "داده نامعتبر.",
+  "data": {
+    "location_id": [
+      "This field is required."
+    ]
+  }
+}

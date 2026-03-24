@@ -1,0 +1,12 @@
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "task_id": "soil-task-123",
+    "status": "PROGRESS",
+    "progress": {
+      "step": "fetch",
+      "percent": 60
+    }
+  }
+}

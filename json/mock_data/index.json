@@ -1,0 +1,604 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/dashboard-data/generate/",
+    "status_code": 202,
+    "description": "Dashboard data task queued",
+    "file": "json/mock_data/dashboard-data/generate/post_202.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/dashboard-data/generate/",
+    "status_code": 400,
+    "description": "Missing sensor_id",
+    "file": "json/mock_data/dashboard-data/generate/post_400.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/dashboard-data/{task_id}/status/",
+    "status_code": 200,
+    "description": "Pending dashboard task",
+    "file": "json/mock_data/dashboard-data/status/get_200_pending.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/dashboard-data/{task_id}/status/",
+    "status_code": 200,
+    "description": "Dashboard task in progress",
+    "file": "json/mock_data/dashboard-data/status/get_200_progress.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/dashboard-data/{task_id}/status/",
+    "status_code": 200,
+    "description": "Successful dashboard task",
+    "file": "json/mock_data/dashboard-data/status/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/dashboard-data/{task_id}/status/",
+    "status_code": 200,
+    "description": "Failed dashboard task",
+    "file": "json/mock_data/dashboard-data/status/get_200_failure.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/fertilization/recommend/",
+    "status_code": 202,
+    "description": "Fertilization task queued",
+    "file": "json/mock_data/fertilization/recommend/post_202.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/fertilization/recommend/",
+    "status_code": 400,
+    "description": "Validation error",
+    "file": "json/mock_data/fertilization/recommend/post_400.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/fertilization/recommend/{task_id}/status/",
+    "status_code": 200,
+    "description": "Fertilization status pending",
+    "file": "json/mock_data/fertilization/status/get_200_pending.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/fertilization/recommend/{task_id}/status/",
+    "status_code": 200,
+    "description": "Fertilization status progress",
+    "file": "json/mock_data/fertilization/status/get_200_progress.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/fertilization/recommend/{task_id}/status/",
+    "status_code": 200,
+    "description": "Fertilization status success",
+    "file": "json/mock_data/fertilization/status/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/fertilization/recommend/{task_id}/status/",
+    "status_code": 200,
+    "description": "Fertilization status failure",
+    "file": "json/mock_data/fertilization/status/get_200_failure.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/irrigation/",
+    "status_code": 200,
+    "description": "List irrigation methods",
+    "file": "json/mock_data/irrigation/methods/get_200.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/irrigation/",
+    "status_code": 201,
+    "description": "Create irrigation method",
+    "file": "json/mock_data/irrigation/methods/post_201.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/irrigation/",
+    "status_code": 400,
+    "description": "Irrigation create validation error",
+    "file": "json/mock_data/irrigation/methods/post_400.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/irrigation/recommend/",
+    "status_code": 202,
+    "description": "Irrigation recommendation task queued",
+    "file": "json/mock_data/irrigation/recommend/post_202.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/irrigation/recommend/",
+    "status_code": 400,
+    "description": "Irrigation recommendation validation error",
+    "file": "json/mock_data/irrigation/recommend/post_400.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/irrigation/recommend/{task_id}/status/",
+    "status_code": 200,
+    "description": "Irrigation recommendation status pending",
+    "file": "json/mock_data/irrigation/recommend/status/get_200_pending.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/irrigation/recommend/{task_id}/status/",
+    "status_code": 200,
+    "description": "Irrigation recommendation status progress",
+    "file": "json/mock_data/irrigation/recommend/status/get_200_progress.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/irrigation/recommend/{task_id}/status/",
+    "status_code": 200,
+    "description": "Irrigation recommendation status success",
+    "file": "json/mock_data/irrigation/recommend/status/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/irrigation/recommend/{task_id}/status/",
+    "status_code": 200,
+    "description": "Irrigation recommendation status failure",
+    "file": "json/mock_data/irrigation/recommend/status/get_200_failure.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 200,
+    "description": "Irrigation method get success",
+    "file": "json/mock_data/irrigation/method-detail/get_200.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 404,
+    "description": "Irrigation method get not found",
+    "file": "json/mock_data/irrigation/method-detail/get_404.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 200,
+    "description": "Irrigation method put success",
+    "file": "json/mock_data/irrigation/method-detail/put_200.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 400,
+    "description": "Irrigation method put validation error",
+    "file": "json/mock_data/irrigation/method-detail/put_400.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 404,
+    "description": "Irrigation method put not found",
+    "file": "json/mock_data/irrigation/method-detail/put_404.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 200,
+    "description": "Irrigation method patch success",
+    "file": "json/mock_data/irrigation/method-detail/patch_200.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 400,
+    "description": "Irrigation method patch validation error",
+    "file": "json/mock_data/irrigation/method-detail/patch_400.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 404,
+    "description": "Irrigation method patch not found",
+    "file": "json/mock_data/irrigation/method-detail/patch_404.json"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 200,
+    "description": "Delete irrigation method",
+    "file": "json/mock_data/irrigation/method-detail/delete_200.json"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/irrigation/{pk}/",
+    "status_code": 404,
+    "description": "Delete irrigation method not found",
+    "file": "json/mock_data/irrigation/method-detail/delete_404.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/soil-data/",
+    "status_code": 200,
+    "description": "Soil data served from database",
+    "file": "json/mock_data/soil-data/get_200_database.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/soil-data/",
+    "status_code": 202,
+    "description": "Soil data fetch task queued",
+    "file": "json/mock_data/soil-data/get_202_queued.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/soil-data/",
+    "status_code": 400,
+    "description": "Soil data validation error",
+    "file": "json/mock_data/soil-data/get_400.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/soil-data/",
+    "status_code": 200,
+    "description": "Soil data POST served from database",
+    "file": "json/mock_data/soil-data/post_200_database.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/soil-data/",
+    "status_code": 202,
+    "description": "Soil data POST task queued",
+    "file": "json/mock_data/soil-data/post_202_queued.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/soil-data/",
+    "status_code": 400,
+    "description": "Soil data POST validation error",
+    "file": "json/mock_data/soil-data/post_400.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/soil-data/tasks/{task_id}/status/",
+    "status_code": 200,
+    "description": "Soil task status pending",
+    "file": "json/mock_data/soil-data/status/get_200_pending.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/soil-data/tasks/{task_id}/status/",
+    "status_code": 200,
+    "description": "Soil task status progress",
+    "file": "json/mock_data/soil-data/status/get_200_progress.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/soil-data/tasks/{task_id}/status/",
+    "status_code": 200,
+    "description": "Soil task status success",
+    "file": "json/mock_data/soil-data/status/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/soil-data/tasks/{task_id}/status/",
+    "status_code": 200,
+    "description": "Soil task status failure",
+    "file": "json/mock_data/soil-data/status/get_200_failure.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plants/",
+    "status_code": 200,
+    "description": "List plants",
+    "file": "json/mock_data/plant/list-get_200.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plants/",
+    "status_code": 201,
+    "description": "Create plant",
+    "file": "json/mock_data/plant/create-post_201.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plants/",
+    "status_code": 400,
+    "description": "Plant create validation error",
+    "file": "json/mock_data/plant/create-post_400.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plants/{pk}/",
+    "status_code": 200,
+    "description": "Plant detail get success",
+    "file": "json/mock_data/plant/detail-get_200.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plants/{pk}/",
+    "status_code": 404,
+    "description": "Plant detail get not found",
+    "file": "json/mock_data/plant/detail-get_404.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/plants/{pk}/",
+    "status_code": 200,
+    "description": "Plant detail put success",
+    "file": "json/mock_data/plant/detail-put_200.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/plants/{pk}/",
+    "status_code": 400,
+    "description": "Plant detail put validation error",
+    "file": "json/mock_data/plant/detail-put_400.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/plants/{pk}/",
+    "status_code": 404,
+    "description": "Plant detail put not found",
+    "file": "json/mock_data/plant/detail-put_404.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/plants/{pk}/",
+    "status_code": 200,
+    "description": "Plant detail patch success",
+    "file": "json/mock_data/plant/detail-patch_200.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/plants/{pk}/",
+    "status_code": 400,
+    "description": "Plant detail patch validation error",
+    "file": "json/mock_data/plant/detail-patch_400.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/plants/{pk}/",
+    "status_code": 404,
+    "description": "Plant detail patch not found",
+    "file": "json/mock_data/plant/detail-patch_404.json"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/plants/{pk}/",
+    "status_code": 200,
+    "description": "Delete plant success",
+    "file": "json/mock_data/plant/detail-delete_200.json"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/plants/{pk}/",
+    "status_code": 404,
+    "description": "Delete plant not found",
+    "file": "json/mock_data/plant/detail-delete_404.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plants/fetch-info/",
+    "status_code": 200,
+    "description": "Fetch plant info success",
+    "file": "json/mock_data/plant/fetch-info-post_200.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plants/fetch-info/",
+    "status_code": 400,
+    "description": "Fetch plant info missing name",
+    "file": "json/mock_data/plant/fetch-info-post_400.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plants/fetch-info/",
+    "status_code": 503,
+    "description": "Fetch plant info service unavailable",
+    "file": "json/mock_data/plant/fetch-info-post_503.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/rag/chat/",
+    "status_code": 200,
+    "description": "RAG chat streaming response",
+    "file": "json/mock_data/rag/chat-post_200_stream.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/rag/chat/",
+    "status_code": 400,
+    "description": "Missing query",
+    "file": "json/mock_data/rag/chat-post_400_missing_query.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/rag/chat/",
+    "status_code": 400,
+    "description": "Invalid service id",
+    "file": "json/mock_data/rag/chat-post_400_invalid_service.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/rag/chat/",
+    "status_code": 400,
+    "description": "Missing user_id for service",
+    "file": "json/mock_data/rag/chat-post_400_missing_user.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/rag/recommend/irrigation/",
+    "status_code": 202,
+    "description": "RAG irrigation task queued",
+    "file": "json/mock_data/rag/irrigation/post_202.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/rag/recommend/irrigation/",
+    "status_code": 400,
+    "description": "RAG irrigation validation error",
+    "file": "json/mock_data/rag/irrigation/post_400.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/rag/recommend/irrigation/{task_id}/status/",
+    "status_code": 200,
+    "description": "RAG irrigation status pending",
+    "file": "json/mock_data/rag/irrigation/status/get_200_pending.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/rag/recommend/irrigation/{task_id}/status/",
+    "status_code": 200,
+    "description": "RAG irrigation status progress",
+    "file": "json/mock_data/rag/irrigation/status/get_200_progress.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/rag/recommend/irrigation/{task_id}/status/",
+    "status_code": 200,
+    "description": "RAG irrigation status success",
+    "file": "json/mock_data/rag/irrigation/status/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/rag/recommend/irrigation/{task_id}/status/",
+    "status_code": 200,
+    "description": "RAG irrigation status failure",
+    "file": "json/mock_data/rag/irrigation/status/get_200_failure.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/rag/recommend/fertilization/",
+    "status_code": 202,
+    "description": "RAG fertilization task queued",
+    "file": "json/mock_data/rag/fertilization/post_202.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/rag/recommend/fertilization/",
+    "status_code": 400,
+    "description": "RAG fertilization validation error",
+    "file": "json/mock_data/rag/fertilization/post_400.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/rag/recommend/fertilization/{task_id}/status/",
+    "status_code": 200,
+    "description": "RAG fertilization status pending",
+    "file": "json/mock_data/rag/fertilization/status/get_200_pending.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/rag/recommend/fertilization/{task_id}/status/",
+    "status_code": 200,
+    "description": "RAG fertilization status progress",
+    "file": "json/mock_data/rag/fertilization/status/get_200_progress.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/rag/recommend/fertilization/{task_id}/status/",
+    "status_code": 200,
+    "description": "RAG fertilization status success",
+    "file": "json/mock_data/rag/fertilization/status/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/rag/recommend/fertilization/{task_id}/status/",
+    "status_code": 200,
+    "description": "RAG fertilization status failure",
+    "file": "json/mock_data/rag/fertilization/status/get_200_failure.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/sensor-data/{uuid_sensor}/",
+    "status_code": 200,
+    "description": "Sensor update put success",
+    "file": "json/mock_data/sensor-data/update-put_200.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/sensor-data/{uuid_sensor}/",
+    "status_code": 400,
+    "description": "Sensor update put validation error",
+    "file": "json/mock_data/sensor-data/update-put_400.json"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/sensor-data/{uuid_sensor}/",
+    "status_code": 404,
+    "description": "Sensor update put location not found",
+    "file": "json/mock_data/sensor-data/update-put_404.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/sensor-data/{uuid_sensor}/",
+    "status_code": 200,
+    "description": "Sensor update patch success",
+    "file": "json/mock_data/sensor-data/update-patch_200.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/sensor-data/{uuid_sensor}/",
+    "status_code": 400,
+    "description": "Sensor update patch validation error",
+    "file": "json/mock_data/sensor-data/update-patch_400.json"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/sensor-data/{uuid_sensor}/",
+    "status_code": 404,
+    "description": "Sensor update patch location not found",
+    "file": "json/mock_data/sensor-data/update-patch_404.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sensor-data/parameters/",
+    "status_code": 201,
+    "description": "Create sensor parameter",
+    "file": "json/mock_data/sensor-data/parameters-post_201.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sensor-data/parameters/",
+    "status_code": 400,
+    "description": "Sensor parameter validation error",
+    "file": "json/mock_data/sensor-data/parameters-post_400.json"
+  },
+  {
+    "method": "POST",
+    "path": "/api/tasks/",
+    "status_code": 200,
+    "description": "Task trigger success",
+    "file": "json/mock_data/tasks/post_200.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/tasks/{task_id}/status/",
+    "status_code": 200,
+    "description": "Task status pending",
+    "file": "json/mock_data/tasks/status/get_200_pending.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/tasks/{task_id}/status/",
+    "status_code": 200,
+    "description": "Task status progress",
+    "file": "json/mock_data/tasks/status/get_200_progress.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/tasks/{task_id}/status/",
+    "status_code": 200,
+    "description": "Task status success",
+    "file": "json/mock_data/tasks/status/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/tasks/{task_id}/status/",
+    "status_code": 200,
+    "description": "Task status failure",
+    "file": "json/mock_data/tasks/status/get_200_failure.json"
+  }
+]

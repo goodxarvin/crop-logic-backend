@@ -1,0 +1,9 @@
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "task_id": "soil-task-123",
+    "status": "FAILURE",
+    "error": "خطا در واکشی داده خاک."
+  }
+}

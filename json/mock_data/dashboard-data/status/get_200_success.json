@@ -1,0 +1,41 @@
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "task_id": "dashboard-task-123",
+    "status": "SUCCESS",
+    "result": {
+      "sensor_id": "550e8400-e29b-41d4-a716-446655440000",
+      "all_cards": {
+        "farmOverviewKpis": {
+          "healthScore": 82,
+          "activeAlerts": 2,
+          "waterNeedMm": 18.4
+        },
+        "sensorValuesList": {
+          "items": [
+            {
+              "label": "رطوبت خاک",
+              "value": 45.2,
+              "unit": "%"
+            },
+            {
+              "label": "دما خاک",
+              "value": 22.5,
+              "unit": "°C"
+            }
+          ]
+        },
+        "recommendationsList": {
+          "items": [
+            {
+              "recommendation_title": "تنظیم نوبت آبیاری",
+              "suggested_action": "آبیاری بعدی را صبح فردا انجام دهید.",
+              "urgency_level": "high"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

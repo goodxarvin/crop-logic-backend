@@ -1,12 +1,50 @@
 from rest_framework import status
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, extend_schema_view
 
+from config.swagger import code_response
 from .models import Sensor
 from .serializers import SensorCreateSerializer, SensorSerializer
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Sensor Hub"],
+        responses={
+            200: code_response("SensorHubGetResponse", data=serializers.JSONField()),
+            404: code_response("SensorHubNotFoundResponse"),
+        },
+    ),
+    post=extend_schema(
+        tags=["Sensor Hub"],
+        request=OpenApiTypes.OBJECT,
+        responses={
+            201: code_response("SensorCreateResponse", data=serializers.JSONField()),
+            200: code_response("SensorToggleResponse"),
+            400: code_response("SensorToggleValidationResponse"),
+            404: code_response("SensorToggleNotFoundResponse"),
+        },
+    ),
+    patch=extend_schema(
+        tags=["Sensor Hub"],
+        request=SensorCreateSerializer,
+        responses={
+            200: code_response("SensorUpdateResponse", data=SensorSerializer()),
+            404: code_response("SensorUpdateNotFoundResponse"),
+        },
+    ),
+    delete=extend_schema(
+        tags=["Sensor Hub"],
+        responses={
+            200: code_response("SensorDeleteResponse"),
+            404: code_response("SensorDeleteNotFoundResponse"),
+        },
+    ),
+)
 class SensorHubView(APIView):
     """
     Sensor-hub CRUD endpoints connected to the database.

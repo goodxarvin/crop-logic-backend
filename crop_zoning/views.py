@@ -1,16 +1,17 @@
 """
 Crop Zoning API views.
-Plain Django only; no DRF. No database. All responses are static mock data.
+No database. All responses are static mock data.
 Response format: {"status": "success", "data": <payload>}. HTTP 200 only.
 No processing, validation, or use of input parameters in responses.
-CSRF exempt on POST so frontend can call without token.
 """
 
-from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views import View
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework import serializers, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 
+from config.swagger import status_response
 from .mock_data import (
     AREA_RESPONSE_DATA,
     PRODUCTS_RESPONSE_DATA,
@@ -22,7 +23,7 @@ from .mock_data import (
 )
 
 
-class AreaView(View):
+class AreaView(APIView):
     """
     GET endpoint for fixed land area (GeoJSON polygon).
 
@@ -40,14 +41,18 @@ class AreaView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Crop Zoning"],
+        responses={200: status_response("CropZoningAreaResponse", data=serializers.JSONField())},
+    )
     def get(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": AREA_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
-class ProductsView(View):
+class ProductsView(APIView):
     """
     GET endpoint for list of crop products and colors.
 
@@ -67,15 +72,18 @@ class ProductsView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Crop Zoning"],
+        responses={200: status_response("CropZoningProductsResponse", data=serializers.JSONField())},
+    )
     def get(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": PRODUCTS_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class ZonesInitialView(View):
+class ZonesInitialView(APIView):
     """
     POST endpoint for initial zone data (map + hover/tooltip).
 
@@ -99,15 +107,19 @@ class ZonesInitialView(View):
     not used in the response.
     """
 
+    @extend_schema(
+        tags=["Crop Zoning"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("CropZoningZonesInitialResponse", data=serializers.JSONField())},
+    )
     def post(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": ZONES_INITIAL_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class ZonesWaterNeedView(View):
+class ZonesWaterNeedView(APIView):
     """
     POST endpoint for water need per zone (water need layer).
 
@@ -126,15 +138,19 @@ class ZonesWaterNeedView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Crop Zoning"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("CropZoningZonesWaterNeedResponse", data=serializers.JSONField())},
+    )
     def post(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": ZONES_WATER_NEED_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class ZonesSoilQualityView(View):
+class ZonesSoilQualityView(APIView):
     """
     POST endpoint for soil quality per zone (soil quality layer).
 
@@ -153,15 +169,19 @@ class ZonesSoilQualityView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Crop Zoning"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("CropZoningZonesSoilQualityResponse", data=serializers.JSONField())},
+    )
     def post(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": ZONES_SOIL_QUALITY_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class ZonesCultivationRiskView(View):
+class ZonesCultivationRiskView(APIView):
     """
     POST endpoint for cultivation risk per zone (cultivation risk layer).
 
@@ -180,14 +200,19 @@ class ZonesCultivationRiskView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Crop Zoning"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("CropZoningZonesCultivationRiskResponse", data=serializers.JSONField())},
+    )
     def post(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": ZONES_CULTIVATION_RISK_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
-class ZoneDetailsView(View):
+class ZoneDetailsView(APIView):
     """
     GET endpoint for zone detail data (detail panel after click).
 
@@ -208,9 +233,13 @@ class ZoneDetailsView(View):
     not used in the response.
     """
 
+    @extend_schema(
+        tags=["Crop Zoning"],
+        responses={200: status_response("CropZoningZoneDetailsResponse", data=serializers.JSONField())},
+    )
     def get(self, request, zone_id):
         data = ZONE_DETAILS_BY_ID.get(zone_id, ZONE_DETAILS_BY_ID["zone-0"])
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": data},
-            status=200,
+            status=status.HTTP_200_OK,
         )

@@ -1,0 +1,8 @@
+{
+  "code": 202,
+  "msg": "dashboard task queued",
+  "data": {
+    "task_id": "dashboard-task-123",
+    "status_url": "/api/dashboard-data/dashboard-task-123/status/"
+  }
+}

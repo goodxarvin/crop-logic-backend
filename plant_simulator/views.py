@@ -1,22 +1,22 @@
 """
 Plant Simulator API views.
-Plain Django only; no DRF. No database. All responses are static mock data.
+No database. All responses are static mock data.
 Response format: {"status": "success"} or {"status": "success", "data": <payload>}. HTTP 200 only.
 No processing, validation, or use of input parameters in responses.
-CSRF exempt so frontend (e.g. localhost:3000) can call POST/PATCH without token.
 """
 
-from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views import View
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework import serializers, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 
+from config.swagger import status_response
 from .mock_data import CONFIG_SLIDERS_ONLY, START_RESPONSE_DATA, STATE_RESPONSE_DATA
 from .serializers import success_response, success_with_data
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class ConfigView(View):
+class ConfigView(APIView):
     """
     GET endpoint for simulator configuration (ورود).
 
@@ -34,12 +34,15 @@ class ConfigView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Plant Simulator"],
+        responses={200: status_response("PlantSimulatorConfigResponse", data=serializers.JSONField())},
+    )
     def get(self, request):
-        return JsonResponse(success_with_data(CONFIG_SLIDERS_ONLY), status=200)
+        return Response(success_with_data(CONFIG_SLIDERS_ONLY), status=status.HTTP_200_OK)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class StateView(View):
+class StateView(APIView):
     """
     GET endpoint for plant state, progress, and chart history.
 
@@ -62,12 +65,15 @@ class StateView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Plant Simulator"],
+        responses={200: status_response("PlantSimulatorStateResponse", data=serializers.JSONField())},
+    )
     def get(self, request):
-        return JsonResponse(success_with_data(STATE_RESPONSE_DATA), status=200)
+        return Response(success_with_data(STATE_RESPONSE_DATA), status=status.HTTP_200_OK)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class StartView(View):
+class StartView(APIView):
     """
     POST endpoint to start simulation.
 
@@ -86,12 +92,16 @@ class StartView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Plant Simulator"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PlantSimulatorStartResponse", data=serializers.JSONField())},
+    )
     def post(self, request):
-        return JsonResponse(success_with_data(START_RESPONSE_DATA), status=200)
+        return Response(success_with_data(START_RESPONSE_DATA), status=status.HTTP_200_OK)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class StopView(View):
+class StopView(APIView):
     """
     POST endpoint to stop simulation.
 
@@ -109,12 +119,16 @@ class StopView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Plant Simulator"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PlantSimulatorStopResponse")},
+    )
     def post(self, request):
-        return JsonResponse(success_response(), status=200)
+        return Response(success_response(), status=status.HTTP_200_OK)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class ResetView(View):
+class ResetView(APIView):
     """
     POST endpoint to reset simulation.
 
@@ -132,12 +146,16 @@ class ResetView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Plant Simulator"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PlantSimulatorResetResponse")},
+    )
     def post(self, request):
-        return JsonResponse(success_response(), status=200)
+        return Response(success_response(), status=status.HTTP_200_OK)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class EnvironmentView(View):
+class EnvironmentView(APIView):
     """
     PATCH endpoint to update environment (slider values).
 
@@ -157,5 +175,10 @@ class EnvironmentView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Plant Simulator"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PlantSimulatorEnvironmentResponse")},
+    )
     def patch(self, request):
-        return JsonResponse(success_response(), status=200)
+        return Response(success_response(), status=status.HTTP_200_OK)

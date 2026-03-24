@@ -1,20 +1,21 @@
 """
 Farm AI Assistant API views.
-Plain Django only; no DRF. No database. All responses are static mock data.
+No database. All responses are static mock data.
 Response format: {"status": "success", "data": <payload>}. HTTP 200 only.
 No processing, validation, or use of input parameters in responses.
-CSRF exempt on POST so frontend can call without token.
 """
 
-from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views import View
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework import serializers, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 
+from config.swagger import status_response
 from .mock_data import CHAT_RESPONSE_DATA, CONTEXT_RESPONSE_DATA
 
 
-class ContextView(View):
+class ContextView(APIView):
     """
     GET endpoint for farm context (Farm AI Assistant bar).
 
@@ -34,15 +35,18 @@ class ContextView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Farm AI Assistant"],
+        responses={200: status_response("FarmAiAssistantContextResponse", data=serializers.JSONField())},
+    )
     def get(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": CONTEXT_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class ChatView(View):
+class ChatView(APIView):
     """
     POST endpoint for Farm AI Assistant chat (send message, get structured reply).
 
@@ -70,8 +74,13 @@ class ChatView(View):
     not used in the response.
     """
 
+    @extend_schema(
+        tags=["Farm AI Assistant"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("FarmAiAssistantChatResponse", data=serializers.JSONField())},
+    )
     def post(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": CHAT_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )

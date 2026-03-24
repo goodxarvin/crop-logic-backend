@@ -1,21 +1,21 @@
 """
 Pest Detection API views.
-Plain Django only; no DRF. No database. All responses are static mock data.
+No database. All responses are static mock data.
 Response format: {"status": "success", "data": <payload>}. HTTP 200 only.
 No processing, validation, or use of input parameters in responses.
-CSRF exempt so frontend can call POST without token.
 """
 
-from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views import View
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework import serializers, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 
+from config.swagger import status_response
 from .mock_data import ANALYZE_RESPONSE_DATA
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class AnalyzeView(View):
+class AnalyzeView(APIView):
     """
     POST endpoint for pest detection analysis.
 
@@ -36,8 +36,13 @@ class AnalyzeView(View):
     No processing or validation is performed on inputs.
     """
 
+    @extend_schema(
+        tags=["Pest Detection"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PestDetectionAnalyzeResponse", data=serializers.JSONField())},
+    )
     def post(self, request):
-        return JsonResponse(
+        return Response(
             {"status": "success", "data": ANALYZE_RESPONSE_DATA},
-            status=200,
+            status=status.HTTP_200_OK,
         )

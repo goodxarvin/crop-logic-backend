@@ -3,11 +3,16 @@ Account API module.
 CRUD endpoints for user account profile.
 """
 
+from rest_framework import serializers
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, extend_schema_view
 
+from auth.serializers import AuthUserSerializer
+from config.swagger import code_response
 from .serializers import UpdateProfileSerializer
 
 
@@ -25,6 +30,13 @@ def _auth_user_to_data(user):
     }
 
 
+@extend_schema_view(
+    patch=extend_schema(
+        tags=["Account"],
+        request=UpdateProfileSerializer,
+        responses={200: code_response("ProfileUpdateResponse", data=AuthUserSerializer())},
+    ),
+)
 class ProfileView(APIView):
     """
     PATCH /api/account/profile/
@@ -63,6 +75,26 @@ class ProfileView(APIView):
         )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Account"],
+        responses={200: code_response("AccountGetResponse", data=serializers.JSONField())},
+    ),
+    post=extend_schema(
+        tags=["Account"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: code_response("AccountCreateResponse")},
+    ),
+    patch=extend_schema(
+        tags=["Account"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: code_response("AccountUpdateResponse")},
+    ),
+    delete=extend_schema(
+        tags=["Account"],
+        responses={200: code_response("AccountDeleteResponse")},
+    ),
+)
 class AccountView(APIView):
     """
     Account CRUD endpoints. Dispatch by HTTP method and path (uuid for detail/update/delete).

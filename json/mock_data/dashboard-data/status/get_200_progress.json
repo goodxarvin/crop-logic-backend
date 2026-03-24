@@ -1,0 +1,14 @@
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "task_id": "dashboard-task-123",
+    "status": "PROGRESS",
+    "progress": {
+      "current": 5,
+      "total": 15,
+      "card": "sensorValuesList",
+      "message": "processing sensorValuesList"
+    }
+  }
+}
