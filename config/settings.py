@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "irrigation_recommendation",
     "fertilization_recommendation",
     "farm_ai_assistant",
+    "external_api_adapter.apps.ExternalApiAdapterConfig",
     "rest_framework",
     "drf_spectacular",
     "drf_spectacular_sidecar",
@@ -134,3 +135,17 @@ SMS_IR_API_KEY = os.environ.get("SMS_IR_API_KEY", "")
 SMS_IR_LINE_NUMBER = int(os.environ.get("SMS_IR_LINE_NUMBER", "300000000000"))
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
+
+USE_EXTERNAL_API_MOCK = os.getenv("USE_EXTERNAL_API_MOCK", "false").lower() == "true"
+EXTERNAL_API_TIMEOUT = int(os.getenv("EXTERNAL_API_TIMEOUT", "30"))
+
+EXTERNAL_SERVICES = {
+    "ai": {
+        "base_url": os.getenv("AI_SERVICE_BASE_URL", ""),
+        "api_key": os.getenv("AI_SERVICE_API_KEY", ""),
+    },
+    "sensor_hub": {
+        "base_url": os.getenv("SENSOR_HUB_SERVICE_BASE_URL", ""),
+        "api_key": os.getenv("SENSOR_HUB_SERVICE_API_KEY", ""),
+    },
+}

@@ -1,0 +1,9 @@
+{
+  "code": 400,
+  "msg": "داده نامعتبر.",
+  "data": {
+    "sensor_uuid": [
+      "This field is required."
+    ]
+  }
+}

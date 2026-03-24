@@ -11,7 +11,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
 from config.swagger import code_response
-from .mock_data import ALL_CARDS, CONFIG
+from external_api_adapter import request as external_api_request
+from .mock_data import CONFIG
 
 
 @extend_schema_view(
@@ -58,4 +59,5 @@ class FarmDashboardCardsView(APIView):
     permission_classes = []
 
     def get(self, request):
-        return Response({"code": 200, "msg": "OK", "data": ALL_CARDS}, status=status.HTTP_200_OK)
+        adapter_response = external_api_request("ai", "/dashboard-data/status", method="GET")
+        return Response(adapter_response.data, status=adapter_response.status_code)

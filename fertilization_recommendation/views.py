@@ -12,7 +12,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 
 from config.swagger import status_response
-from .mock_data import CONFIG_RESPONSE_DATA, RECOMMEND_RESPONSE_DATA
+from external_api_adapter import request as external_api_request
+from .mock_data import CONFIG_RESPONSE_DATA
 
 
 class ConfigView(APIView):
@@ -74,7 +75,10 @@ class RecommendView(APIView):
         responses={200: status_response("FertilizationRecommendResponse", data=serializers.JSONField())},
     )
     def post(self, request):
-        return Response(
-            {"status": "success", "data": RECOMMEND_RESPONSE_DATA},
-            status=status.HTTP_200_OK,
+        adapter_response = external_api_request(
+            "ai",
+            "/fertilization/recommend",
+            method="POST",
+            payload=request.data,
         )
+        return Response(adapter_response.data, status=adapter_response.status_code)

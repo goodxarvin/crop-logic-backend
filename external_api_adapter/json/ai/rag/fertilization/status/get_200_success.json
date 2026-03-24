@@ -1,0 +1,19 @@
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "task_id": "rag-fert-123",
+    "status": "SUCCESS",
+    "result": {
+      "plan": {
+        "npkRatio": "20-20-20",
+        "amountPerHectare": "150 kg/ha",
+        "applicationMethod": "کودآبیاری در دو نوبت",
+        "applicationInterval": "هر ۱۰ روز",
+        "reasoning": "نیتروژن و پتاسیم خاک در محدوده متوسط است و گیاه در فاز رویشی نیاز تغذیه‌ای بالاتری دارد."
+      },
+      "raw_response": "{\"plan\":{\"npkRatio\":\"20-20-20\"}}",
+      "status": "completed"
+    }
+  }
+}

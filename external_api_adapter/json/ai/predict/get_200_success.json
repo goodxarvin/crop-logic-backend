@@ -1,0 +1,9 @@
+{
+  "status": "success",
+  "service": "ai",
+  "path": "/predict",
+  "result": {
+    "prediction": "healthy",
+    "confidence": 0.97
+  }
+}

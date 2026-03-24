@@ -1,0 +1,67 @@
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "task_id": "soil-task-123",
+    "status": "SUCCESS",
+    "result": {
+      "source": "database",
+      "id": 12,
+      "lon": "51.389000",
+      "lat": "35.689200",
+      "depths": [
+        {
+          "depth_label": "0-5cm",
+          "bdod": 1.31,
+          "cec": 18.4,
+          "cfvo": 2.0,
+          "clay": 24.0,
+          "nitrogen": 0.18,
+          "ocd": 32.0,
+          "ocs": 4.1,
+          "phh2o": 7.2,
+          "sand": 34.0,
+          "silt": 42.0,
+          "soc": 1.6,
+          "wv0010": 0.31,
+          "wv0033": 0.22,
+          "wv1500": 0.11
+        },
+        {
+          "depth_label": "5-15cm",
+          "bdod": 1.35,
+          "cec": 17.2,
+          "cfvo": 2.3,
+          "clay": 26.0,
+          "nitrogen": 0.16,
+          "ocd": 28.0,
+          "ocs": 3.7,
+          "phh2o": 7.1,
+          "sand": 36.0,
+          "silt": 38.0,
+          "soc": 1.4,
+          "wv0010": 0.29,
+          "wv0033": 0.2,
+          "wv1500": 0.1
+        },
+        {
+          "depth_label": "15-30cm",
+          "bdod": 1.39,
+          "cec": 15.8,
+          "cfvo": 2.8,
+          "clay": 28.0,
+          "nitrogen": 0.13,
+          "ocd": 22.0,
+          "ocs": 3.2,
+          "phh2o": 7.0,
+          "sand": 38.0,
+          "silt": 34.0,
+          "soc": 1.1,
+          "wv0010": 0.26,
+          "wv0033": 0.18,
+          "wv1500": 0.09
+        }
+      ]
+    }
+  }
+}

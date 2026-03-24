@@ -1,6 +1,7 @@
 import secrets
 
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, get_user_model
+from django.db.models import Q
 from django.conf import settings
 from django.core.cache import cache
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
@@ -130,8 +131,21 @@ class LoginView(APIView):
         identifier = serializer.validated_data["identifier"]
         password = serializer.validated_data["password"]
 
-        user = authenticate(request, username=identifier, password=password)
+        User = get_user_model()
 
+        identifier = serializer.validated_data["identifier"]
+        password = serializer.validated_data["password"]
+
+        user_obj = User.objects.filter(
+            Q(username=identifier) | Q(email=identifier) | Q(phone_number=identifier)
+        ).first()
+
+        
+
+        if user_obj:
+            user = authenticate(request, username=user_obj.username, password=password)
+        else:
+            user = None
         if user is None:
             return Response(
                 {"code": 401, "msg": "Invalid credentials."},

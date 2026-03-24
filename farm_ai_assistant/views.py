@@ -5,6 +5,7 @@ Response format: {"status": "success", "data": <payload>}. HTTP 200 only.
 No processing, validation, or use of input parameters in responses.
 """
 
+from django.http import HttpResponse
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,7 +13,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 
 from config.swagger import status_response
-from .mock_data import CHAT_RESPONSE_DATA, CONTEXT_RESPONSE_DATA
+from external_api_adapter import request as external_api_request
+from .mock_data import CONTEXT_RESPONSE_DATA
 
 
 class ContextView(APIView):
@@ -80,7 +82,16 @@ class ChatView(APIView):
         responses={200: status_response("FarmAiAssistantChatResponse", data=serializers.JSONField())},
     )
     def post(self, request):
-        return Response(
-            {"status": "success", "data": CHAT_RESPONSE_DATA},
-            status=status.HTTP_200_OK,
+        adapter_response = external_api_request(
+            "ai",
+            "/rag/chat",
+            method="POST",
+            payload=request.data,
         )
+        if isinstance(adapter_response.data, dict) and "body" in adapter_response.data:
+            return HttpResponse(
+                adapter_response.data["body"],
+                status=adapter_response.status_code,
+                content_type=adapter_response.data.get("content_type", "text/plain; charset=utf-8"),
+            )
+        return Response(adapter_response.data, status=adapter_response.status_code)
