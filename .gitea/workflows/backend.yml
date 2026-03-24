@@ -71,7 +71,7 @@ jobs:
 
       - name: Checkout repository
         run: |
-          git clone http://gitea:3000/sajad-dev/Backend.git .
+          git clone  http://15f3baa28036aa35f8eb707585567d1b87bd8977@git.crop-logic.ir/sajad-dev/Backend.git .
 
       - name: Install Python
         run: |
@@ -115,6 +115,6 @@ jobs:
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} -p ${{secrets.SERVER_SSH_PORT}}<< 'EOF'
           cd application/Backend
           git pull origin production
-          docker-compose -f docker-compose-prod.yaml down
-          docker-compose -f docker-compose-prod.yaml up -d
+          docker-compose -f docker-compose-prod.yaml down --remove-orphans 
+          docker-compose -f docker-compose-prod.yaml up -d 
           EOF
