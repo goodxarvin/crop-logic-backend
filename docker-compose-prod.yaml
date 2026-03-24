@@ -15,7 +15,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+    networks:
+      - crop_network 
   web:
     build: .
     env_file:
@@ -26,8 +27,12 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
-    ports:
-      - "8000:8000"
 
+    networks:
+      - crop_network  
+
+networks:
+  crop_network:
+    external: true  
 volumes:
   mysql_data:
