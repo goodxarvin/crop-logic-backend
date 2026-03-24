@@ -1,13 +1,13 @@
 import secrets
 
-from django.contrib.auth import authenticate, get_user_model
-from django.db.models import Q
+from django.contrib.auth import authenticate
 from django.conf import settings
 from django.core.cache import cache
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db import IntegrityError
 from rest_framework import serializers
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -60,6 +60,8 @@ class RegisterView(APIView):
     All fields are required (first_name, last_name optional).
     Returns JWT tokens and user data on success.
     """
+
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -124,6 +126,8 @@ class LoginView(APIView):
     Returns JWT tokens and user data on success.
     """
 
+    permission_classes = [AllowAny]
+
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -131,21 +135,8 @@ class LoginView(APIView):
         identifier = serializer.validated_data["identifier"]
         password = serializer.validated_data["password"]
 
-        User = get_user_model()
+        user = authenticate(request, username=identifier, password=password)
 
-        identifier = serializer.validated_data["identifier"]
-        password = serializer.validated_data["password"]
-
-        user_obj = User.objects.filter(
-            Q(username=identifier) | Q(email=identifier) | Q(phone_number=identifier)
-        ).first()
-
-        
-
-        if user_obj:
-            user = authenticate(request, username=user_obj.username, password=password)
-        else:
-            user = None
         if user is None:
             return Response(
                 {"code": 401, "msg": "Invalid credentials."},
@@ -192,6 +183,8 @@ class AuthenticationView(APIView):
     Dispatches by path: .../request-otp/ -> request_otp, .../verify-otp/ -> verify_otp.
     Response format: RequestOTPResponse / VerifyOTPResponse (code, msg, token, data when applicable).
     """
+
+    permission_classes = [AllowAny]
 
     def post(self, request):
         if "verify-otp" in request.path:

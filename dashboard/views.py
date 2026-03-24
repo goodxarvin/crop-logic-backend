@@ -33,9 +33,6 @@ class FarmDashboardConfigView(APIView):
     PATCH accepts body but returns same static config; no processing or validation.
     No database. No input values used in response.
     """
-    authentication_classes = []  # No authentication
-    permission_classes = []
-
     def get(self, request):
         return Response({"code": 200, "msg": "OK", "data": CONFIG}, status=status.HTTP_200_OK)
 
@@ -55,9 +52,6 @@ class FarmDashboardCardsView(APIView):
     Returns unified response with all 15 card payloads.
     No database. Static mock data only.
     """
-    authentication_classes = []  # No authentication
-    permission_classes = []
-
     def get(self, request):
         adapter_response = external_api_request("ai", "/dashboard-data/status", method="GET")
         return Response(adapter_response.data, status=adapter_response.status_code)

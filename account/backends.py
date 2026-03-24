@@ -19,10 +19,12 @@ class MultiFieldBackend(ModelBackend):
             user = User.objects.get(
                 Q(username=username) | Q(email=username) | Q(phone_number=username)
             )
+            print(user)
         except (User.DoesNotExist, User.MultipleObjectsReturned):
             User().set_password(password)
             return None
-
+        print(user.check_password(password) , self.user_can_authenticate(user))
+        
         if user.check_password(password) and self.user_can_authenticate(user):
             return user
         return None
