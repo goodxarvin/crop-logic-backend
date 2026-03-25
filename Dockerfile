@@ -38,8 +38,10 @@ RUN pip config --user set global.index-url https://package-mirror.liara.ir/repos
 
 RUN    pip install -r requirements.txt
 
+COPY entrypoint.sh /app/entrypoint.sh
 COPY . .
 
 EXPOSE 8000
 
+ENTRYPOINT ["sh", "/app/entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
