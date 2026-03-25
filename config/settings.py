@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -149,4 +150,12 @@ EXTERNAL_SERVICES = {
         "base_url": os.getenv("SENSOR_HUB_SERVICE_BASE_URL", ""),
         "api_key": os.getenv("SENSOR_HUB_SERVICE_API_KEY", ""),
     },
+}
+
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
 }

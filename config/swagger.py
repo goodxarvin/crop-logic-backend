@@ -3,9 +3,8 @@ from rest_framework import serializers
 from drf_spectacular.utils import inline_serializer
 
 
-class TokenPairSerializer(serializers.Serializer):
-    access = serializers.CharField()
-    refresh = serializers.CharField()
+class AuthTokenSerializer(serializers.Serializer):
+    token = serializers.CharField()
 
 
 def code_response(name, data=None, token=False, extra_fields=None):
@@ -16,7 +15,7 @@ def code_response(name, data=None, token=False, extra_fields=None):
     if data is not None:
         fields["data"] = data
     if token:
-        fields["token"] = TokenPairSerializer()
+        fields["token"] = serializers.CharField()
     if extra_fields:
         fields.update(extra_fields)
     return inline_serializer(name=name, fields=fields)

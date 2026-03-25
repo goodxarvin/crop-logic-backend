@@ -25,7 +25,7 @@ class ExternalAPIAdapter:
         request_method = method.upper()
         self._validate_method(request_method)
         service = self.service_registry.get(service_name)
-
+        
         if getattr(settings, "USE_EXTERNAL_API_MOCK", False):
             mock_response = self.mock_loader.load(service_name=service_name, path=path, method=request_method)
             return AdapterResponse(

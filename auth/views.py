@@ -1,17 +1,16 @@
 import secrets
 
-from django.contrib.auth import authenticate
 from django.conf import settings
+from django.contrib.auth import authenticate
 from django.core.cache import cache
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db import IntegrityError
-from rest_framework import serializers
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import AccessToken
 
 from account.models import User
 from config.swagger import code_response
@@ -30,7 +29,6 @@ OTP_SIGNER = TimestampSigner(salt="auth.otp")
 
 
 def _auth_user_to_data(user):
-    """Build AuthUser-shaped dict from Django User."""
     if user is None or not getattr(user, "pk", None):
         return None
     return {
@@ -41,6 +39,10 @@ def _auth_user_to_data(user):
         "last_name": getattr(user, "last_name", "") or "",
         "phone_number": getattr(user, "phone_number", "") or "",
     }
+
+
+def _issue_token(user):
+    return str(AccessToken.for_user(user))
 
 
 @extend_schema_view(
@@ -54,13 +56,6 @@ def _auth_user_to_data(user):
     ),
 )
 class RegisterView(APIView):
-    """
-    POST /api/auth/register/
-    Creates a new user with username, email, phone_number, and password.
-    All fields are required (first_name, last_name optional).
-    Returns JWT tokens and user data on success.
-    """
-
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -87,23 +82,14 @@ class RegisterView(APIView):
                 detail = "A user with this phone number already exists."
             else:
                 detail = "A user with these credentials already exists."
-            return Response(
-                {"code": 400, "msg": detail},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        refresh = RefreshToken.for_user(user)
-        user_data = _auth_user_to_data(user)
+            return Response({"code": 400, "msg": detail}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
             {
                 "code": 201,
                 "msg": "success",
-                "data": user_data,
-                "token": {
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
-                },
+                "data": _auth_user_to_data(user),
+                "token": _issue_token(user),
             },
             status=status.HTTP_201_CREATED,
         )
@@ -120,12 +106,6 @@ class RegisterView(APIView):
     ),
 )
 class LoginView(APIView):
-    """
-    POST /api/auth/login/
-    Accepts identifier (username, email, or phone_number) + password.
-    Returns JWT tokens and user data on success.
-    """
-
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -134,27 +114,17 @@ class LoginView(APIView):
 
         identifier = serializer.validated_data["identifier"]
         password = serializer.validated_data["password"]
-
         user = authenticate(request, username=identifier, password=password)
 
         if user is None:
-            return Response(
-                {"code": 401, "msg": "Invalid credentials."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        refresh = RefreshToken.for_user(user)
-        user_data = _auth_user_to_data(user)
+            return Response({"code": 401, "msg": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
 
         return Response(
             {
                 "code": 200,
                 "msg": "success",
-                "data": user_data,
-                "token": {
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
-                },
+                "data": _auth_user_to_data(user),
+                "token": _issue_token(user),
             },
             status=status.HTTP_200_OK,
         )
@@ -178,12 +148,6 @@ class LoginView(APIView):
     ),
 )
 class AuthenticationView(APIView):
-    """
-    Single view for auth flows: request-otp and verify-otp.
-    Dispatches by path: .../request-otp/ -> request_otp, .../verify-otp/ -> verify_otp.
-    Response format: RequestOTPResponse / VerifyOTPResponse (code, msg, token, data when applicable).
-    """
-
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -197,10 +161,8 @@ class AuthenticationView(APIView):
 
         phone_number = serializer.validated_data["phone_number"].strip()
         otp_code = f"{secrets.randbelow(1_000_000):06d}"
-
         cache.set(f"otp_code:{phone_number}", otp_code, timeout=OTP_TTL_SECONDS)
         otp_token = OTP_SIGNER.sign(phone_number)
-
         sms_sent = send_otp_sms(phone_number, otp_code)
 
         payload = {"code": 200, "msg": "success", "token": otp_token}
@@ -208,7 +170,6 @@ class AuthenticationView(APIView):
             payload["sms_warning"] = "SMS delivery failed; OTP stored server-side."
         if settings.DEBUG:
             payload["debug_otp"] = otp_code
-
         return Response(payload, status=status.HTTP_200_OK)
 
     def _verify_otp(self, request):
@@ -219,24 +180,15 @@ class AuthenticationView(APIView):
         otp_code = serializer.validated_data["otp_code"].strip()
 
         try:
-            phone_number = OTP_SIGNER.unsign(
-                token, max_age=OTP_TTL_SECONDS
-            )
+            phone_number = OTP_SIGNER.unsign(token, max_age=OTP_TTL_SECONDS)
         except (BadSignature, SignatureExpired):
-            return Response(
-                {"code": 400, "msg": "Token is invalid or expired."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"code": 400, "msg": "Token is invalid or expired."}, status=status.HTTP_400_BAD_REQUEST)
 
         cached_otp = cache.get(f"otp_code:{phone_number}")
         if cached_otp is None or cached_otp != otp_code:
-            return Response(
-                {"code": 400, "msg": "OTP code is invalid or expired."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"code": 400, "msg": "OTP code is invalid or expired."}, status=status.HTTP_400_BAD_REQUEST)
 
         cache.delete(f"otp_code:{phone_number}")
-
         user, created = User.objects.get_or_create(
             phone_number=phone_number,
             defaults={
@@ -245,19 +197,12 @@ class AuthenticationView(APIView):
             },
         )
 
-        refresh = RefreshToken.for_user(user)
-
-        user_data = _auth_user_to_data(user)
-
         return Response(
             {
                 "code": 200,
                 "msg": "success",
-                "data": user_data,
-                "token": {
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
-                },
+                "data": _auth_user_to_data(user),
+                "token": _issue_token(user),
             },
             status=status.HTTP_200_OK,
         )
