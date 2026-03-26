@@ -18,6 +18,7 @@ services:
     networks:
       - crop_network 
   web:
+    container_name: backend-web
     build: .
     env_file:
       - .env
