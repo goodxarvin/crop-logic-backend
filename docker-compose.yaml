@@ -1,7 +1,7 @@
 # Development: volumes mount source so code updates apply without rebuild
 services:
   db:
-    image: mysql:8.0
+    image: docker.iranserver.com/mysql:8.0
     environment:
       MYSQL_DATABASE: ${DB_NAME:-croplogic}
       MYSQL_USER: ${DB_USER:-croplogic}
@@ -15,17 +15,17 @@ services:
       timeout: 5s
       retries: 5
 
-  phpmyadmin:
-    image: phpmyadmin:latest
-    environment:
-      PMA_HOST: db
-      PMA_PORT: 3306
-      UPLOAD_LIMIT: 64M
-    ports:
-      - "8081:80"
-    depends_on:
-      db:
-        condition: service_healthy
+  # phpmyadmin:
+  #   image: docker.iranserver.com/phpmyadmin
+  #   environment:
+  #     PMA_HOST: db
+  #     PMA_PORT: 3306
+  #     UPLOAD_LIMIT: 64M
+  #   ports:
+  #     - "8081:80"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
 
   web:
     build: .
