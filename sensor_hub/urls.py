@@ -1,10 +1,10 @@
 from django.urls import path
 
-from .views import SensorHubView
+from .views import SensorActiveView, SensorDeactiveView, SensorDetailView, SensorListCreateView
 
 urlpatterns = [
-    path("active/", SensorHubView.as_view(), name="sensor-hub-active", kwargs={"action": "active"}),
-    path("deactive/", SensorHubView.as_view(), name="sensor-hub-deactive", kwargs={"action": "deactive"}),
-    path("<uuid:uuid>/", SensorHubView.as_view(), name="sensor-hub-detail"),
-    path("", SensorHubView.as_view(), name="sensor-hub-list"),
+    path("active/", SensorActiveView.as_view(), name="sensor-hub-active"),
+    path("deactive/", SensorDeactiveView.as_view(), name="sensor-hub-deactive"),
+    path("<uuid:uuid>/", SensorDetailView.as_view(), name="sensor-hub-detail"),
+    path("", SensorListCreateView.as_view(), name="sensor-hub-list"),
 ]

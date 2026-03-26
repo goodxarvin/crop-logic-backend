@@ -1,43 +1,51 @@
 """
 Farm Dashboard API views.
-No database connection. All responses use static mock data from mock_data.py.
 """
 
 from rest_framework import status
 from rest_framework import serializers
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
 from config.swagger import code_response
-from external_api_adapter import request as external_api_request
-from .mock_data import CONFIG
+from .mock_data import get_config, update_config
+from .serializers import FarmDashboardConfigPatchSerializer, FarmDashboardConfigSerializer
 
 
 @extend_schema_view(
     get=extend_schema(
         tags=["Farm Dashboard"],
-        responses={200: code_response("FarmDashboardConfigGetResponse", data=serializers.JSONField())},
+        responses={200: code_response("FarmDashboardConfigGetResponse", data=FarmDashboardConfigSerializer())},
     ),
     patch=extend_schema(
         tags=["Farm Dashboard"],
-        request=OpenApiTypes.OBJECT,
-        responses={200: code_response("FarmDashboardConfigPatchResponse", data=serializers.JSONField())},
+        request=FarmDashboardConfigPatchSerializer,
+        responses={200: code_response("FarmDashboardConfigPatchResponse", data=FarmDashboardConfigSerializer())},
     ),
 )
 class FarmDashboardConfigView(APIView):
     """
-    Farm dashboard config endpoints: GET and PATCH.
-    GET returns static config (disabled_card_ids, row_order, enable_drag_reorder).
-    PATCH accepts body but returns same static config; no processing or validation.
-    No database. No input values used in response.
+    Farm dashboard config endpoints.
+    GET returns the current config.
+    PATCH accepts partial updates and returns the full final config.
     """
+    permission_classes = [AllowAny]
+
     def get(self, request):
-        return Response({"code": 200, "msg": "OK", "data": CONFIG}, status=status.HTTP_200_OK)
+        config = get_config()
+        return Response({"code": 200, "msg": "OK", "data": config}, status=status.HTTP_200_OK)
 
     def patch(self, request):
-        return Response({"code": 200, "msg": "OK", "data": CONFIG}, status=status.HTTP_200_OK)
+        serializer = FarmDashboardConfigPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        config = update_config(serializer.validated_data)
+        response_serializer = FarmDashboardConfigSerializer(config)
+        return Response(
+            {"code": 200, "msg": "OK", "data": response_serializer.data},
+            status=status.HTTP_200_OK,
+        )
 
 
 @extend_schema_view(
@@ -53,5 +61,7 @@ class FarmDashboardCardsView(APIView):
     No database. Static mock data only.
     """
     def get(self, request):
+        from external_api_adapter import request as external_api_request
+
         adapter_response = external_api_request("ai", "/dashboard-data/status", method="GET")
         return Response(adapter_response.data, status=adapter_response.status_code)

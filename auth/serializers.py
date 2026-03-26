@@ -19,7 +19,7 @@ class LoginSerializer(serializers.Serializer):
     identifier can be username, email, or phone_number."""
 
     identifier = serializers.CharField()
-    password = serializers.CharField()
+    password = serializers.CharField(min_length=8, write_only=True)
 
 
 # --- RequestOTP (request-otp/) ---

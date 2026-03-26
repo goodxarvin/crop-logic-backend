@@ -1,27 +1,67 @@
 """
 Static mock data for Farm Dashboard API.
-No database, no dynamic values. Pure static payloads.
 """
 
-# Config payload for GET/PATCH farm-dashboard-config (section 2.1)
-# row_order must use valid row IDs only: overviewKpis, weatherAlerts, sensorMonitoring,
-# sensorCharts, alertsWater, predictions, soilHeatmap, ndviRecommendations, economic
-CONFIG = {
-    "disabled_card_ids": [
-        "predictions",
-    ],
-    "row_order": [
-        "overviewKpis",
-        "weatherAlerts",
-        "sensorMonitoring",
-        "sensorCharts",
-        "alertsWater",
-        "soilHeatmap",
-        "ndviRecommendations",
-        "economic",
-    ],
-    "enable_drag_reorder": False,
+from copy import deepcopy
+from threading import Lock
+
+
+VALID_ROW_IDS = [
+    "overviewKpis",
+    "weatherAlerts",
+    "sensorMonitoring",
+    "sensorCharts",
+    "alertsWater",
+    "predictions",
+    "soilHeatmap",
+    "ndviRecommendations",
+    "economic",
+]
+
+VALID_CARD_IDS = [
+    "farmOverviewKpis",
+    "farmWeatherCard",
+    "farmAlertsTracker",
+    "sensorValuesList",
+    "sensorRadarChart",
+    "sensorComparisonChart",
+    "anomalyDetectionCard",
+    "farmAlertsTimeline",
+    "waterNeedPrediction",
+    "harvestPredictionCard",
+    "yieldPredictionChart",
+    "soilMoistureHeatmap",
+    "ndviHealthCard",
+    "recommendationsList",
+    "economicOverview",
+]
+
+DEFAULT_CONFIG = {
+    "disabled_card_ids": [],
+    "row_order": VALID_ROW_IDS.copy(),
+    "enable_drag_reorder": True,
 }
+
+_config_lock = Lock()
+_config_state = deepcopy(DEFAULT_CONFIG)
+
+
+def get_config():
+    with _config_lock:
+        return deepcopy(_config_state)
+
+
+def update_config(changes):
+    with _config_lock:
+        _config_state.update(deepcopy(changes))
+        return deepcopy(_config_state)
+
+
+def reset_config():
+    with _config_lock:
+        _config_state.clear()
+        _config_state.update(deepcopy(DEFAULT_CONFIG))
+        return deepcopy(_config_state)
 
 # 4.1 farmOverviewKpis
 FARM_OVERVIEW_KPIS = {

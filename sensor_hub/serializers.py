@@ -30,3 +30,7 @@ class SensorCreateSerializer(serializers.ModelSerializer):
             "power_source",
             "customized_sensors",
         ]
+
+
+class SensorToggleSerializer(serializers.Serializer):
+    uuid_sensor = serializers.UUIDField()
