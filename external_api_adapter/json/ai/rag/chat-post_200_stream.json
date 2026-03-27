@@ -1,4 +1,29 @@
 {
-  "content_type": "text/plain; charset=utf-8",
-  "body": "سلام، برای بازیابی رطوبت خاک بهتر است آبیاری صبح‌گاهی را تنظیم کنید."
+  "content": "Here is the recommended plan.",
+  "sections": [
+    {
+      "type": "recommendation",
+      "title": "Irrigation Plan",
+      "icon": "droplet",
+      "frequency": "3 times per week",
+      "amount": "15 liters per plant",
+      "timing": "Early morning",
+      "expandableExplanation": "Loamy soil holds moisture well, so moderate frequency is enough."
+    },
+    {
+      "type": "list",
+      "title": "Important Notes",
+      "icon": "leaf",
+      "items": [
+        "Avoid watering at noon",
+        "Check leaf stress every two days"
+      ]
+    },
+    {
+      "type": "warning",
+      "title": "Heat Alert",
+      "icon": "warning",
+      "content": "Increase irrigation if temperature rises above 35°C."
+    }
+  ]
 }

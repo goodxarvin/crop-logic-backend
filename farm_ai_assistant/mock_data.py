@@ -1,38 +1,81 @@
 """
 Static mock data for Farm AI Assistant API.
-No database, no dynamic values. All responses are fixed JSON.
 """
 
 CHAT_RESPONSE_DATA = {
-    "message_id": "a-1739123456789",
-    "conversation_id": "conv-abc123",
-    "content": "",
+    "message_id": "msg-001",
+    "conversation_id": "conv-123",
+    "content": "Here is the recommended plan.",
     "sections": [
         {
             "type": "recommendation",
-            "title": "Irrigation recommendation",
+            "title": "Irrigation Plan",
             "icon": "droplet",
             "frequency": "3 times per week",
-            "amount": "15–20 L per plant",
-            "timing": "Early morning (05:00–07:00)",
-            "expandableExplanation": "Your loamy soil holds moisture well...",
+            "amount": "15 liters per plant",
+            "timing": "Early morning",
+            "expandableExplanation": "Loamy soil holds moisture well, so moderate frequency is enough.",
         },
         {
             "type": "list",
-            "title": "Key points",
+            "title": "Important Notes",
             "icon": "leaf",
             "items": [
-                "Avoid midday watering to reduce evaporation",
-                "Drip irrigation preferred for root zone targeting",
+                "Avoid watering at noon",
+                "Check leaf stress every two days",
             ],
         },
         {
             "type": "warning",
-            "title": "Weather advisory",
+            "title": "Heat Alert",
             "icon": "warning",
-            "content": "High temps forecasted next week. Consider increasing frequency.",
+            "content": "Increase irrigation if temperature rises above 35°C.",
         },
     ],
+}
+
+CHAT_LIST_RESPONSE_DATA = [
+    {
+        "id": "conv-123",
+        "message_count": 4,
+    },
+    {
+        "id": "conv-456",
+        "message_count": 2,
+    },
+]
+
+CHAT_MESSAGES_RESPONSE_DATA = {
+    "conversation_id": "conv-123",
+    "messages": [
+        {
+            "message_id": "msg-user-001",
+            "conversation_id": "conv-123",
+            "role": "user",
+            "content": "What is the best irrigation plan for tomato?",
+            "sections": [],
+            "images": [],
+            "created_at": "2025-01-01T08:00:00Z",
+        },
+        {
+            "message_id": "msg-001",
+            "conversation_id": "conv-123",
+            "role": "assistant",
+            "content": "Here is the recommended plan.",
+            "sections": CHAT_RESPONSE_DATA["sections"],
+            "images": [],
+            "created_at": "2025-01-01T08:00:05Z",
+        },
+    ],
+}
+
+CHAT_CREATE_RESPONSE_DATA = {
+    "id": "conv-789",
+    "message_count": 0,
+}
+
+CHAT_DELETE_RESPONSE_DATA = {
+    "conversation_id": "conv-123",
 }
 
 CONTEXT_RESPONSE_DATA = {
