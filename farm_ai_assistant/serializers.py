@@ -51,6 +51,23 @@ class ConversationDeleteSerializer(serializers.Serializer):
     conversation_id = serializers.UUIDField(read_only=True)
 
 
+class ChatTaskSubmitDataSerializer(serializers.Serializer):
+    task_id = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.CharField(required=False, allow_blank=True)
+    status_url = serializers.CharField(required=False, allow_blank=True)
+    conversation_id = serializers.UUIDField(read_only=True)
+    message_id = serializers.UUIDField(read_only=True)
+
+
+class ChatTaskStatusDataSerializer(serializers.Serializer):
+    task_id = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.CharField(required=False, allow_blank=True)
+    conversation_id = serializers.UUIDField(read_only=True)
+    progress = serializers.JSONField(required=False)
+    result = serializers.JSONField(required=False)
+    error = serializers.CharField(required=False, allow_blank=True)
+
+
 class ChatPostSerializer(serializers.Serializer):
     content = serializers.CharField(required=False, allow_blank=True, default="")
     images = serializers.ListField(

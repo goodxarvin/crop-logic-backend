@@ -1,0 +1,9 @@
+{
+  "code": 202,
+  "msg": "تسک چت دستیار مزرعه در صف قرار گرفت.",
+  "data": {
+    "task_id": "farm-ai-chat-task-123",
+    "status": "PENDING",
+    "status_url": "/api/tasks/farm-ai-chat-task-123/status/"
+  }
+}

@@ -181,7 +181,9 @@
 
 | ردیف | API | متد | Endpoint | وضعیت |
 |------|-----|------|----------|--------|
-| ۱ | Farm AI Chat | POST | `/api/farm-ai-assistant/chat/` (پیشنهادی) | **پیاده‌سازی نشده** |
+| ۱ | Farm AI Chat | POST | `/api/farm-ai-assistant/chat/` | موجود |
+| ۱.۱ | Farm AI Chat Task Create | POST | `/api/farm-ai-assistant/chat/task/` | موجود |
+| ۱.۲ | Farm AI Chat Task Status | GET | `/api/farm-ai-assistant/chat/task/{task_id}/status/` | موجود |
 | ۲ | Farm Context | GET | `/api/farm-ai-assistant/context/` (پیشنهادی) | **پیاده‌سازی نشده**؛ استفاده از configهای آبیاری/کوددهی |
 | ۳ | توصیه آبیاری | GET | `/api/irrigation-recommendation/config/` | موجود (mock) |
 | ۳ | توصیه آبیاری | POST | `/api/irrigation-recommendation/recommend/` | موجود (mock) |

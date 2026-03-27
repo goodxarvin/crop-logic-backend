@@ -47,6 +47,18 @@ class MockLoader:
             if flat_files:
                 return flat_files
 
+        normalized_parts = [part for part in str(path).strip().strip("/").split("/") if part]
+        for index in range(len(normalized_parts) - 1, -1, -1):
+            candidate_parts = normalized_parts[:index] + normalized_parts[index + 1 :]
+            if not candidate_parts:
+                continue
+
+            candidate_directory = service_root / Path(*candidate_parts)
+            if candidate_directory.exists() and candidate_directory.is_dir():
+                candidate_files = list(candidate_directory.glob(pattern))
+                if candidate_files:
+                    return candidate_files
+
         raise MockDirectoryNotFound(
             f"Mock directory not found for service='{service_name}' path='{path}': {directory_path}"
         )
