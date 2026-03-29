@@ -1,4 +1,5 @@
 from rest_framework import serializers, status
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -7,6 +8,7 @@ from drf_spectacular.utils import extend_schema
 from config.swagger import code_response
 from .models import Sensor
 from .serializers import SensorCreateSerializer, SensorSerializer, SensorToggleSerializer
+from .services import create_sensor_with_zoning
 
 
 class SensorHubBaseView(APIView):
@@ -37,8 +39,15 @@ class SensorListCreateView(SensorHubBaseView):
     def post(self, request):
         serializer = SensorCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        sensor = serializer.save(owner=request.user)
+        try:
+            sensor, zoning_payload = create_sensor_with_zoning(serializer, owner=request.user)
+        except ValueError as exc:
+            raise serializers.ValidationError({"area_geojson": [str(exc)]}) from exc
+        except ImproperlyConfigured as exc:
+            return Response({"code": 500, "msg": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         data = SensorSerializer(sensor).data
+        if zoning_payload is not None:
+            data["zoning"] = zoning_payload
         return Response({"code": 201, "msg": "success", "data": data}, status=status.HTTP_201_CREATED)
 
 

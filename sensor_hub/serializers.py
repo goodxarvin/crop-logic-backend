@@ -22,6 +22,8 @@ class SensorSerializer(serializers.ModelSerializer):
 
 
 class SensorCreateSerializer(serializers.ModelSerializer):
+    area_geojson = serializers.JSONField(write_only=True, required=False)
+
     class Meta:
         model = Sensor
         fields = [
@@ -29,7 +31,25 @@ class SensorCreateSerializer(serializers.ModelSerializer):
             "specifications",
             "power_source",
             "customized_sensors",
+            "area_geojson",
         ]
+
+    def validate_area_geojson(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("`area_geojson` must be a GeoJSON object.")
+
+        geometry = value.get("geometry") if value.get("type") == "Feature" else value
+        if not isinstance(geometry, dict):
+            raise serializers.ValidationError("`area_geojson.geometry` is required.")
+
+        if geometry.get("type") != "Polygon":
+            raise serializers.ValidationError("`area_geojson.geometry.type` must be `Polygon`.")
+
+        coordinates = geometry.get("coordinates")
+        if not isinstance(coordinates, list) or not coordinates or not isinstance(coordinates[0], list):
+            raise serializers.ValidationError("`area_geojson.geometry.coordinates` must be a polygon ring.")
+
+        return value
 
 
 class SensorToggleSerializer(serializers.Serializer):
