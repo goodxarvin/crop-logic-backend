@@ -25,8 +25,13 @@ class MockLoader:
 
         selected_file = sorted(mock_files, key=self._mock_file_priority)[0]
         with selected_file.open("r", encoding="utf-8") as file:
+            service_root = self.base_path / service_name
             return LoadedMockResponse(
-                data=json.load(file),
+                data=self._resolve_references(
+                    json.load(file),
+                    current_file=selected_file,
+                    service_root=service_root,
+                ),
                 status_code=self._extract_status_code(selected_file),
                 file_path=str(selected_file),
             )
@@ -99,3 +104,60 @@ class MockLoader:
         elif "pending" in stem or "progress" in stem:
             keyword_rank = 1
         return (status_code >= 400, keyword_rank, stem)
+
+    def _resolve_references(self, value, current_file, service_root, seen=None):
+        current_file = current_file.resolve()
+        service_root = service_root.resolve()
+        seen = seen or {current_file}
+
+        if isinstance(value, list):
+            return [
+                self._resolve_references(item, current_file=current_file, service_root=service_root, seen=seen)
+                for item in value
+            ]
+
+        if not isinstance(value, dict):
+            return value
+
+        ref_path = value.get("$ref")
+        if isinstance(ref_path, str) and len(value) == 1:
+            referenced_file = self._resolve_reference_path(
+                ref_path=ref_path,
+                current_file=current_file,
+                service_root=service_root,
+            )
+
+            if referenced_file in seen:
+                raise MockFileNotFound(f"Circular mock reference detected for '{referenced_file}'.")
+
+            with referenced_file.open("r", encoding="utf-8") as file:
+                return self._resolve_references(
+                    json.load(file),
+                    current_file=referenced_file,
+                    service_root=service_root,
+                    seen=seen | {referenced_file},
+                )
+
+        return {
+            key: self._resolve_references(item, current_file=current_file, service_root=service_root, seen=seen)
+            for key, item in value.items()
+        }
+
+    @staticmethod
+    def _resolve_reference_path(ref_path, current_file, service_root):
+        candidates = [
+            current_file.parent / ref_path,
+            service_root / ref_path,
+        ]
+
+        service_root_resolved = service_root.resolve()
+        for candidate in candidates:
+            candidate_resolved = candidate.resolve()
+            try:
+                candidate_resolved.relative_to(service_root_resolved)
+            except ValueError:
+                continue
+            if candidate_resolved.is_file():
+                return candidate_resolved
+
+        raise MockFileNotFound(f"Referenced mock file '{ref_path}' was not found.")

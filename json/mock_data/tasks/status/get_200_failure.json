@@ -2,7 +2,7 @@
   "code": 200,
   "msg": "success",
   "data": {
-    "task_id": "sample-task-123",
+    "task_id": "farm-ai-chat-task-123",
     "status": "FAILURE",
     "error": "Sample task failed."
   }

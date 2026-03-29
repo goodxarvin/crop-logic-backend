@@ -5,6 +5,7 @@ Response format: {"status": "success", "data": <payload>}. HTTP 200 only.
 No processing, validation, or use of input parameters in responses.
 """
 
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -21,6 +22,7 @@ from .mock_data import (
     ZONES_SOIL_QUALITY_RESPONSE_DATA,
     ZONES_WATER_NEED_RESPONSE_DATA,
 )
+from .services import persist_zones
 
 
 class AreaView(APIView):
@@ -88,23 +90,17 @@ class ZonesInitialView(APIView):
     POST endpoint for initial zone data (map + hover/tooltip).
 
     Purpose:
-        Accepts zones (FeatureCollection of grid squares) and returns static
-        initial data per zone for map rendering and hover/tooltip display.
-        Does not include reason or criteria (those are in zone details).
+        Accepts the main area polygon and creates zones based on configured
+        area chunk size. Stores generated zones in database.
 
     Input parameters (body, JSON):
-        - zones: GeoJSON FeatureCollection. Location: body. Grid square polygons.
-        - products: array of strings, optional. Location: body. Product IDs.
-          Not read or used in response.
+        - area: GeoJSON Feature. Location: body. Main land polygon.
+          If omitted, the static area from mock data is used.
 
     Response structure:
-        - status: string, always "success".
+        - status: string.
         - data: object with total_area_hectares, total_area_sqm, zone_count,
-          zones (array of { zoneId, geometry, crop, matchPercent, waterNeed,
-          estimatedProfit }).
-
-    No processing or validation is performed on inputs. Input values are
-    not used in the response.
+          chunk_area_sqm and zones.
     """
 
     @extend_schema(
@@ -113,10 +109,52 @@ class ZonesInitialView(APIView):
         responses={200: status_response("CropZoningZonesInitialResponse", data=serializers.JSONField())},
     )
     def post(self, request):
+        area_feature = request.data.get("area") or AREA_RESPONSE_DATA.get("area")
+
+        try:
+            zoning_result = persist_zones(area_feature)
+        except ValueError as exc:
+            return Response(
+                {"status": "error", "message": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ImproperlyConfigured as exc:
+            return Response(
+                {"status": "error", "message": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        area_data = zoning_result["area"]
+        response_data = {
+            "area": {
+                "id": area_data["id"],
+                "uuid": area_data["uuid"],
+                "geometry": area_data["geometry"],
+                "points": area_data["points"],
+                "center": area_data["center"],
+                "area_sqm": round(area_data["area_sqm"], 2),
+                "area_hectares": round(area_data["area_hectares"], 4),
+                "chunk_area_sqm": round(area_data["chunk_area_sqm"], 2),
+                "zone_count": area_data["zone_count"],
+            },
+            "zones": [
+                {
+                    "zoneId": zone["zone_id"],
+                    "geometry": zone["geometry"],
+                    "points": zone["points"],
+                    "center": zone["center"],
+                    "area_sqm": round(zone["area_sqm"], 2),
+                    "area_hectares": round(zone["area_hectares"], 4),
+                }
+                for zone in zoning_result["zones"]
+            ],
+        }
+
         return Response(
-            {"status": "success", "data": ZONES_INITIAL_RESPONSE_DATA},
+            {"status": "success", "data": response_data},
             status=status.HTTP_200_OK,
         )
+
 
 
 class ZonesWaterNeedView(APIView):

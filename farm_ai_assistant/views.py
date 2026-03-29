@@ -201,6 +201,29 @@ class ConversationAccessMixin:
 
         return task_status_payload
 
+    def _extract_structured_task_result(self, adapter_data):
+        payload_source = adapter_data
+        if isinstance(adapter_data, dict) and isinstance(adapter_data.get("data"), dict):
+            payload_source = adapter_data["data"]
+
+        if not isinstance(payload_source, dict):
+            return None
+
+        result = payload_source.get("result")
+        if isinstance(result, dict):
+            return result
+
+        if payload_source.get("status") == "SUCCESS":
+            content = payload_source.get("content")
+            sections = payload_source.get("sections")
+            if content or sections:
+                return {
+                    "content": content or "",
+                    "sections": sections or [],
+                }
+
+        return None
+
     @staticmethod
     def _serialize_chat_message(message):
         raw_response = message.raw_response if isinstance(message.raw_response, dict) else {}
@@ -541,7 +564,10 @@ class ChatTaskStatusView(ConversationAccessMixin, APIView):
             conversation_id=conversation_id,
         )
 
-        result = task_status_payload.get("result")
+        result = self._extract_structured_task_result(adapter_response.data)
+        if result is not None:
+            task_status_payload["result"] = result
+
         if user_message and task_status_payload.get("status") == "SUCCESS" and isinstance(result, dict):
             assistant_payload = self._persist_task_result(user_message, task_id, result)
             task_status_payload["result"] = assistant_payload

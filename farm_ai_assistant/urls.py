@@ -12,7 +12,7 @@ from .views import (
 
 urlpatterns = [
     path("context/", ContextView.as_view(), name="farm-ai-assistant-context"),
-    path("chat/", ChatView.as_view(), name="farm-ai-assistant-chat"),
+    # path("chat/", ChatView.as_view(), name="farm-ai-assistant-chat"),
     path("chat/task/", ChatTaskCreateView.as_view(), name="farm-ai-assistant-chat-task-create"),
     path("chat/task/<str:task_id>/status/", ChatTaskStatusView.as_view(), name="farm-ai-assistant-chat-task-status"),
     path("chats/", ChatListCreateView.as_view(), name="farm-ai-assistant-chat-list-create"),
