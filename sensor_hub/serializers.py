@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-
 from .models import Sensor
 
 
@@ -50,6 +49,14 @@ class SensorCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("`area_geojson.geometry.coordinates` must be a polygon ring.")
 
         return value
+
+    def create(self, validated_data):
+        validated_data.pop("area_geojson", None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("area_geojson", None)
+        return super().update(instance, validated_data)
 
 
 class SensorToggleSerializer(serializers.Serializer):

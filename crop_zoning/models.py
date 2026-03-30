@@ -1,10 +1,19 @@
 import uuid
 
 from django.db import models
+from sensor_hub.models import Sensor
 
 
 class CropArea(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    sensor = models.ForeignKey(
+        Sensor,
+        on_delete=models.CASCADE,
+        related_name="crop_areas",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     geometry = models.JSONField(default=dict)
     points = models.JSONField(default=list)
     center = models.JSONField(default=dict)
@@ -215,5 +224,4 @@ class CropZoneAnalysis(models.Model):
     class Meta:
         db_table = "crop_zone_analyses"
         ordering = ["crop_zone_id"]
-
 

@@ -1,46 +1,106 @@
-# Development: volumes mount source so code updates apply without rebuild
 services:
   db:
-    image: mysql:8.0
+    image: docker.iranserver.com/mysql:8
+    container_name: ai-db
     environment:
-      MYSQL_DATABASE: ${DB_NAME:-croplogic}
-      MYSQL_USER: ${DB_USER:-croplogic}
+      MYSQL_DATABASE: ${DB_NAME:-ai}
+      MYSQL_USER: ${DB_USER:-ai}
       MYSQL_PASSWORD: ${DB_PASSWORD:-changeme}
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-changeme}
     volumes:
-      - mysql_data:/var/lib/mysql
+      - ai_mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-changeme}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # phpmyadmin:
-  #   image: docker.iranserver.com/phpmyadmin
-  #   environment:
-  #     PMA_HOST: db
-  #     PMA_PORT: 3306
-  #     UPLOAD_LIMIT: 64M
-  #   ports:
-  #     - "8081:80"
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
+  phpmyadmin:
+    image: docker-mirror.liara.ir/phpmyadmin:latest
+    container_name: ai-phpmyadmin
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8082:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    ports:
+      - "6380:6379"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: ai-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
 
   web:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    build:
+      context: .
+      args:
+        APT_MIRROR: mirror2.chabokan.net
+        PIP_INDEX_URL: https://package-mirror.liara.ir/repository/pypi/simple
+        PIP_EXTRA_INDEX_URL: https://mirror2.chabokan.net/pypi/simple
+        PYTHON_MIRROR: mirror2.chabokan.net
+    container_name: ai-web
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     volumes:
       - .:/app
+      - ./logs:/app/logs
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
       DB_HOST: db
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+
+  celery:
+    build:
+      context: .
+      args:
+        APT_MIRROR: mirror2.chabokan.net
+        PIP_INDEX_URL: https://package-mirror.liara.ir/repository/pypi/simple
+        PIP_EXTRA_INDEX_URL: https://mirror2.chabokan.net/pypi/simple
+        PYTHON_MIRROR: mirror2.chabokan.net
+    container_name: ai-celery
+    command: celery -A config worker -l info
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SKIP_MIGRATE: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
 volumes:
-  mysql_data:
+  ai_mysql_data:
+  qdrant_data:

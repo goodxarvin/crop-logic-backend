@@ -3,8 +3,10 @@ from copy import deepcopy
 from decimal import Decimal
 
 from django.conf import settings
+from kombu.exceptions import OperationalError
 from django.db import transaction
 from django.db.models import Prefetch
+from sensor_hub.models import Sensor
 
 from external_api_adapter.adapter import request as external_request
 
@@ -23,17 +25,68 @@ from .models import (
 
 EARTH_RADIUS_METERS = 6378137.0
 PRODUCT_DEFAULTS = PRODUCTS_RESPONSE_DATA["products"]
+DEFAULT_CELL_SIDE_KM = 0.15
+RULE_BASED_ALGORITHM = "rule_based_v1"
+RULE_BASED_PRODUCTS = {
+    "wheat": {
+        "water_need": "۴۵۰۰-۵۵۰۰ m³/ha",
+        "water_need_level": "medium",
+        "estimated_profit": "۱۵-۲۵ میلیون/هکتار",
+        "reason": "دمای مناسب، خاک حاصلخیز، دسترسی به آب کافی",
+    },
+    "canola": {
+        "water_need": "۵۰۰۰-۶۰۰۰ m³/ha",
+        "water_need_level": "high",
+        "estimated_profit": "۲۰-۳۵ میلیون/هکتار",
+        "reason": "پایداری بهتر در برابر نوسان دما و پتانسیل سود اقتصادی مناسب",
+    },
+    "saffron": {
+        "water_need": "۳۰۰۰-۴۰۰۰ m³/ha",
+        "water_need_level": "low",
+        "estimated_profit": "۵۰-۱۵۰ میلیون/هکتار",
+        "reason": "اقلیم خشک‌تر و نیاز آبی کمتر این زون برای زعفران مناسب‌تر است",
+    },
+}
+RULE_BASED_CROP_IDS = tuple(RULE_BASED_PRODUCTS.keys())
 
 
-def get_chunk_area_sqm():
+def get_default_cell_side_km():
+    raw_value = getattr(settings, "CROP_ZONE_CELL_SIDE_KM", None)
+    try:
+        cell_side_km = float(raw_value)
+    except (TypeError, ValueError):
+        cell_side_km = 0
+    if cell_side_km > 0:
+        return cell_side_km
+
     raw_value = getattr(settings, "CROP_ZONE_CHUNK_AREA_SQM", 0)
     try:
         chunk_area = float(raw_value)
     except (TypeError, ValueError):
         chunk_area = 0
-    if chunk_area <= 0:
-        raise ValueError("CROP_ZONE_CHUNK_AREA_SQM must be a positive number.")
-    return chunk_area
+    if chunk_area > 0:
+        return math.sqrt(chunk_area) / 1000.0
+
+    return DEFAULT_CELL_SIDE_KM
+
+
+def get_cell_side_km(cell_side_km=None):
+    if cell_side_km is None or cell_side_km == "":
+        resolved_value = get_default_cell_side_km()
+    else:
+        try:
+            resolved_value = float(cell_side_km)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("cell_side_km must be a positive number.") from exc
+
+    if resolved_value <= 0:
+        raise ValueError("cell_side_km must be a positive number.")
+    return resolved_value
+
+
+def get_chunk_area_sqm(cell_side_km=None):
+    resolved_cell_side_km = get_cell_side_km(cell_side_km)
+    return (resolved_cell_side_km * 1000.0) ** 2
 
 
 def get_default_area_feature():
@@ -138,69 +191,206 @@ def calculate_center(points):
     }
 
 
+def get_bbox(points):
+    longitudes = [point[0] for point in points]
+    latitudes = [point[1] for point in points]
+    return {
+        "min_lng": min(longitudes),
+        "max_lng": max(longitudes),
+        "min_lat": min(latitudes),
+        "max_lat": max(latitudes),
+    }
+
+
+def meters_to_latitude_delta(meters):
+    return meters / 111320.0
+
+
+def meters_to_longitude_delta(meters, latitude):
+    longitude_factor = 111320.0 * math.cos(math.radians(latitude))
+    if abs(longitude_factor) < 1e-9:
+        longitude_factor = 1.0
+    return meters / longitude_factor
+
+
+def point_in_polygon(point, polygon_points):
+    x, y = point
+    inside = False
+    point_count = len(polygon_points)
+    if point_count < 3:
+        return False
+
+    for index in range(point_count):
+        x1, y1 = polygon_points[index]
+        x2, y2 = polygon_points[(index + 1) % point_count]
+        intersects = ((y1 > y) != (y2 > y)) and (
+            x < ((x2 - x1) * (y - y1) / ((y2 - y1) or 1e-12)) + x1
+        )
+        if intersects:
+            inside = not inside
+
+    return inside
+
+
+def _orientation(point_a, point_b, point_c):
+    value = ((point_b[1] - point_a[1]) * (point_c[0] - point_b[0])) - (
+        (point_b[0] - point_a[0]) * (point_c[1] - point_b[1])
+    )
+    if abs(value) < 1e-12:
+        return 0
+    return 1 if value > 0 else 2
+
+
+def _on_segment(point_a, point_b, point_c):
+    return (
+        min(point_a[0], point_c[0]) - 1e-12 <= point_b[0] <= max(point_a[0], point_c[0]) + 1e-12
+        and min(point_a[1], point_c[1]) - 1e-12 <= point_b[1] <= max(point_a[1], point_c[1]) + 1e-12
+    )
+
+
+def segments_intersect(point_a, point_b, point_c, point_d):
+    orientation_1 = _orientation(point_a, point_b, point_c)
+    orientation_2 = _orientation(point_a, point_b, point_d)
+    orientation_3 = _orientation(point_c, point_d, point_a)
+    orientation_4 = _orientation(point_c, point_d, point_b)
+
+    if orientation_1 != orientation_2 and orientation_3 != orientation_4:
+        return True
+
+    if orientation_1 == 0 and _on_segment(point_a, point_c, point_b):
+        return True
+    if orientation_2 == 0 and _on_segment(point_a, point_d, point_b):
+        return True
+    if orientation_3 == 0 and _on_segment(point_c, point_a, point_d):
+        return True
+    if orientation_4 == 0 and _on_segment(point_c, point_b, point_d):
+        return True
+
+    return False
+
+
+def rectangle_contains_point(point, cell_points):
+    min_lng = min(vertex[0] for vertex in cell_points)
+    max_lng = max(vertex[0] for vertex in cell_points)
+    min_lat = min(vertex[1] for vertex in cell_points)
+    max_lat = max(vertex[1] for vertex in cell_points)
+    return min_lng <= point[0] <= max_lng and min_lat <= point[1] <= max_lat
+
+
+def polygon_intersects_cell(polygon_points, cell_points):
+    cell_center = calculate_center(cell_points)
+    if point_in_polygon([cell_center["longitude"], cell_center["latitude"]], polygon_points):
+        return True
+
+    if any(point_in_polygon(point, polygon_points) for point in cell_points):
+        return True
+
+    if any(rectangle_contains_point(point, cell_points) for point in polygon_points):
+        return True
+
+    polygon_edges = list(zip(polygon_points, polygon_points[1:] + polygon_points[:1]))
+    cell_edges = list(zip(cell_points, cell_points[1:] + cell_points[:1]))
+    return any(
+        segments_intersect(start_a, end_a, start_b, end_b)
+        for start_a, end_a in polygon_edges
+        for start_b, end_b in cell_edges
+    )
+
+
+def build_square_points(left_lng, bottom_lat, right_lng, top_lat):
+    return [
+        [round(left_lng, 8), round(bottom_lat, 8)],
+        [round(right_lng, 8), round(bottom_lat, 8)],
+        [round(right_lng, 8), round(top_lat, 8)],
+        [round(left_lng, 8), round(top_lat, 8)],
+    ]
+
+
 def build_zone_square(area_points, center, zone_area_sqm):
     if len(area_points) < 4:
         return area_points
 
     width = math.sqrt(max(zone_area_sqm, 1))
     half_width = width / 2.0
+    delta_lat = meters_to_latitude_delta(half_width)
+    delta_lng = meters_to_longitude_delta(half_width, center["latitude"])
 
-    latitude_factor = 111320.0
-    longitude_factor = 111320.0 * math.cos(math.radians(center["latitude"]))
-    if longitude_factor == 0:
-        longitude_factor = 1.0
-
-    delta_lat = half_width / latitude_factor
-    delta_lng = half_width / longitude_factor
-
-    return [
-        [round(center["longitude"] - delta_lng, 8), round(center["latitude"] - delta_lat, 8)],
-        [round(center["longitude"] + delta_lng, 8), round(center["latitude"] - delta_lat, 8)],
-        [round(center["longitude"] + delta_lng, 8), round(center["latitude"] + delta_lat, 8)],
-        [round(center["longitude"] - delta_lng, 8), round(center["latitude"] + delta_lat, 8)],
-    ]
+    return build_square_points(
+        center["longitude"] - delta_lng,
+        center["latitude"] - delta_lat,
+        center["longitude"] + delta_lng,
+        center["latitude"] + delta_lat,
+    )
 
 
-def split_area_into_zones(area_feature):
+def split_area_into_zones(area_feature, cell_side_km=None):
     area_ring = get_polygon_ring(area_feature)
     area_points = normalize_points(area_ring)
     area_center = calculate_center(area_points)
     total_area_sqm = polygon_area_sqm(area_ring)
-    chunk_area_sqm = get_chunk_area_sqm()
-    zone_count = max(1, math.ceil(total_area_sqm / chunk_area_sqm))
+    resolved_cell_side_km = get_cell_side_km(cell_side_km)
+    chunk_area_sqm = get_chunk_area_sqm(resolved_cell_side_km)
+    cell_side_meters = resolved_cell_side_km * 1000.0
+    bbox = get_bbox(area_points)
+    latitude_step = meters_to_latitude_delta(cell_side_meters)
 
     zones = []
-    remaining_area = total_area_sqm
-    base_longitude = area_center["longitude"]
-    base_latitude = area_center["latitude"]
+    sequence = 0
+    current_lat = bbox["min_lat"]
 
-    for sequence in range(zone_count):
-        zone_area_sqm = min(chunk_area_sqm, remaining_area) if sequence < zone_count - 1 else remaining_area
-        if zone_area_sqm <= 0:
-            zone_area_sqm = min(chunk_area_sqm, total_area_sqm)
+    while current_lat < bbox["max_lat"] - 1e-12:
+        next_lat = current_lat + latitude_step
+        row_center_lat = current_lat + (latitude_step / 2.0)
+        longitude_step = meters_to_longitude_delta(cell_side_meters, row_center_lat)
+        current_lng = bbox["min_lng"]
 
-        shift = (sequence - ((zone_count - 1) / 2)) * 0.0003
-        zone_center = {
-            "longitude": round(base_longitude + shift, 8),
-            "latitude": round(base_latitude, 8),
-        }
-        zone_points = build_zone_square(area_points, zone_center, zone_area_sqm)
+        while current_lng < bbox["max_lng"] - 1e-12:
+            next_lng = current_lng + longitude_step
+            zone_points = build_square_points(current_lng, current_lat, next_lng, next_lat)
+
+            if polygon_intersects_cell(area_points, zone_points):
+                zone_geometry = {
+                    "type": "Polygon",
+                    "coordinates": [[*zone_points, zone_points[0]]],
+                }
+                zone_area_sqm = polygon_area_sqm(zone_geometry["coordinates"][0])
+                zones.append(
+                    {
+                        "zone_id": f"zone-{sequence}",
+                        "geometry": zone_geometry,
+                        "points": zone_points,
+                        "center": calculate_center(zone_points),
+                        "area_sqm": round(zone_area_sqm, 2),
+                        "area_hectares": round(zone_area_sqm / 10000, 4),
+                        "sequence": sequence,
+                    }
+                )
+                sequence += 1
+
+            current_lng = next_lng
+
+        current_lat = next_lat
+
+    if not zones:
+        zone_points = build_zone_square(area_points, area_center, max(total_area_sqm, chunk_area_sqm))
         zone_geometry = {
             "type": "Polygon",
             "coordinates": [[*zone_points, zone_points[0]]],
         }
+        zone_area_sqm = polygon_area_sqm(zone_geometry["coordinates"][0])
         zones.append(
             {
-                "zone_id": f"zone-{sequence}",
+                "zone_id": "zone-0",
                 "geometry": zone_geometry,
                 "points": zone_points,
-                "center": zone_center,
-                "area_sqm": zone_area_sqm,
-                "area_hectares": zone_area_sqm / 10000,
-                "sequence": sequence,
+                "center": area_center,
+                "area_sqm": round(zone_area_sqm, 2),
+                "area_hectares": round(zone_area_sqm / 10000, 4),
+                "sequence": 0,
             }
         )
-        remaining_area = max(0.0, remaining_area - zone_area_sqm)
+
+    zone_count = len(zones)
 
     area_geometry = {
         "type": "Feature",
@@ -213,6 +403,7 @@ def split_area_into_zones(area_feature):
             "center": area_center,
             "area_sqm": round(total_area_sqm, 2),
             "area_hectares": round(total_area_sqm / 10000, 4),
+            "cell_side_km": round(resolved_cell_side_km, 4),
         }
     )
 
@@ -224,9 +415,47 @@ def split_area_into_zones(area_feature):
             "area_sqm": total_area_sqm,
             "area_hectares": total_area_sqm / 10000,
             "chunk_area_sqm": chunk_area_sqm,
+            "cell_side_km": resolved_cell_side_km,
             "zone_count": zone_count,
         },
         "zones": zones,
+    }
+
+
+def build_rule_based_zone_metrics(index, coords):
+    if coords:
+        first_longitude, first_latitude = coords[0]
+    else:
+        first_longitude, first_latitude = (0.0, 0.0)
+
+    seed = int((index * 7) + math.floor(first_latitude * 100) + math.floor(first_longitude * 100))
+    crop_id = RULE_BASED_CROP_IDS[abs(seed) % len(RULE_BASED_CROP_IDS)]
+    crop_metadata = RULE_BASED_PRODUCTS[crop_id]
+
+    match_percent = 60 + (abs(seed) % 35)
+    criteria = [
+        {"name": "دما", "value": 55 + (abs(seed + 11) % 40)},
+        {"name": "بارش", "value": 55 + (abs(seed + 17) % 40)},
+        {"name": "خاک", "value": 55 + (abs(seed + 23) % 40)},
+        {"name": "آب", "value": 55 + (abs(seed + 29) % 40)},
+    ]
+    soil_quality_score = criteria[2]["value"]
+    soil_level = _pick_level(soil_quality_score, 65, 85)
+    cultivation_risk_score = max(1, min(100, round(100 - match_percent + ((abs(seed) % 9) - 4))))
+    cultivation_risk_level = "low" if cultivation_risk_score <= 30 else "medium" if cultivation_risk_score <= 60 else "high"
+
+    return {
+        "soil_quality_score": soil_quality_score,
+        "soil_level": soil_level,
+        "water_need_level": crop_metadata["water_need_level"],
+        "water_need_value": crop_metadata["water_need"],
+        "cultivation_risk_level": cultivation_risk_level,
+        "recommended_crop": crop_id,
+        "match_percent": match_percent,
+        "estimated_profit": crop_metadata["estimated_profit"],
+        "reason": crop_metadata["reason"],
+        "criteria": criteria,
+        "algorithm": RULE_BASED_ALGORITHM,
     }
 
 
@@ -240,6 +469,67 @@ def build_initial_zone_payload(zone):
         "waterNeed": recommendation.water_need if recommendation else "",
         "estimatedProfit": recommendation.estimated_profit if recommendation else "",
     }
+
+
+def persist_zone_analysis_metrics(zone, metrics):
+    ensure_products_exist()
+    product = CropProduct.objects.get(product_id=metrics["recommended_crop"])
+    recommendation, _ = CropZoneRecommendation.objects.update_or_create(
+        crop_zone=zone,
+        defaults={
+            "product": product,
+            "match_percent": metrics["match_percent"],
+            "water_need": metrics["water_need_value"],
+            "estimated_profit": metrics["estimated_profit"],
+            "reason": metrics["reason"],
+        },
+    )
+    CropZoneCriteria.objects.filter(recommendation=recommendation).delete()
+    CropZoneCriteria.objects.bulk_create(
+        [
+            CropZoneCriteria(
+                recommendation=recommendation,
+                name=item["name"],
+                value=item["value"],
+                sequence=index,
+            )
+            for index, item in enumerate(metrics["criteria"])
+        ]
+    )
+    CropZoneWaterNeedLayer.objects.update_or_create(
+        crop_zone=zone,
+        defaults={
+            "level": metrics["water_need_level"],
+            "value": metrics["water_need_value"],
+            "color": _get_level_color_map("water", metrics["water_need_level"]),
+        },
+    )
+    CropZoneSoilQualityLayer.objects.update_or_create(
+        crop_zone=zone,
+        defaults={
+            "level": metrics["soil_level"],
+            "score": metrics["soil_quality_score"],
+            "color": _get_level_color_map("soil", metrics["soil_level"]),
+        },
+    )
+    CropZoneCultivationRiskLayer.objects.update_or_create(
+        crop_zone=zone,
+        defaults={
+            "level": metrics["cultivation_risk_level"],
+            "color": _get_level_color_map("risk", metrics["cultivation_risk_level"]),
+        },
+    )
+    return recommendation
+
+
+def ensure_rule_based_zone_data(zone, force=False):
+    has_recommendation = CropZoneRecommendation.objects.filter(crop_zone=zone).exists()
+    if has_recommendation and not force:
+        return zone
+
+    metrics = build_rule_based_zone_metrics(zone.sequence, zone.points)
+    persist_zone_analysis_metrics(zone, metrics)
+    return zone
 
 
 def _get_level_color_map(layer_name, level):
@@ -371,51 +661,7 @@ def analyze_and_store_zone_soil_data(zone_id):
                 "depths": depths,
             },
         )
-        recommendation, _ = CropZoneRecommendation.objects.update_or_create(
-            crop_zone=zone,
-            defaults={
-                "product": product,
-                "match_percent": metrics["match_percent"],
-                "water_need": metrics["water_need_value"],
-                "estimated_profit": metrics["estimated_profit"],
-                "reason": metrics["reason"],
-            },
-        )
-        CropZoneCriteria.objects.filter(recommendation=recommendation).delete()
-        CropZoneCriteria.objects.bulk_create(
-            [
-                CropZoneCriteria(
-                    recommendation=recommendation,
-                    name=item["name"],
-                    value=item["value"],
-                    sequence=index,
-                )
-                for index, item in enumerate(metrics["criteria"])
-            ]
-        )
-        CropZoneWaterNeedLayer.objects.update_or_create(
-            crop_zone=zone,
-            defaults={
-                "level": metrics["water_need_level"],
-                "value": metrics["water_need_value"],
-                "color": _get_level_color_map("water", metrics["water_need_level"]),
-            },
-        )
-        CropZoneSoilQualityLayer.objects.update_or_create(
-            crop_zone=zone,
-            defaults={
-                "level": metrics["soil_level"],
-                "score": metrics["soil_quality_score"],
-                "color": _get_level_color_map("soil", metrics["soil_level"]),
-            },
-        )
-        CropZoneCultivationRiskLayer.objects.update_or_create(
-            crop_zone=zone,
-            defaults={
-                "level": metrics["cultivation_risk_level"],
-                "color": _get_level_color_map("risk", metrics["cultivation_risk_level"]),
-            },
-        )
+        persist_zone_analysis_metrics(zone, metrics)
         zone.processing_status = CropZone.STATUS_COMPLETED
         zone.processing_error = ""
         zone.save(update_fields=["processing_status", "processing_error", "updated_at"])
@@ -428,28 +674,130 @@ def analyze_and_store_zone_soil_data(zone_id):
     return zone
 
 
-def dispatch_zone_processing_tasks(crop_area_id):
+def dispatch_zone_processing_tasks(crop_area_id=None, zone_ids=None):
     from .tasks import process_zone_soil_data
 
-    zones = list(CropZone.objects.filter(crop_area_id=crop_area_id).only("id"))
+    queryset = CropZone.objects.select_related("crop_area").all()
+    if crop_area_id is not None:
+        queryset = queryset.filter(crop_area_id=crop_area_id)
+    if zone_ids is not None:
+        queryset = queryset.filter(id__in=zone_ids)
+
+    zones = list(queryset.only("id", "task_id", "processing_status", "crop_area__sensor_id"))
+    sensor_task_ids = {}
     for zone in zones:
-        task_identifier = ""
+        sensor_id = zone.crop_area.sensor_id
+        existing_task_id = sensor_task_ids.get(sensor_id) or zone.task_id
+        if existing_task_id and zone.processing_status in {CropZone.STATUS_PENDING, CropZone.STATUS_PROCESSING}:
+            sensor_task_ids[sensor_id] = existing_task_id
+            if zone.task_id != existing_task_id:
+                CropZone.objects.filter(id=zone.id).update(task_id=existing_task_id)
+            continue
+
         try:
             async_result = process_zone_soil_data.delay(zone.id)
-            task_identifier = getattr(async_result, "id", "") or ""
-        except Exception:
-            analyze_and_store_zone_soil_data(zone_id=zone.id)
-        CropZone.objects.filter(id=zone.id).update(task_id=task_identifier)
+            task_identifier = getattr(async_result, "id", "") or str(uuid.uuid4())
+            processing_error = ""
+        except OperationalError as exc:
+            task_identifier = str(uuid.uuid4())
+            processing_error = f"Celery broker unavailable: {exc}"
+        except Exception as exc:
+            task_identifier = str(uuid.uuid4())
+            processing_error = f"Celery dispatch failed: {exc}"
+
+        update_fields = {"task_id": task_identifier}
+        if zone.processing_status == CropZone.STATUS_FAILED:
+            update_fields["processing_status"] = CropZone.STATUS_PENDING
+        if processing_error:
+            update_fields["processing_error"] = processing_error
+        elif zone.processing_status == CropZone.STATUS_FAILED:
+            update_fields["processing_error"] = ""
+        CropZone.objects.filter(id=zone.id).update(**update_fields)
+        if sensor_id and task_identifier:
+            sensor_task_ids[sensor_id] = task_identifier
 
 
-def create_zones_and_dispatch(area_feature):
+def create_missing_zones_for_area(crop_area):
+    if crop_area.zones.exists():
+        return list(crop_area.zones.order_by("sequence", "id"))
+
+    area_feature = normalize_area_feature(crop_area.geometry)
+    zoning_result = split_area_into_zones(
+        area_feature,
+        cell_side_km=math.sqrt(max(crop_area.chunk_area_sqm, 1)) / 1000.0,
+    )
+    zones = CropZone.objects.bulk_create(
+        [
+            CropZone(
+                crop_area=crop_area,
+                zone_id=zone["zone_id"],
+                geometry=zone["geometry"],
+                points=zone["points"],
+                center=zone["center"],
+                area_sqm=round(zone["area_sqm"], 2),
+                area_hectares=round(zone["area_hectares"], 4),
+                sequence=zone["sequence"],
+            )
+            for zone in zoning_result["zones"]
+        ]
+    )
+    crop_area.zone_count = len(zones)
+    crop_area.save(update_fields=["zone_count", "updated_at"])
+    return list(crop_area.zones.order_by("sequence", "id"))
+
+
+def get_sensor_for_uuid(sensor_uuid):
+    if not sensor_uuid:
+        raise ValueError("sensor_uuid is required.")
+    try:
+        return Sensor.objects.get(uuid_sensor=sensor_uuid)
+    except Sensor.DoesNotExist as exc:
+        raise ValueError("Sensor not found.") from exc
+
+
+def ensure_latest_area_ready_for_processing(sensor_uuid, area_feature=None):
+    sensor = get_sensor_for_uuid(sensor_uuid)
+    latest_area = CropArea.objects.filter(sensor=sensor).order_by("-created_at", "-id").first()
+    if latest_area is None:
+        latest_area, _ = create_zones_and_dispatch(area_feature or get_default_area_feature(), sensor=sensor)
+        return latest_area
+
+    zones = create_missing_zones_for_area(latest_area)
+    for zone in zones:
+        ensure_rule_based_zone_data(zone)
+
+    active_task_id = next((zone.task_id for zone in zones if zone.task_id and zone.processing_status in {CropZone.STATUS_PENDING, CropZone.STATUS_PROCESSING}), "")
+    zones_to_dispatch = []
+    for zone in zones:
+        if zone.processing_status == CropZone.STATUS_COMPLETED:
+            continue
+        if active_task_id:
+            if not zone.task_id:
+                CropZone.objects.filter(id=zone.id).update(task_id=active_task_id)
+            continue
+        if zone.processing_status == CropZone.STATUS_PROCESSING and zone.task_id:
+            active_task_id = zone.task_id
+            continue
+        if zone.processing_status == CropZone.STATUS_PENDING and zone.task_id:
+            active_task_id = zone.task_id
+            continue
+        zones_to_dispatch.append(zone.id)
+
+    if zones_to_dispatch:
+        dispatch_zone_processing_tasks(zone_ids=zones_to_dispatch)
+
+    return CropArea.objects.get(id=latest_area.id)
+
+
+def create_zones_and_dispatch(area_feature, cell_side_km=None, sensor=None):
     ensure_products_exist()
     area_feature = normalize_area_feature(area_feature)
-    zoning_result = split_area_into_zones(area_feature)
+    zoning_result = split_area_into_zones(area_feature, cell_side_km=cell_side_km)
     area_data = zoning_result["area"]
 
     with transaction.atomic():
         crop_area = CropArea.objects.create(
+            sensor=sensor,
             geometry=area_data["geometry"],
             points=area_data["points"],
             center=area_data["center"],
@@ -475,6 +823,9 @@ def create_zones_and_dispatch(area_feature):
         )
 
     crop_area.refresh_from_db()
+    zones = list(crop_area.zones.order_by("sequence", "id"))
+    for zone in zones:
+        ensure_rule_based_zone_data(zone)
     dispatch_zone_processing_tasks(crop_area.id)
     return crop_area, zones
 
@@ -493,11 +844,62 @@ def _zones_queryset(zone_ids=None):
     return queryset
 
 
-def get_latest_area_payload():
-    area = CropArea.objects.order_by("-created_at", "-id").first()
+def get_latest_area_payload(area=None):
+    area = area or CropArea.objects.order_by("-created_at", "-id").first()
     if area:
-        return {"area": area.geometry}
-    return {"area": get_default_area_feature()}
+        zones = list(area.zones.only("zone_id", "task_id", "processing_status", "processing_error"))
+        total_zones = len(zones)
+        completed_zones = sum(1 for zone in zones if zone.processing_status == CropZone.STATUS_COMPLETED)
+        processing_zones = sum(1 for zone in zones if zone.processing_status == CropZone.STATUS_PROCESSING)
+        failed_zones = sum(1 for zone in zones if zone.processing_status == CropZone.STATUS_FAILED)
+        pending_zones = sum(1 for zone in zones if zone.processing_status == CropZone.STATUS_PENDING)
+
+        if failed_zones:
+            task_status = "FAILURE"
+        elif total_zones and completed_zones == total_zones:
+            task_status = "SUCCESS"
+        elif processing_zones or completed_zones:
+            task_status = "PROCESSING"
+        else:
+            task_status = "PENDING"
+
+        return {
+            "task": {
+                "status": task_status,
+                "area_uuid": str(area.uuid),
+                "total_zones": total_zones,
+                "completed_zones": completed_zones,
+                "processing_zones": processing_zones,
+                "pending_zones": pending_zones,
+                "failed_zones": failed_zones,
+                "task_ids": [zone.task_id for zone in zones if zone.task_id],
+                "failed_zone_errors": [
+                    {
+                        "zoneId": zone.zone_id,
+                        "error": zone.processing_error,
+                    }
+                    for zone in zones
+                    if zone.processing_status == CropZone.STATUS_FAILED and zone.processing_error
+                ],
+                "cell_side_km": round(math.sqrt(max(area.chunk_area_sqm, 1)) / 1000.0, 4),
+            },
+            "area": area.geometry,
+        }
+    return {
+        "task": {
+            "status": "IDLE",
+            "area_uuid": "",
+            "total_zones": 0,
+            "completed_zones": 0,
+            "processing_zones": 0,
+            "pending_zones": 0,
+            "failed_zones": 0,
+            "task_ids": [],
+            "failed_zone_errors": [],
+            "cell_side_km": round(get_default_cell_side_km(), 4),
+        },
+        "area": get_default_area_feature(),
+    }
 
 
 def get_initial_zones_payload(crop_area):

@@ -5,6 +5,7 @@ from django.db import transaction
 from account.seeds import seed_admin_user
 
 from .models import Sensor
+from .services import dispatch_sensor_zoning
 
 
 ADMIN_SENSOR_UUID = uuid.UUID("11111111-1111-1111-1111-111111111111")
@@ -74,6 +75,22 @@ ADMIN_SENSOR_DATA = {
     },
 }
 
+ADMIN_SENSOR_AREA_GEOJSON = {
+    "type": "Feature",
+    "properties": {},
+    "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [51.418934, 35.706815],
+                [51.423054, 35.691062],
+                [51.384258, 35.689389],
+                [51.418934, 35.706815],
+            ]
+        ],
+    },
+}
+
 
 @transaction.atomic
 def seed_admin_sensor():
@@ -89,4 +106,6 @@ def seed_admin_sensor():
             "customized_sensors": ADMIN_SENSOR_DATA["customized_sensors"],
         },
     )
+    if created:
+        dispatch_sensor_zoning(ADMIN_SENSOR_AREA_GEOJSON)
     return sensor, created

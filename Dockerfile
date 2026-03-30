@@ -30,13 +30,12 @@ COPY requirements.txt .
 
 # Python mirrors
 RUN pip config --user set global.index-url https://package-mirror.liara.ir/repository/pypi/simple && \
-    pip config --user set global.extra-index-url https://mirror.cdn.ir/repository/pypi/simple && \
     pip config --user set global.extra-index-url https://mirror2.chabokan.net/pypi/simple && \
     pip config --user set global.trusted-host package-mirror.liara.ir && \
-    pip config --user set global.trusted-host mirror.cdn.ir && \
+    pip config --user set global.trusted-host mirror2.chabokan.net && \
     pip config --user set global.trusted-host mirror-pypi.runflare.com
 
-RUN    pip install -r requirements.txt
+RUN pip install -r requirements.txt
 
 COPY entrypoint.sh /app/entrypoint.sh
 COPY . .
