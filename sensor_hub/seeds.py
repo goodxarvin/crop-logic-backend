@@ -107,5 +107,5 @@ def seed_admin_sensor():
         },
     )
     if created:
-        dispatch_sensor_zoning(ADMIN_SENSOR_AREA_GEOJSON)
+        dispatch_sensor_zoning(ADMIN_SENSOR_AREA_GEOJSON, sensor)
     return sensor, created

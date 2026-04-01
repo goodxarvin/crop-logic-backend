@@ -1,14 +1,14 @@
-# Production: no source mount; image contains code
 services:
   db:
     image: docker.iranserver.com/mysql:8
+    container_name: backend-db
     environment:
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
-      - mysql_data:/var/lib/mysql
+      - backend_mysql_data:/var/lib/mysql
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
@@ -16,7 +16,23 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - crop_network 
+      - crop_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: backend-redis
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - backend_redis_data:/data
+    networks:
+      - crop_network
+
   web:
     container_name: backend-web
     build: .
@@ -24,16 +40,44 @@ services:
       - .env
     environment:
       DB_HOST: db
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      QDRANT_HOST: ${QDRANT_HOST:-qdrant}
+      QDRANT_PORT: ${QDRANT_PORT:-6333}
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
-
     networks:
-      - crop_network  
+      - crop_network
+
+  celery:
+    container_name: backend-celery
+    build: .
+    command: ["celery", "-A", "config", "worker", "-l", "info"]
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP: "true"
+      SKIP_MIGRATE: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - crop_network
 
 networks:
   crop_network:
-    external: true  
+    external: true
+
 volumes:
-  mysql_data:
+  backend_mysql_data:
+  backend_redis_data:

@@ -4,7 +4,9 @@ from kombu.exceptions import OperationalError
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIRequestFactory
+from datetime import timedelta
 
 from crop_zoning.models import CropArea, CropZone
 from crop_zoning.views import AreaView, ZonesInitialView
@@ -126,6 +128,9 @@ class AreaViewTests(TestCase):
         self.assertEqual(response.data["data"]["task"]["status"], "PROCESSING")
         self.assertEqual(response.data["data"]["task"]["total_zones"], 2)
         self.assertEqual(response.data["data"]["area"], AREA_GEOJSON)
+        self.assertEqual(len(response.data["data"]["zones"]), 2)
+        self.assertEqual(response.data["data"]["zones"][0]["zoneId"], "zone-0")
+        self.assertIn("processing_status", response.data["data"]["zones"][0])
 
     def test_get_returns_area_when_all_tasks_complete(self):
         crop_area = self._create_area()
@@ -148,6 +153,10 @@ class AreaViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["task"]["status"], "SUCCESS")
         self.assertEqual(response.data["data"]["area"], AREA_GEOJSON)
+        self.assertEqual(len(response.data["data"]["zones"]), 2)
+        self.assertEqual(response.data["data"]["zones"][1]["zoneId"], "zone-1")
+        self.assertIn("crop", response.data["data"]["zones"][0])
+        self.assertIn("waterNeedLayer", response.data["data"]["zones"][0])
 
     @patch("crop_zoning.services.dispatch_zone_processing_tasks")
     def test_get_dispatches_zone_task_when_task_id_is_missing(self, mock_dispatch):
@@ -183,7 +192,7 @@ class AreaViewTests(TestCase):
         self.assertEqual(mock_create.call_args.kwargs["sensor"], self.sensor)
 
     @patch("crop_zoning.tasks.process_zone_soil_data.delay")
-    def test_only_one_active_task_is_created_per_sensor(self, mock_delay):
+    def test_each_zone_gets_its_own_task(self, mock_delay):
         crop_area = self._create_area()
         zone0 = CropZone.objects.create(
             crop_area=crop_area,
@@ -211,18 +220,19 @@ class AreaViewTests(TestCase):
         )
 
         class Result:
-            id = "shared-task-id"
+            def __init__(self, task_id):
+                self.id = task_id
 
-        mock_delay.return_value = Result()
+        mock_delay.side_effect = [Result("task-zone-0"), Result("task-zone-1")]
 
         response = AreaView.as_view()(self._request())
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(mock_delay.call_count, 1)
+        self.assertEqual(mock_delay.call_count, 2)
         zone0.refresh_from_db()
         zone1.refresh_from_db()
-        self.assertEqual(zone0.task_id, "shared-task-id")
-        self.assertEqual(zone1.task_id, "shared-task-id")
+        self.assertEqual(zone0.task_id, "task-zone-0")
+        self.assertEqual(zone1.task_id, "task-zone-1")
 
     @patch("crop_zoning.tasks.process_zone_soil_data.delay", side_effect=OperationalError("redis down"))
     def test_get_generates_local_task_id_when_broker_is_unavailable(self, mock_delay):
@@ -245,7 +255,8 @@ class AreaViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         zone.refresh_from_db()
         self.assertTrue(zone.task_id)
-        self.assertEqual(response.data["data"]["task"]["task_ids"], [zone.task_id])
+        self.assertEqual(response.data["data"]["task"]["summary"]["remaining"], 1)
+        self.assertEqual(response.data["data"]["task"]["remaining_zones"], 1)
         self.assertEqual(response.data["data"]["task"]["status"], "PENDING")
         self.assertIn("Celery broker unavailable", zone.processing_error)
 
@@ -274,12 +285,56 @@ class AreaViewTests(TestCase):
         self.assertEqual(first_response.status_code, 200)
         zone.refresh_from_db()
         self.assertEqual(zone.task_id, "persisted-task-id")
-        self.assertEqual(first_response.data["data"]["task"]["task_ids"], ["persisted-task-id"])
+        self.assertEqual(first_response.data["data"]["task"]["summary"]["done"], 0)
+        self.assertEqual(first_response.data["data"]["task"]["summary"]["remaining"], 1)
         self.assertEqual(mock_delay.call_count, 1)
 
         second_response = AreaView.as_view()(self._request())
         self.assertEqual(second_response.status_code, 200)
-        self.assertEqual(second_response.data["data"]["task"]["task_ids"], ["persisted-task-id"])
+        self.assertEqual(second_response.data["data"]["task"]["summary"]["remaining"], 1)
         self.assertEqual(second_response.data["data"]["task"]["status"], "PENDING")
         self.assertEqual(mock_delay.call_count, 1)
 
+    @patch("crop_zoning.services.AsyncResult")
+    @patch("crop_zoning.tasks.process_zone_soil_data.delay")
+    def test_get_redispatches_pending_zone_when_shared_task_already_completed(self, mock_delay, mock_async_result):
+        crop_area = self._create_area()
+        CropZone.objects.create(
+            crop_area=crop_area,
+            zone_id="zone-0",
+            geometry=AREA_GEOJSON["geometry"],
+            points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
+            center={"longitude": 51.4087, "latitude": 35.6957},
+            area_sqm=150000,
+            area_hectares=15,
+            sequence=0,
+            processing_status=CropZone.STATUS_COMPLETED,
+            task_id="legacy-shared-task-id",
+        )
+        stale_zone = CropZone.objects.create(
+            crop_area=crop_area,
+            zone_id="zone-1",
+            geometry=AREA_GEOJSON["geometry"],
+            points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
+            center={"longitude": 51.4088, "latitude": 35.6958},
+            area_sqm=150000,
+            area_hectares=15,
+            sequence=1,
+            processing_status=CropZone.STATUS_PENDING,
+            task_id="legacy-shared-task-id",
+        )
+        stale_zone.updated_at = timezone.now() - timedelta(minutes=10)
+        stale_zone.save(update_fields=["updated_at"])
+
+        class Result:
+            id = "requeued-zone-1"
+
+        mock_delay.return_value = Result()
+        mock_async_result.return_value.state = "SUCCESS"
+
+        response = AreaView.as_view()(self._request())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_delay.call_count, 1)
+        stale_zone.refresh_from_db()
+        self.assertEqual(stale_zone.task_id, "requeued-zone-1")
