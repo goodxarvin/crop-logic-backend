@@ -19,7 +19,7 @@ services:
       - crop_network
 
   redis:
-    image: redis:7-alpine
+    image: docker.iranserver.com/redis
     container_name: backend-redis
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
     restart: unless-stopped
