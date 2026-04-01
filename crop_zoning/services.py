@@ -29,6 +29,7 @@ from .models import (
 EARTH_RADIUS_METERS = 6378137.0
 PRODUCT_DEFAULTS = PRODUCTS_RESPONSE_DATA["products"]
 DEFAULT_CELL_SIDE_KM = 0.15
+DEFAULT_ZONE_PAGE_SIZE = 10
 RULE_BASED_ALGORITHM = "rule_based_v1"
 RULE_BASED_PRODUCTS = {
     "wheat": {
@@ -105,6 +106,29 @@ def get_cell_side_km(cell_side_km=None):
 def get_chunk_area_sqm(cell_side_km=None):
     resolved_cell_side_km = get_cell_side_km(cell_side_km)
     return (resolved_cell_side_km * 1000.0) ** 2
+
+
+def parse_positive_int(value, field_name, default=None):
+    if value in {None, ""}:
+        if default is None:
+            raise ValueError(f"{field_name} must be a positive integer.")
+        return default
+
+    try:
+        parsed_value = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a positive integer.") from exc
+
+    if parsed_value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer.")
+    return parsed_value
+
+
+def get_zone_page_request_params(query_params):
+    return (
+        parse_positive_int(query_params.get("page"), "page", default=1),
+        parse_positive_int(query_params.get("page_size"), "page_size", default=DEFAULT_ZONE_PAGE_SIZE),
+    )
 
 
 def get_default_area_feature():
@@ -920,7 +944,7 @@ def _zones_queryset(zone_ids=None):
     return queryset
 
 
-def get_latest_area_payload(area=None):
+def get_latest_area_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
     area = area or CropArea.objects.order_by("-created_at", "-id").first()
     if area:
         status_zones = list(area.zones.only("zone_id", "task_id", "processing_status", "processing_error"))
@@ -929,7 +953,10 @@ def get_latest_area_payload(area=None):
         processing_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_PROCESSING)
         failed_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_FAILED)
         pending_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_PENDING)
-        zones = _zones_queryset().filter(crop_area=area)
+        total_pages = math.ceil(total_zones / page_size) if total_zones else 0
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        zones = list(_zones_queryset().filter(crop_area=area)[start_index:end_index])
 
         if failed_zones:
             task_status = "FAILURE"
@@ -995,6 +1022,15 @@ def get_latest_area_payload(area=None):
             },
             "area": area.geometry,
             "zones": [build_area_zone_payload(zone) for zone in zones],
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_zones": total_zones,
+                "returned_zones": len(zones),
+                "has_next": page < total_pages,
+                "has_previous": page > 1 and total_pages > 0,
+            },
         }
     return {
         "task": {
@@ -1010,6 +1046,15 @@ def get_latest_area_payload(area=None):
         },
         "area": get_default_area_feature(),
         "zones": [],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_pages": 0,
+            "total_zones": 0,
+            "returned_zones": 0,
+            "has_next": False,
+            "has_previous": False,
+        },
     }
 
 

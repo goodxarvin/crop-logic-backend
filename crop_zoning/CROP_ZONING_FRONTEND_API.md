@@ -51,19 +51,22 @@ Content-Type: application/json
 ## 1) Get Area
 
 ```http
-GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>
+GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>&page=1&page_size=10
 ```
 
 ### Query Params
 
 - `sensor_uuid`: اجباری، UUID سنسور
+- `page`: اختیاری، شماره صفحه زون‌ها. پیش‌فرض `1`
+- `page_size`: اختیاری، تعداد زون در هر صفحه. پیش‌فرض `10`
 
 ### کاربرد
 
 - گرفتن آخرین area مربوط به سنسور
 - ساخت area و zoneها در صورت نبود داده
 - دریافت وضعیت task
-- دریافت لیست کامل `zones` برای نمایش روی نقشه
+- دریافت لیست `zones` به صورت صفحه‌بندی‌شده برای نمایش روی نقشه
+- دریافت اطلاعات pagination برای ساخت pager یا infinite loading در فرانت
 
 ### نمونه پاسخ موفق
 
@@ -145,9 +148,40 @@ GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>
           "color": "#22c55e"
         }
       }
-    ]
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 10,
+      "total_pages": 37,
+      "total_zones": 364,
+      "returned_zones": 10,
+      "has_next": true,
+      "has_previous": false
+    }
   }
 }
+```
+
+### رفتار pagination
+
+- `zones` فقط شامل زون‌های همان صفحه‌ای است که در query param فرستاده شده
+- `task.total_zones` تعداد کل زون‌های area را نشان می‌دهد، نه فقط زون‌های همان صفحه
+- `pagination.total_pages` تعداد کل صفحه‌ها را برای فرانت مشخص می‌کند
+- `pagination.returned_zones` تعداد آیتم‌های برگشتی در همان response را نشان می‌دهد
+- اگر `page` بزرگ‌تر از `total_pages` باشد، response خطا نمی‌دهد و فقط `zones` خالی برمی‌گردد
+
+### مثال‌ها
+
+#### صفحه اول با 10 زون در هر صفحه
+
+```http
+GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>&page=1&page_size=10
+```
+
+#### صفحه سوم با 25 زون در هر صفحه
+
+```http
+GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>&page=3&page_size=25
 ```
 
 ### فیلدهای مهم `zones`
@@ -169,6 +203,16 @@ GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>
 - `soilQualityLayer`: داده layer کیفیت خاک
 - `cultivationRiskLayer`: داده layer ریسک کشت
 
+### فیلدهای مهم `pagination`
+
+- `page`: شماره صفحه فعلی
+- `page_size`: تعداد زون در هر صفحه
+- `total_pages`: تعداد کل صفحه‌ها
+- `total_zones`: تعداد کل زون‌های area
+- `returned_zones`: تعداد زون‌های برگشتی در response فعلی
+- `has_next`: آیا صفحه بعدی وجود دارد یا نه
+- `has_previous`: آیا صفحه قبلی وجود دارد یا نه
+
 ### خطاها
 
 #### وقتی `sensor_uuid` ارسال نشود
@@ -188,6 +232,18 @@ GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>
   "message": "Sensor not found."
 }
 ```
+
+#### وقتی `page` یا `page_size` نامعتبر باشد
+
+```json
+{
+  "status": "error",
+  "message": "page must be a positive integer."
+}
+```
+
+- همین رفتار برای `page_size` هم وجود دارد و پیام خطا به صورت
+  `page_size must be a positive integer.` برمی‌گردد.
 
 ---
 

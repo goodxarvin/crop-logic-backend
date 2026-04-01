@@ -17,6 +17,7 @@ from .services import (
     get_products_payload,
     get_soil_quality_payload,
     get_water_need_payload,
+    get_zone_page_request_params,
     get_zone_details_payload,
 )
 
@@ -31,6 +32,20 @@ class AreaView(APIView):
                 location=OpenApiParameter.QUERY,
                 required=True,
                 description="UUID سنسور ارسالی کاربر برای گرفتن یا ساخت task فعال همان سنسور.",
+            ),
+            OpenApiParameter(
+                name="page",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="شماره صفحه زون‌ها. مقدار پیش‌فرض 1 است.",
+            ),
+            OpenApiParameter(
+                name="page_size",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="تعداد زون در هر صفحه. مقدار پیش‌فرض 10 است.",
             )
         ],
         responses={
@@ -42,13 +57,17 @@ class AreaView(APIView):
     def get(self, request):
         sensor_uuid = request.query_params.get("sensor_uuid")
         try:
+            page, page_size = get_zone_page_request_params(request.query_params)
             crop_area = ensure_latest_area_ready_for_processing(sensor_uuid=sensor_uuid)
         except ValueError as exc:
             return Response({"status": "error", "message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except ImproperlyConfigured as exc:
             return Response({"status": "error", "message": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({"status": "success", "data": get_latest_area_payload(crop_area)}, status=status.HTTP_200_OK)
+        return Response(
+            {"status": "success", "data": get_latest_area_payload(crop_area, page=page, page_size=page_size)},
+            status=status.HTTP_200_OK,
+        )
 
 
 class ProductsView(APIView):

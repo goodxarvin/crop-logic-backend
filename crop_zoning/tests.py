@@ -88,6 +88,11 @@ class AreaViewTests(TestCase):
     def _request(self):
         return self.factory.get(f"/api/crop-zoning/area/?sensor_uuid={self.sensor.uuid_sensor}")
 
+    def _request_with_pagination(self, page=1, page_size=10):
+        return self.factory.get(
+            f"/api/crop-zoning/area/?sensor_uuid={self.sensor.uuid_sensor}&page={page}&page_size={page_size}"
+        )
+
     def test_get_requires_sensor_uuid(self):
         request = self.factory.get("/api/crop-zoning/area/")
         response = AreaView.as_view()(request)
@@ -157,6 +162,39 @@ class AreaViewTests(TestCase):
         self.assertEqual(response.data["data"]["zones"][1]["zoneId"], "zone-1")
         self.assertIn("crop", response.data["data"]["zones"][0])
         self.assertIn("waterNeedLayer", response.data["data"]["zones"][0])
+
+    def test_get_returns_paginated_zones(self):
+        crop_area = self._create_area(zone_count=3, area_sqm=300000, area_hectares=30)
+        for sequence in range(3):
+            CropZone.objects.create(
+                crop_area=crop_area,
+                zone_id=f"zone-{sequence}",
+                geometry=AREA_GEOJSON["geometry"],
+                points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
+                center={"longitude": 51.4087 + (sequence * 0.0001), "latitude": 35.6957},
+                area_sqm=100000,
+                area_hectares=10,
+                sequence=sequence,
+                processing_status=CropZone.STATUS_COMPLETED,
+                task_id=f"celery-task-{sequence}",
+            )
+
+        response = AreaView.as_view()(self._request_with_pagination(page=2, page_size=1))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["data"]["zones"]), 1)
+        self.assertEqual(response.data["data"]["zones"][0]["zoneId"], "zone-1")
+        self.assertEqual(response.data["data"]["pagination"]["page"], 2)
+        self.assertEqual(response.data["data"]["pagination"]["page_size"], 1)
+        self.assertEqual(response.data["data"]["pagination"]["total_pages"], 3)
+        self.assertTrue(response.data["data"]["pagination"]["has_next"])
+        self.assertTrue(response.data["data"]["pagination"]["has_previous"])
+
+    def test_get_rejects_invalid_pagination_params(self):
+        response = AreaView.as_view()(self._request_with_pagination(page=0, page_size=10))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["message"], "page must be a positive integer.")
 
     @patch("crop_zoning.services.dispatch_zone_processing_tasks")
     def test_get_dispatches_zone_task_when_task_id_is_missing(self, mock_dispatch):
