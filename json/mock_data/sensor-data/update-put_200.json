@@ -2,7 +2,7 @@
   "code": 200,
   "msg": "success",
   "data": {
-    "uuid_sensor": "550e8400-e29b-41d4-a716-446655440000",
+    "farm_uuid": "550e8400-e29b-41d4-a716-446655440000",
     "location_id": 12,
     "soil_moisture": 45.2,
     "soil_temperature": 22.5,

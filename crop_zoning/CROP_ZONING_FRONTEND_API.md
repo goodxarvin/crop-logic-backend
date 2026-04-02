@@ -20,7 +20,7 @@ Content-Type: application/json
 
 ## Flow پیشنهادی فرانت
 
-1. ابتدا `GET /area/` را با `sensor_uuid` صدا بزنید.
+1. ابتدا `GET /area/` را با `farm_uuid` صدا بزنید.
 2. اگر `task.status` برابر `PENDING` یا `PROCESSING` بود، polling انجام دهید.
 3. وقتی `task.status` برابر `SUCCESS` شد:
    - `area` را برای polygon اصلی زمین استفاده کنید.
@@ -29,7 +29,7 @@ Content-Type: application/json
 
 ## وضعیت‌های Task
 
-- `IDLE`: هنوز area/taskی برای سنسور وجود ندارد.
+- `IDLE`: هنوز area/taskی برای مزرعه وجود ندارد.
 - `PENDING`: تسک ساخته شده ولی پردازش هنوز شروع نشده یا در صف است.
 - `PROCESSING`: بخشی از زون‌ها در حال پردازش هستند یا برخی کامل شده‌اند.
 - `SUCCESS`: همه زون‌ها کامل پردازش شده‌اند.
@@ -51,18 +51,18 @@ Content-Type: application/json
 ## 1) Get Area
 
 ```http
-GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>&page=1&page_size=10
+GET /api/crop-zoning/area/?farm_uuid=<farm_uuid>&page=1&page_size=10
 ```
 
 ### Query Params
 
-- `sensor_uuid`: اجباری، UUID سنسور
+- `farm_uuid`: اجباری، UUID مزرعه
 - `page`: اختیاری، شماره صفحه زون‌ها. پیش‌فرض `1`
 - `page_size`: اختیاری، تعداد زون در هر صفحه. پیش‌فرض `10`
 
 ### کاربرد
 
-- گرفتن آخرین area مربوط به سنسور
+- گرفتن آخرین area مربوط به مزرعه
 - ساخت area و zoneها در صورت نبود داده
 - دریافت وضعیت task
 - دریافت لیست `zones` به صورت صفحه‌بندی‌شده برای نمایش روی نقشه
@@ -175,13 +175,13 @@ GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>&page=1&page_size=10
 #### صفحه اول با 10 زون در هر صفحه
 
 ```http
-GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>&page=1&page_size=10
+GET /api/crop-zoning/area/?farm_uuid=<farm_uuid>&page=1&page_size=10
 ```
 
 #### صفحه سوم با 25 زون در هر صفحه
 
 ```http
-GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>&page=3&page_size=25
+GET /api/crop-zoning/area/?farm_uuid=<farm_uuid>&page=3&page_size=25
 ```
 
 ### فیلدهای مهم `zones`
@@ -215,21 +215,21 @@ GET /api/crop-zoning/area/?sensor_uuid=<sensor_uuid>&page=3&page_size=25
 
 ### خطاها
 
-#### وقتی `sensor_uuid` ارسال نشود
+#### وقتی `farm_uuid` ارسال نشود
 
 ```json
 {
   "status": "error",
-  "message": "sensor_uuid is required."
+  "message": "farm_uuid is required."
 }
 ```
 
-#### وقتی سنسور پیدا نشود
+#### وقتی مزرعه پیدا نشود
 
 ```json
 {
   "status": "error",
-  "message": "Sensor not found."
+  "message": "Farm not found."
 }
 ```
 

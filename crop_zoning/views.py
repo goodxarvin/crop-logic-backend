@@ -17,8 +17,8 @@ from .services import (
     get_products_payload,
     get_soil_quality_payload,
     get_water_need_payload,
-    get_zone_page_request_params,
     get_zone_details_payload,
+    get_zone_page_request_params,
 )
 
 
@@ -27,26 +27,26 @@ class AreaView(APIView):
         tags=["Crop Zoning"],
         parameters=[
             OpenApiParameter(
-                name="sensor_uuid",
+                name="farm_uuid",
                 type=OpenApiTypes.UUID,
                 location=OpenApiParameter.QUERY,
                 required=True,
-                description="UUID سنسور ارسالی کاربر برای گرفتن یا ساخت task فعال همان سنسور.",
+                description="UUID مزرعه برای گرفتن يا ساخت آخرين پردازش محدوده همان مزرعه.",
             ),
             OpenApiParameter(
                 name="page",
                 type=OpenApiTypes.INT,
                 location=OpenApiParameter.QUERY,
                 required=False,
-                description="شماره صفحه زون‌ها. مقدار پیش‌فرض 1 است.",
+                description="شماره صفحه زون ها. مقدار پيش فرض 1 است.",
             ),
             OpenApiParameter(
                 name="page_size",
                 type=OpenApiTypes.INT,
                 location=OpenApiParameter.QUERY,
                 required=False,
-                description="تعداد زون در هر صفحه. مقدار پیش‌فرض 10 است.",
-            )
+                description="تعداد زون در هر صفحه. مقدار پيش فرض 10 است.",
+            ),
         ],
         responses={
             200: status_response("CropZoningAreaResponse", data=serializers.JSONField()),
@@ -55,10 +55,10 @@ class AreaView(APIView):
         },
     )
     def get(self, request):
-        sensor_uuid = request.query_params.get("sensor_uuid")
+        farm_uuid = request.query_params.get("farm_uuid")
         try:
             page, page_size = get_zone_page_request_params(request.query_params)
-            crop_area = ensure_latest_area_ready_for_processing(sensor_uuid=sensor_uuid)
+            crop_area = ensure_latest_area_ready_for_processing(farm_uuid=farm_uuid, owner=request.user)
         except ValueError as exc:
             return Response({"status": "error", "message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except ImproperlyConfigured as exc:

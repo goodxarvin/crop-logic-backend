@@ -17,10 +17,12 @@ class ChatSectionSerializer(serializers.Serializer):
 
 class ConversationSummarySerializer(serializers.Serializer):
     id = serializers.UUIDField(source="uuid", read_only=True)
+    farm_uuid = serializers.UUIDField(source="farm.farm_uuid", read_only=True)
     message_count = serializers.IntegerField(read_only=True)
 
 
 class ConversationCreateSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True)
     title = serializers.CharField(required=False, allow_blank=True, max_length=255)
     farm_context = serializers.JSONField(required=False)
 
@@ -28,6 +30,7 @@ class ConversationCreateSerializer(serializers.Serializer):
 class ChatHistoryMessageSerializer(serializers.Serializer):
     message_id = serializers.UUIDField(read_only=True)
     conversation_id = serializers.UUIDField(read_only=True)
+    farm_uuid = serializers.UUIDField(read_only=True)
     role = serializers.ChoiceField(choices=Message.ROLE_CHOICES, read_only=True)
     content = serializers.CharField(read_only=True, allow_blank=True)
     sections = ChatSectionSerializer(many=True, read_only=True)
@@ -37,18 +40,21 @@ class ChatHistoryMessageSerializer(serializers.Serializer):
 
 class ConversationMessagesSerializer(serializers.Serializer):
     conversation_id = serializers.UUIDField(read_only=True)
+    farm_uuid = serializers.UUIDField(read_only=True)
     messages = ChatHistoryMessageSerializer(many=True, read_only=True)
 
 
 class ChatResponseDataSerializer(serializers.Serializer):
     message_id = serializers.UUIDField(read_only=True)
     conversation_id = serializers.UUIDField(read_only=True)
+    farm_uuid = serializers.UUIDField(read_only=True)
     content = serializers.CharField(read_only=True, allow_blank=True)
     sections = ChatSectionSerializer(many=True, read_only=True)
 
 
 class ConversationDeleteSerializer(serializers.Serializer):
     conversation_id = serializers.UUIDField(read_only=True)
+    farm_uuid = serializers.UUIDField(read_only=True)
 
 
 class ChatTaskSubmitDataSerializer(serializers.Serializer):
@@ -57,18 +63,21 @@ class ChatTaskSubmitDataSerializer(serializers.Serializer):
     status_url = serializers.CharField(required=False, allow_blank=True)
     conversation_id = serializers.UUIDField(read_only=True)
     message_id = serializers.UUIDField(read_only=True)
+    farm_uuid = serializers.UUIDField(read_only=True)
 
 
 class ChatTaskStatusDataSerializer(serializers.Serializer):
     task_id = serializers.CharField(required=False, allow_blank=True)
     status = serializers.CharField(required=False, allow_blank=True)
     conversation_id = serializers.UUIDField(read_only=True)
+    farm_uuid = serializers.UUIDField(read_only=True)
     progress = serializers.JSONField(required=False)
     result = serializers.JSONField(required=False)
     error = serializers.CharField(required=False, allow_blank=True)
 
 
 class ChatPostSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True)
     content = serializers.CharField(required=False, allow_blank=True, default="")
     images = serializers.ListField(
         child=serializers.CharField(),

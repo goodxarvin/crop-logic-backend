@@ -3,6 +3,8 @@ import uuid
 from django.conf import settings
 from django.db import models
 
+from farm_hub.models import FarmHub
+
 
 class Conversation(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
@@ -10,6 +12,13 @@ class Conversation(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="farm_ai_conversations",
+    )
+    farm = models.ForeignKey(
+        FarmHub,
+        on_delete=models.CASCADE,
+        related_name="ai_conversations",
+        null=True,
+        blank=True,
     )
     title = models.CharField(max_length=255, blank=True, default="")
     farm_context = models.JSONField(default=dict, blank=True)
@@ -37,6 +46,13 @@ class Message(models.Model):
         Conversation,
         on_delete=models.CASCADE,
         related_name="messages",
+    )
+    farm = models.ForeignKey(
+        FarmHub,
+        on_delete=models.CASCADE,
+        related_name="ai_messages",
+        null=True,
+        blank=True,
     )
     role = models.CharField(max_length=32, choices=ROLE_CHOICES)
     content = models.TextField(blank=True, default="")

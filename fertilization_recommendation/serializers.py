@@ -8,6 +8,7 @@ class FertilizationFarmDataSerializer(serializers.Serializer):
 
 
 class FertilizationRecommendRequestSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True)
     crop_id = serializers.CharField(required=False, allow_blank=True)
     growth_stage = serializers.CharField(required=False, allow_blank=True)
     farm_data = FertilizationFarmDataSerializer(required=False)

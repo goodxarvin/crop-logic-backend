@@ -8,6 +8,7 @@ class IrrigationFarmDataSerializer(serializers.Serializer):
 
 
 class IrrigationRecommendRequestSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True)
     crop_id = serializers.CharField(required=False, allow_blank=True)
     farm_data = IrrigationFarmDataSerializer(required=False)
     soilType = serializers.CharField(required=False, allow_blank=True)

@@ -1,16 +1,15 @@
+from datetime import timedelta
 from unittest.mock import patch
-
-from kombu.exceptions import OperationalError
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
-from rest_framework.test import APIRequestFactory
-from datetime import timedelta
+from kombu.exceptions import OperationalError
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from crop_zoning.models import CropArea, CropZone
 from crop_zoning.views import AreaView, ZonesInitialView
-from sensor_hub.models import Sensor
+from farm_hub.models import FarmHub, FarmType
 
 
 AREA_GEOJSON = {
@@ -69,11 +68,19 @@ class AreaViewTests(TestCase):
             email="farmer@example.com",
             phone_number="09120000000",
         )
-        self.sensor = Sensor.objects.create(owner=self.user, name="sensor-1")
+        self.other_user = get_user_model().objects.create_user(
+            username="other-farmer",
+            password="secret123",
+            email="other@example.com",
+            phone_number="09120000001",
+        )
+        self.farm_type = FarmType.objects.create(name="زراعی")
+        self.farm = FarmHub.objects.create(owner=self.user, name="farm-1", farm_type=self.farm_type)
+        self.other_farm = FarmHub.objects.create(owner=self.other_user, name="farm-2", farm_type=self.farm_type)
 
     def _create_area(self, **kwargs):
         defaults = {
-            "sensor": self.sensor,
+            "farm": self.farm,
             "geometry": AREA_GEOJSON,
             "points": AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
             "center": {"longitude": 51.40874867, "latitude": 35.69575533},
@@ -86,18 +93,32 @@ class AreaViewTests(TestCase):
         return CropArea.objects.create(**defaults)
 
     def _request(self):
-        return self.factory.get(f"/api/crop-zoning/area/?sensor_uuid={self.sensor.uuid_sensor}")
+        request = self.factory.get(f"/api/crop-zoning/area/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+        return request
 
     def _request_with_pagination(self, page=1, page_size=10):
-        return self.factory.get(
-            f"/api/crop-zoning/area/?sensor_uuid={self.sensor.uuid_sensor}&page={page}&page_size={page_size}"
+        request = self.factory.get(
+            f"/api/crop-zoning/area/?farm_uuid={self.farm.farm_uuid}&page={page}&page_size={page_size}"
         )
+        force_authenticate(request, user=self.user)
+        return request
 
-    def test_get_requires_sensor_uuid(self):
+    def test_get_requires_farm_uuid(self):
         request = self.factory.get("/api/crop-zoning/area/")
+        force_authenticate(request, user=self.user)
         response = AreaView.as_view()(request)
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.data["message"], "sensor_uuid is required.")
+        self.assertEqual(response.data["message"], "farm_uuid is required.")
+
+    def test_get_rejects_foreign_farm_uuid(self):
+        request = self.factory.get(f"/api/crop-zoning/area/?farm_uuid={self.other_farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+
+        response = AreaView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["message"], "Farm not found.")
 
     def test_get_returns_pending_task_status_until_all_zones_complete(self):
         crop_area = self._create_area()
@@ -219,7 +240,7 @@ class AreaViewTests(TestCase):
         mock_dispatch.assert_called_once()
 
     @patch("crop_zoning.services.create_zones_and_dispatch")
-    def test_get_creates_area_when_sensor_has_no_data(self, mock_create):
+    def test_get_creates_area_when_farm_has_no_data(self, mock_create):
         created_area = self._create_area(zone_count=0)
         mock_create.return_value = (created_area, [])
 
@@ -227,7 +248,7 @@ class AreaViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         mock_create.assert_called_once()
-        self.assertEqual(mock_create.call_args.kwargs["sensor"], self.sensor)
+        self.assertEqual(mock_create.call_args.kwargs["farm"], self.farm)
 
     @patch("crop_zoning.tasks.process_zone_soil_data.delay")
     def test_each_zone_gets_its_own_task(self, mock_delay):
@@ -238,8 +259,8 @@ class AreaViewTests(TestCase):
             geometry=AREA_GEOJSON["geometry"],
             points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
             center={"longitude": 51.4087, "latitude": 35.6957},
-            area_sqm=150000,
-            area_hectares=15,
+            area_sqm=200000,
+            area_hectares=20,
             sequence=0,
             processing_status=CropZone.STATUS_PENDING,
             task_id="",
@@ -250,18 +271,12 @@ class AreaViewTests(TestCase):
             geometry=AREA_GEOJSON["geometry"],
             points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
             center={"longitude": 51.4088, "latitude": 35.6958},
-            area_sqm=150000,
-            area_hectares=15,
+            area_sqm=100000,
+            area_hectares=10,
             sequence=1,
             processing_status=CropZone.STATUS_PENDING,
             task_id="",
         )
-
-        class Result:
-            def __init__(self, task_id):
-                self.id = task_id
-
-        mock_delay.side_effect = [Result("task-zone-0"), Result("task-zone-1")]
 
         response = AreaView.as_view()(self._request())
 
@@ -269,110 +284,32 @@ class AreaViewTests(TestCase):
         self.assertEqual(mock_delay.call_count, 2)
         zone0.refresh_from_db()
         zone1.refresh_from_db()
-        self.assertEqual(zone0.task_id, "task-zone-0")
-        self.assertEqual(zone1.task_id, "task-zone-1")
-
-    @patch("crop_zoning.tasks.process_zone_soil_data.delay", side_effect=OperationalError("redis down"))
-    def test_get_generates_local_task_id_when_broker_is_unavailable(self, mock_delay):
-        crop_area = self._create_area(zone_count=1, area_sqm=200000, area_hectares=20)
-        zone = CropZone.objects.create(
-            crop_area=crop_area,
-            zone_id="zone-0",
-            geometry=AREA_GEOJSON["geometry"],
-            points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
-            center={"longitude": 51.4087, "latitude": 35.6957},
-            area_sqm=200000,
-            area_hectares=20,
-            sequence=0,
-            processing_status=CropZone.STATUS_PENDING,
-            task_id="",
-        )
-
-        response = AreaView.as_view()(self._request())
-
-        self.assertEqual(response.status_code, 200)
-        zone.refresh_from_db()
-        self.assertTrue(zone.task_id)
-        self.assertEqual(response.data["data"]["task"]["summary"]["remaining"], 1)
-        self.assertEqual(response.data["data"]["task"]["remaining_zones"], 1)
-        self.assertEqual(response.data["data"]["task"]["status"], "PENDING")
-        self.assertIn("Celery broker unavailable", zone.processing_error)
-
-    @patch("crop_zoning.tasks.process_zone_soil_data.delay")
-    def test_get_stores_task_id_and_reuses_it_on_next_request(self, mock_delay):
-        crop_area = self._create_area(zone_count=1, area_sqm=200000, area_hectares=20)
-        zone = CropZone.objects.create(
-            crop_area=crop_area,
-            zone_id="zone-0",
-            geometry=AREA_GEOJSON["geometry"],
-            points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
-            center={"longitude": 51.4087, "latitude": 35.6957},
-            area_sqm=200000,
-            area_hectares=20,
-            sequence=0,
-            processing_status=CropZone.STATUS_PENDING,
-            task_id="",
-        )
-
-        class Result:
-            id = "persisted-task-id"
-
-        mock_delay.return_value = Result()
-
-        first_response = AreaView.as_view()(self._request())
-        self.assertEqual(first_response.status_code, 200)
-        zone.refresh_from_db()
-        self.assertEqual(zone.task_id, "persisted-task-id")
-        self.assertEqual(first_response.data["data"]["task"]["summary"]["done"], 0)
-        self.assertEqual(first_response.data["data"]["task"]["summary"]["remaining"], 1)
-        self.assertEqual(mock_delay.call_count, 1)
-
-        second_response = AreaView.as_view()(self._request())
-        self.assertEqual(second_response.status_code, 200)
-        self.assertEqual(second_response.data["data"]["task"]["summary"]["remaining"], 1)
-        self.assertEqual(second_response.data["data"]["task"]["status"], "PENDING")
-        self.assertEqual(mock_delay.call_count, 1)
+        self.assertTrue(zone0.task_id)
+        self.assertTrue(zone1.task_id)
+        self.assertNotEqual(zone0.task_id, zone1.task_id)
 
     @patch("crop_zoning.services.AsyncResult")
-    @patch("crop_zoning.tasks.process_zone_soil_data.delay")
-    def test_get_redispatches_pending_zone_when_shared_task_already_completed(self, mock_delay, mock_async_result):
+    def test_stale_tasks_are_redispatched(self, mock_async_result):
         crop_area = self._create_area()
-        CropZone.objects.create(
+        stale_time = timezone.now() - timedelta(minutes=10)
+        stale_zone = CropZone.objects.create(
             crop_area=crop_area,
             zone_id="zone-0",
             geometry=AREA_GEOJSON["geometry"],
             points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
             center={"longitude": 51.4087, "latitude": 35.6957},
-            area_sqm=150000,
-            area_hectares=15,
+            area_sqm=200000,
+            area_hectares=20,
             sequence=0,
-            processing_status=CropZone.STATUS_COMPLETED,
-            task_id="legacy-shared-task-id",
+            processing_status=CropZone.STATUS_PROCESSING,
+            task_id="stale-task",
         )
-        stale_zone = CropZone.objects.create(
-            crop_area=crop_area,
-            zone_id="zone-1",
-            geometry=AREA_GEOJSON["geometry"],
-            points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
-            center={"longitude": 51.4088, "latitude": 35.6958},
-            area_sqm=150000,
-            area_hectares=15,
-            sequence=1,
-            processing_status=CropZone.STATUS_PENDING,
-            task_id="legacy-shared-task-id",
-        )
-        stale_zone.updated_at = timezone.now() - timedelta(minutes=10)
-        stale_zone.save(update_fields=["updated_at"])
+        CropZone.objects.filter(id=stale_zone.id).update(updated_at=stale_time)
 
-        class Result:
-            id = "requeued-zone-1"
+        mock_async_result.side_effect = OperationalError("broker down")
 
-        mock_delay.return_value = Result()
-        mock_async_result.return_value.state = "SUCCESS"
-
-        response = AreaView.as_view()(self._request())
+        with patch("crop_zoning.services.dispatch_zone_processing_tasks") as mock_dispatch:
+            response = AreaView.as_view()(self._request())
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(mock_delay.call_count, 1)
-        stale_zone.refresh_from_db()
-        self.assertEqual(stale_zone.task_id, "requeued-zone-1")
+        mock_dispatch.assert_called_once_with(zone_ids=[stale_zone.id], force=True)

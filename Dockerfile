@@ -11,12 +11,7 @@ printf '%s\n' \
 'deb https://mirror-linux.runflare.com/debian/ bookworm main contrib non-free non-free-firmware' \
 'deb https://mirror-linux.runflare.com/debian/ bookworm-updates main contrib non-free non-free-firmware' \
 'deb https://mirror-linux.runflare.com/debian-security/ bookworm-security main contrib non-free non-free-firmware' \
-'' \
-'deb [trusted=yes] https://mirror2.chabokan.net/debian bookworm main contrib non-free non-free-firmware' \
-'deb [trusted=yes] https://mirror2.chabokan.net/debian-security bookworm-security main contrib non-free non-free-firmware' \
-'' \
-'deb http://mirror.iranserver.com/debian/ bookworm main contrib non-free non-free-firmware' \
-'deb-src http://mirror.iranserver.com/debian/ bookworm main contrib non-free non-free-firmware' \
+
 > /etc/apt/sources.list
 
 # System deps for MySQL client (pkg-config required by mysqlclient to find libs)

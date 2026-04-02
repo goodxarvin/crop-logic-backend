@@ -42,7 +42,7 @@
 
 ### کار این view
 
-- `sensor_uuid` را از query params می‌گیرد.
+- `farm_uuid` را از query params می‌گیرد.
 - `page` و `page_size` را هم از query params می‌گیرد.
 - از service می‌خواهد مطمئن شود برای این sensor یک area معتبر و zoneهای آن وجود دارند.
 - اگر zoneها وجود نداشته باشند، ساخته می‌شوند.
@@ -51,7 +51,7 @@
 
 ### ورودی‌های `AreaView`
 
-- `sensor_uuid`: اجباری
+- `farm_uuid`: اجباری
 - `page`: اختیاری، پیش‌فرض `1`
 - `page_size`: اختیاری، پیش‌فرض `10`
 
@@ -68,8 +68,8 @@
 
 اگر هر کدام از این موارد رخ بدهد، خطای `400` داده می‌شود:
 
-- `sensor_uuid` ارسال نشده باشد
-- `sensor_uuid` معتبر نباشد یا sensor پیدا نشود
+- `farm_uuid` ارسال نشده باشد
+- `farm_uuid` معتبر نباشد یا farm پیدا نشود
 - `page` نامعتبر باشد
 - `page_size` نامعتبر باشد
 
@@ -107,7 +107,7 @@
 
 ### تفاوت با `AreaView`
 
-- `AreaView` بر اساس `sensor_uuid` کار می‌کند و وضعیت taskها را هم برمی‌گرداند.
+- `AreaView` بر اساس `farm_uuid` کار می‌کند و وضعیت taskها را هم برمی‌گرداند.
 - `ZonesInitialView` بیشتر برای ساخت اولیه zoneها از روی polygon مناسب است.
 
 ---
@@ -532,14 +532,14 @@ metrics را داخل مدل‌های مختلف ذخیره می‌کند:
 
 اگر area در دیتابیس وجود داشته باشد ولی zoneهایش از بین رفته باشند یا ساخته نشده باشند، دوباره از روی geometry آن zoneها را می‌سازد.
 
-### `get_sensor_for_uuid(sensor_uuid)`
+### `get_farm_for_uuid(farm_uuid)`
 
 اعتبارسنجی می‌کند که:
 
-- `sensor_uuid` ارسال شده باشد
-- sensor واقعا در دیتابیس وجود داشته باشد
+- `farm_uuid` ارسال شده باشد
+- farm واقعا در دیتابیس وجود داشته باشد
 
-### `ensure_latest_area_ready_for_processing(sensor_uuid, area_feature=None)`
+### `ensure_latest_area_ready_for_processing(farm_uuid, area_feature=None)`
 
 این یکی از مهم‌ترین توابع کل فایل است.
 
@@ -648,7 +648,7 @@ payload ساده‌تر برای endpoint اولیه zoneها می‌سازد.
 
 اگر بخواهیم کل flow را از ابتدا تا انتها خیلی ساده توضیح بدهیم:
 
-1. فرانت `sensor_uuid` و احتمالا `page` و `page_size` را می‌فرستد.
+1. فرانت `farm_uuid` و احتمالا `page` و `page_size` را می‌فرستد.
 2. `AreaView` پارامترها را می‌خواند.
 3. `ensure_latest_area_ready_for_processing` اجرا می‌شود.
 4. اگر area وجود نداشته باشد، area و zoneها ساخته می‌شوند.
@@ -714,7 +714,7 @@ payload ساده‌تر برای endpoint اولیه zoneها می‌سازد.
 
 ### `_request()`
 
-یک request استاندارد برای `AreaView` با `sensor_uuid` معتبر می‌سازد.
+یک request استاندارد برای `AreaView` با `farm_uuid` معتبر می‌سازد.
 
 ### `_request_with_pagination(page, page_size)`
 
@@ -724,9 +724,9 @@ payload ساده‌تر برای endpoint اولیه zoneها می‌سازد.
 
 ### تست‌های اصلی `AreaView`
 
-#### `test_get_requires_sensor_uuid`
+#### `test_get_requires_farm_uuid`
 
-بررسی می‌کند اگر `sensor_uuid` ارسال نشود، پاسخ `400` برگردد.
+بررسی می‌کند اگر `farm_uuid` ارسال نشود، پاسخ `400` برگردد.
 
 #### `test_get_returns_pending_task_status_until_all_zones_complete`
 

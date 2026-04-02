@@ -1,5 +1,5 @@
 {
   "code": 400,
-  "msg": "پارامتر sensor_uuid الزامی است.",
+  "msg": "پارامتر farm_uuid الزامی است.",
   "data": null
 }

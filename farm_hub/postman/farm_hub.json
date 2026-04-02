@@ -1,0 +1,117 @@
+{
+  "info": {
+    "name": "Farm Hub",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Farm Hub API. GET list, GET by uuid, POST add, PATCH update, DELETE delete, POST active/deactive. Authenticated user required."
+  },
+  "item": [
+    {
+      "name": "List farms",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "url": "{{baseUrl}}/api/farm-hub/",
+        "description": "Get farms for current user."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\",\n  \"data\": [\n    {\n      \"farm_uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"مزرعه نمونه\",\n      \"is_active\": true,\n      \"customization\": {\"report_interval_sec\": 300},\n      \"farm_type\": {\"uuid\": \"11111111-1111-1111-1111-111111111111\", \"name\": \"زراعی\", \"description\": \"\", \"metadata\": {}},\n      \"products\": [{\"uuid\": \"22222222-2222-2222-2222-222222222222\", \"name\": \"گندم\", \"description\": \"\", \"metadata\": {}}],\n      \"sensors\": [\n        {\n          \"uuid\": \"33333333-3333-3333-3333-333333333333\",\n          \"name\": \"Station 1\",\n          \"sensor_type\": \"weather_station\",\n          \"is_active\": true,\n          \"specifications\": {\"model\": \"FH-1\"},\n          \"power_source\": {\"type\": \"battery\"},\n          \"customization\": {\"report_interval_sec\": 300},\n          \"last_updated\": \"2025-02-18T12:00:00Z\"\n        }\n      ],\n      \"last_updated\": \"2025-02-18T12:00:00Z\"\n    }\n  ]\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get farm details",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "url": "{{baseUrl}}/api/farm-hub/{{farmUuid}}/",
+        "description": "Get one farm by farm uuid."
+      },
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"code\": 200,\n  \"msg\": \"success\",\n  \"data\": {\n    \"farm_uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"name\": \"مزرعه نمونه\",\n    \"is_active\": true,\n    \"customization\": {\"report_interval_sec\": 300},\n    \"farm_type\": {\"uuid\": \"11111111-1111-1111-1111-111111111111\", \"name\": \"زراعی\", \"description\": \"\", \"metadata\": {}},\n    \"products\": [{\"uuid\": \"22222222-2222-2222-2222-222222222222\", \"name\": \"گندم\", \"description\": \"\", \"metadata\": {}}],\n    \"sensors\": [\n      {\n        \"uuid\": \"33333333-3333-3333-3333-333333333333\",\n        \"name\": \"Station 1\",\n        \"sensor_type\": \"weather_station\",\n        \"is_active\": true,\n        \"specifications\": {\"model\": \"FH-1\"},\n        \"power_source\": {\"type\": \"battery\"},\n        \"customization\": {\"report_interval_sec\": 300},\n        \"last_updated\": \"2025-02-18T12:00:00Z\"\n      }\n    ],\n    \"last_updated\": \"2025-02-18T12:00:00Z\"\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Create farm",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "body": {"mode": "raw", "raw": "{\n  \"name\": \"مزرعه شماره 1\",\n  \"farm_type_uuid\": \"11111111-1111-1111-1111-111111111111\",\n  \"product_uuids\": [\"22222222-2222-2222-2222-222222222222\"],\n  \"customization\": {\"report_interval_sec\": 300},\n  \"sensors\": [\n    {\n      \"name\": \"Station 1\",\n      \"sensor_type\": \"weather_station\",\n      \"is_active\": true,\n      \"specifications\": {\"model\": \"FH-1\"},\n      \"power_source\": {\"type\": \"battery\"},\n      \"customization\": {\"report_interval_sec\": 300}\n    }\n  ]\n}"},
+        "url": "{{baseUrl}}/api/farm-hub/",
+        "description": "Create a farm with its sensors."
+      }
+    },
+    {
+      "name": "Update farm",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "body": {"mode": "raw", "raw": "{}"},
+        "url": "{{baseUrl}}/api/farm-hub/{{farmUuid}}/",
+        "description": "Update farm by farm uuid."
+      }
+    },
+    {
+      "name": "Delete farm",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "url": "{{baseUrl}}/api/farm-hub/{{farmUuid}}/",
+        "description": "Delete farm by farm uuid."
+      }
+    },
+    {
+      "name": "Activate farm",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "body": {"mode": "raw", "raw": "{\n  \"farm_uuid\": \"550e8400-e29b-41d4-a716-446655440000\"\n}"},
+        "url": "{{baseUrl}}/api/farm-hub/active/",
+        "description": "Activate one farm."
+      }
+    },
+    {
+      "name": "Deactivate farm",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{token}}", "description": "Required: user must be authenticated"}
+        ],
+        "body": {"mode": "raw", "raw": "{\n  \"farm_uuid\": \"550e8400-e29b-41d4-a716-446655440000\"\n}"},
+        "url": "{{baseUrl}}/api/farm-hub/deactive/",
+        "description": "Deactivate one farm."
+      }
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8000"},
+    {"key": "token", "value": ""},
+    {"key": "farmUuid", "value": "550e8400-e29b-41d4-a716-446655440000"}
+  ]
+}

@@ -512,42 +512,42 @@
   },
   {
     "method": "PUT",
-    "path": "/api/sensor-data/{uuid_sensor}/",
+    "path": "/api/sensor-data/{farm_uuid}/",
     "status_code": 200,
     "description": "Sensor update put success",
     "file": "json/mock_data/sensor-data/update-put_200.json"
   },
   {
     "method": "PUT",
-    "path": "/api/sensor-data/{uuid_sensor}/",
+    "path": "/api/sensor-data/{farm_uuid}/",
     "status_code": 400,
     "description": "Sensor update put validation error",
     "file": "json/mock_data/sensor-data/update-put_400.json"
   },
   {
     "method": "PUT",
-    "path": "/api/sensor-data/{uuid_sensor}/",
+    "path": "/api/sensor-data/{farm_uuid}/",
     "status_code": 404,
     "description": "Sensor update put location not found",
     "file": "json/mock_data/sensor-data/update-put_404.json"
   },
   {
     "method": "PATCH",
-    "path": "/api/sensor-data/{uuid_sensor}/",
+    "path": "/api/sensor-data/{farm_uuid}/",
     "status_code": 200,
     "description": "Sensor update patch success",
     "file": "json/mock_data/sensor-data/update-patch_200.json"
   },
   {
     "method": "PATCH",
-    "path": "/api/sensor-data/{uuid_sensor}/",
+    "path": "/api/sensor-data/{farm_uuid}/",
     "status_code": 400,
     "description": "Sensor update patch validation error",
     "file": "json/mock_data/sensor-data/update-patch_400.json"
   },
   {
     "method": "PATCH",
-    "path": "/api/sensor-data/{uuid_sensor}/",
+    "path": "/api/sensor-data/{farm_uuid}/",
     "status_code": 404,
     "description": "Sensor update patch location not found",
     "file": "json/mock_data/sensor-data/update-patch_404.json"

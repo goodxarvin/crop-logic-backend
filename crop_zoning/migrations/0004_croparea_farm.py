@@ -4,20 +4,20 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("sensor_hub", "0001_initial"),
+        ("farm_hub", "0002_seed_default_catalog"),
         ("crop_zoning", "0003_zone_processing_and_analysis"),
     ]
 
     operations = [
         migrations.AddField(
             model_name="croparea",
-            name="sensor",
+            name="farm",
             field=models.ForeignKey(
                 blank=True,
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="crop_areas",
-                to="sensor_hub.sensor",
+                to="farm_hub.farmhub",
             ),
         ),
     ]

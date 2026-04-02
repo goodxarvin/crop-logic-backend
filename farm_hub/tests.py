@@ -3,8 +3,9 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from crop_zoning.models import CropArea
-from sensor_hub.seeds import seed_admin_sensor
-from sensor_hub.views import SensorListCreateView
+from farm_hub.models import FarmType, Product
+from farm_hub.seeds import seed_admin_farm
+from farm_hub.views import FarmListCreateView
 
 
 AREA_GEOJSON = {
@@ -28,7 +29,7 @@ AREA_GEOJSON = {
     USE_EXTERNAL_API_MOCK=True,
     CROP_ZONE_CHUNK_AREA_SQM=200000,
 )
-class SensorListCreateViewTests(TestCase):
+class FarmListCreateViewTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
         self.user = get_user_model().objects.create_user(
@@ -37,27 +38,39 @@ class SensorListCreateViewTests(TestCase):
             email="farmer@example.com",
             phone_number="09120000000",
         )
+        self.farm_type, _ = FarmType.objects.get_or_create(name="زراعی")
+        self.wheat, _ = Product.objects.get_or_create(farm_type=self.farm_type, name="گندم")
 
-    def test_create_sensor_with_area_geojson_creates_crop_zoning_payload(self):
+    def test_create_farm_with_area_geojson_creates_crop_zoning_payload(self):
         request = self.factory.post(
-            "/api/sensor-hub/",
+            "/api/farm-hub/",
             {
-                "name": "zone-sensor",
-                "specifications": {"model": "SH-1"},
-                "power_source": {"type": "battery"},
-                "customized_sensors": {"report_interval_sec": 300},
+                "name": "farm-1",
+                "farm_type_uuid": str(self.farm_type.uuid),
+                "product_uuids": [str(self.wheat.uuid)],
+                "customization": {"report_interval_sec": 300},
+                "sensors": [
+                    {
+                        "name": "zone-sensor",
+                        "sensor_type": "weather_station",
+                        "specifications": {"model": "FH-1"},
+                        "power_source": {"type": "battery"},
+                        "customization": {"report_interval_sec": 300},
+                    }
+                ],
                 "area_geojson": AREA_GEOJSON,
             },
             format="json",
         )
         force_authenticate(request, user=self.user)
 
-        response = SensorListCreateView.as_view()(request)
+        response = FarmListCreateView.as_view()(request)
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["code"], 201)
-        self.assertEqual(response.data["data"]["name"], "zone-sensor")
+        self.assertEqual(response.data["data"]["name"], "farm-1")
         self.assertIn("zoning", response.data["data"])
+        self.assertEqual(len(response.data["data"]["sensors"]), 1)
         self.assertGreater(response.data["data"]["zoning"]["zone_count"], 1)
         self.assertEqual(
             response.data["data"]["zoning"]["zone_count"],
@@ -70,19 +83,20 @@ class SensorListCreateViewTests(TestCase):
     USE_EXTERNAL_API_MOCK=True,
     CROP_ZONE_CHUNK_AREA_SQM=200000,
 )
-class SensorSeedTests(TestCase):
-    def test_seed_admin_sensor_dispatches_crop_logic_flow_on_create(self):
-        sensor, created = seed_admin_sensor()
+class FarmSeedTests(TestCase):
+    def test_seed_admin_farm_dispatches_crop_logic_flow_on_create(self):
+        farm, created = seed_admin_farm()
 
         self.assertTrue(created)
-        self.assertEqual(sensor.uuid_sensor.hex, "11111111111111111111111111111111")
+        self.assertEqual(farm.farm_uuid.hex, "11111111111111111111111111111111")
         self.assertEqual(CropArea.objects.count(), 1)
+        self.assertEqual(farm.sensors.count(), 2)
 
-    def test_seed_admin_sensor_does_not_dispatch_twice_for_existing_seed(self):
-        first_sensor, first_created = seed_admin_sensor()
-        second_sensor, second_created = seed_admin_sensor()
+    def test_seed_admin_farm_does_not_dispatch_twice_for_existing_seed(self):
+        first_farm, first_created = seed_admin_farm()
+        second_farm, second_created = seed_admin_farm()
 
         self.assertTrue(first_created)
         self.assertFalse(second_created)
-        self.assertEqual(first_sensor.id, second_sensor.id)
+        self.assertEqual(first_farm.id, second_farm.id)
         self.assertEqual(CropArea.objects.count(), 1)

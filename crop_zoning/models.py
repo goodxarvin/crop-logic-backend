@@ -1,13 +1,13 @@
 import uuid
 
 from django.db import models
-from sensor_hub.models import Sensor
+from farm_hub.models import FarmHub
 
 
 class CropArea(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
-    sensor = models.ForeignKey(
-        Sensor,
+    farm = models.ForeignKey(
+        FarmHub,
         on_delete=models.CASCADE,
         related_name="crop_areas",
         null=True,
@@ -72,7 +72,6 @@ class CropZone(models.Model):
 
     def __str__(self):
         return self.zone_id
-
 
 
 class CropProduct(models.Model):
@@ -205,7 +204,6 @@ class CropZoneCultivationRiskLayer(models.Model):
         ordering = ["crop_zone_id"]
 
 
-
 class CropZoneAnalysis(models.Model):
     source = models.CharField(max_length=64, blank=True, default="")
     external_record_id = models.CharField(max_length=64, blank=True, default="")
@@ -224,4 +222,3 @@ class CropZoneAnalysis(models.Model):
     class Meta:
         db_table = "crop_zone_analyses"
         ordering = ["crop_zone_id"]
-

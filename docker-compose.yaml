@@ -43,15 +43,6 @@ services:
     volumes:
       - backend_redis_data:/data
 
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: backend-qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - backend_qdrant_data:/qdrant/storage
-    restart: unless-stopped
 
   web:
     build:
@@ -81,8 +72,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      qdrant:
-        condition: service_started
     restart: unless-stopped
 
   celery:

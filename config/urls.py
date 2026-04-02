@@ -9,7 +9,7 @@ urlpatterns = [
     path("api/docs/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     path("api/auth/", include("auth.urls")),
     path("api/account/", include("account.urls")),
-    path("api/sensor-hub/", include("sensor_hub.urls")),
+    path("api/farm-hub/", include("farm_hub.urls")),
     path("api/farm-dashboard-config/", include("dashboard.urls_config")),
     path("api/farm-dashboard/", include("dashboard.urls")),
     path("api/crop-zoning/", include("crop_zoning.urls")),

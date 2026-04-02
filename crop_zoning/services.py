@@ -9,7 +9,7 @@ from kombu.exceptions import OperationalError
 from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
-from sensor_hub.models import Sensor
+from farm_hub.models import FarmHub
 
 from external_api_adapter.adapter import request as external_request
 
@@ -852,20 +852,25 @@ def create_missing_zones_for_area(crop_area):
     return list(crop_area.zones.order_by("sequence", "id"))
 
 
-def get_sensor_for_uuid(sensor_uuid):
-    if not sensor_uuid:
-        raise ValueError("sensor_uuid is required.")
+def get_farm_for_uuid(farm_uuid, owner=None):
+    if not farm_uuid:
+        raise ValueError("farm_uuid is required.")
+
+    filters = {"farm_uuid": farm_uuid}
+    if owner is not None:
+        filters["owner"] = owner
+
     try:
-        return Sensor.objects.get(uuid_sensor=sensor_uuid)
-    except Sensor.DoesNotExist as exc:
-        raise ValueError("Sensor not found.") from exc
+        return FarmHub.objects.get(**filters)
+    except FarmHub.DoesNotExist as exc:
+        raise ValueError("Farm not found.") from exc
 
 
-def ensure_latest_area_ready_for_processing(sensor_uuid, area_feature=None):
-    sensor = get_sensor_for_uuid(sensor_uuid)
-    latest_area = CropArea.objects.filter(sensor=sensor).order_by("-created_at", "-id").first()
+def ensure_latest_area_ready_for_processing(farm_uuid, area_feature=None, owner=None):
+    farm = get_farm_for_uuid(farm_uuid, owner=owner)
+    latest_area = CropArea.objects.filter(farm=farm).order_by("-created_at", "-id").first()
     if latest_area is None:
-        latest_area, _ = create_zones_and_dispatch(area_feature or get_default_area_feature(), sensor=sensor)
+        latest_area, _ = create_zones_and_dispatch(area_feature or get_default_area_feature(), farm=farm)
         return latest_area
 
     zones = create_missing_zones_for_area(latest_area)
@@ -889,7 +894,7 @@ def ensure_latest_area_ready_for_processing(sensor_uuid, area_feature=None):
     return CropArea.objects.get(id=latest_area.id)
 
 
-def create_zones_and_dispatch(area_feature, cell_side_km=None, sensor=None):
+def create_zones_and_dispatch(area_feature, cell_side_km=None, farm=None):
     ensure_products_exist()
     area_feature = normalize_area_feature(area_feature)
     zoning_result = split_area_into_zones(area_feature, cell_side_km=cell_side_km)
@@ -897,7 +902,7 @@ def create_zones_and_dispatch(area_feature, cell_side_km=None, sensor=None):
 
     with transaction.atomic():
         crop_area = CropArea.objects.create(
-            sensor=sensor,
+            farm=farm,
             geometry=area_data["geometry"],
             points=area_data["points"],
             center=area_data["center"],

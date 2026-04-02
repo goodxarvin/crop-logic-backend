@@ -1,52 +1,105 @@
 from copy import deepcopy
+from unittest.mock import patch
 
-from django.test import SimpleTestCase
-from rest_framework.test import APIRequestFactory
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from rest_framework.test import APIRequestFactory, force_authenticate
 
-from .mock_data import DEFAULT_CONFIG, reset_config
-from .views import FarmDashboardConfigView
+from farm_hub.models import FarmHub, FarmType
+
+from .mock_data import DEFAULT_CONFIG
+from .models import FarmDashboardConfig
+from .views import FarmDashboardCardsView, FarmDashboardConfigView
 
 
-class FarmDashboardConfigViewTests(SimpleTestCase):
+class DashboardBaseTestCase(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        reset_config()
+        self.user = get_user_model().objects.create_user(
+            username="farmer",
+            password="secret123",
+            email="farmer@example.com",
+            phone_number="09120000000",
+        )
+        self.other_user = get_user_model().objects.create_user(
+            username="other-farmer",
+            password="secret123",
+            email="other@example.com",
+            phone_number="09120000001",
+        )
+        self.farm_type = FarmType.objects.create(name="زراعی")
+        self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="Farm 1")
+        self.other_farm = FarmHub.objects.create(owner=self.other_user, farm_type=self.farm_type, name="Farm 2")
 
-    def tearDown(self):
-        reset_config()
 
-    def test_get_returns_canonical_config(self):
-        request = self.factory.get("/api/farm-dashboard-config/")
+class FarmDashboardConfigViewTests(DashboardBaseTestCase):
+    def test_get_returns_default_config_and_persists_it(self):
+        request = self.factory.get(f"/api/farm-dashboard-config/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
         response = FarmDashboardConfigView.as_view()(request)
+
+        expected = deepcopy(DEFAULT_CONFIG)
+        expected["farm_uuid"] = str(self.farm.farm_uuid)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["code"], 200)
         self.assertEqual(response.data["msg"], "OK")
-        self.assertEqual(response.data["data"], DEFAULT_CONFIG)
+        self.assertEqual(response.data["data"], expected)
+        self.assertTrue(FarmDashboardConfig.objects.filter(farm=self.farm).exists())
+
+    def test_get_requires_farm_uuid(self):
+        request = self.factory.get("/api/farm-dashboard-config/")
+        force_authenticate(request, user=self.user)
+        response = FarmDashboardConfigView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["farm_uuid"][0], "This field is required.")
+
+    def test_get_rejects_foreign_farm_uuid(self):
+        request = self.factory.get(f"/api/farm-dashboard-config/?farm_uuid={self.other_farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+        response = FarmDashboardConfigView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["farm_uuid"][0], "Farm not found.")
 
     def test_patch_partial_update_returns_full_final_config(self):
         request = self.factory.patch(
             "/api/farm-dashboard-config/",
-            {"disabled_card_ids": ["farmWeatherCard"]},
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "disabled_card_ids": ["farmWeatherCard"],
+            },
             format="json",
         )
+        force_authenticate(request, user=self.user)
         response = FarmDashboardConfigView.as_view()(request)
 
         expected = deepcopy(DEFAULT_CONFIG)
+        expected["farm_uuid"] = str(self.farm.farm_uuid)
         expected["disabled_card_ids"] = ["farmWeatherCard"]
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"], expected)
+        self.assertEqual(
+            FarmDashboardConfig.objects.get(farm=self.farm).disabled_card_ids,
+            ["farmWeatherCard"],
+        )
 
     def test_patch_only_drag_flag_still_returns_full_config(self):
         request = self.factory.patch(
             "/api/farm-dashboard-config/",
-            {"enable_drag_reorder": False},
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "enable_drag_reorder": False,
+            },
             format="json",
         )
+        force_authenticate(request, user=self.user)
         response = FarmDashboardConfigView.as_view()(request)
 
         expected = deepcopy(DEFAULT_CONFIG)
+        expected["farm_uuid"] = str(self.farm.farm_uuid)
         expected["enable_drag_reorder"] = False
 
         self.assertEqual(response.status_code, 200)
@@ -57,10 +110,43 @@ class FarmDashboardConfigViewTests(SimpleTestCase):
     def test_patch_rejects_invalid_row_order(self):
         request = self.factory.patch(
             "/api/farm-dashboard-config/",
-            {"row_order": ["overviewKpis"]},
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "row_order": ["overviewKpis"],
+            },
             format="json",
         )
+        force_authenticate(request, user=self.user)
         response = FarmDashboardConfigView.as_view()(request)
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("row_order", response.data)
+
+
+class FarmDashboardCardsViewTests(DashboardBaseTestCase):
+    @patch("dashboard.views.external_api_request")
+    def test_get_forwards_farm_uuid_to_external_api(self, mock_external_api_request):
+        mock_external_api_request.return_value.data = {"status": "success", "data": {}}
+        mock_external_api_request.return_value.status_code = 200
+
+        request = self.factory.get(f"/api/farm-dashboard/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+
+        response = FarmDashboardCardsView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        mock_external_api_request.assert_called_once_with(
+            "ai",
+            "/dashboard-data/status",
+            method="GET",
+            query={"farm_uuid": str(self.farm.farm_uuid)},
+        )
+
+    def test_get_requires_farm_uuid(self):
+        request = self.factory.get("/api/farm-dashboard/")
+        force_authenticate(request, user=self.user)
+
+        response = FarmDashboardCardsView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["farm_uuid"][0], "This field is required.")

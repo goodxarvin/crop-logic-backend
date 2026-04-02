@@ -27,7 +27,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "auth.apps.AuthConfig",
     "account.apps.AccountConfig",
-    "sensor_hub.apps.SensorHubConfig",
+    "farm_hub.apps.FarmHubConfig",
+    "plant.apps.PlantConfig",
     "dashboard",
     "crop_zoning",
     "plant_simulator",
@@ -146,9 +147,9 @@ EXTERNAL_SERVICES = {
         "base_url": os.getenv("AI_SERVICE_BASE_URL", ""),
         "api_key": os.getenv("AI_SERVICE_API_KEY", ""),
     },
-    "sensor_hub": {
-        "base_url": os.getenv("SENSOR_HUB_SERVICE_BASE_URL", ""),
-        "api_key": os.getenv("SENSOR_HUB_SERVICE_API_KEY", ""),
+    "farm_hub": {
+        "base_url": os.getenv("FARM_HUB_SERVICE_BASE_URL", ""),
+        "api_key": os.getenv("FARM_HUB_SERVICE_API_KEY", ""),
     },
 }
 

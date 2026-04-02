@@ -4,6 +4,7 @@ from .mock_data import VALID_CARD_IDS, VALID_ROW_IDS
 
 
 class FarmDashboardConfigSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(read_only=True)
     disabled_card_ids = serializers.ListField(
         child=serializers.CharField(),
         allow_empty=True,
@@ -40,6 +41,7 @@ class FarmDashboardConfigSerializer(serializers.Serializer):
 
 
 class FarmDashboardConfigPatchSerializer(FarmDashboardConfigSerializer):
+    farm_uuid = serializers.UUIDField(required=True)
     disabled_card_ids = serializers.ListField(
         child=serializers.CharField(),
         allow_empty=True,
@@ -54,6 +56,6 @@ class FarmDashboardConfigPatchSerializer(FarmDashboardConfigSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        if not attrs:
+        if set(attrs.keys()) == {"farm_uuid"}:
             raise serializers.ValidationError("At least one config field must be provided.")
         return attrs
