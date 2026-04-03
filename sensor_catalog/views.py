@@ -17,6 +17,6 @@ class SensorCatalogListView(APIView):
         responses={200: code_response("SensorCatalogListResponse", data=SensorCatalogSerializer(many=True))},
     )
     def get(self, request):
-        sensors = SensorCatalog.objects.order_by("name")
+        sensors = SensorCatalog.objects.order_by("code")
         data = SensorCatalogSerializer(sensors, many=True).data
         return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)

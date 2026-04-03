@@ -7,6 +7,7 @@ from access_control.services import build_farm_access_profile
 from access_control.views import FarmAccessProfileView
 from crop_zoning.models import CropArea
 from farm_hub.models import FarmHub, FarmType, Product
+from farm_hub.serializers import FarmHubSerializer
 from farm_hub.seeds import seed_admin_farm
 from farm_hub.views import FarmListCreateView, FarmTypeListView, FarmTypeProductsView
 from sensor_catalog.models import SensorCatalog
@@ -46,6 +47,7 @@ class FarmListCreateViewTests(TestCase):
         self.wheat, _ = Product.objects.get_or_create(farm_type=self.farm_type, name="گندم")
         self.plan = SubscriptionPlan.objects.create(code="gold", name="Gold")
         self.weather_station, _ = SensorCatalog.objects.get_or_create(
+            code="sensor_7_soil_moisture_sensor_v1_2",
             name="Sensor 7 - Soil Moisture Sensor v1.2",
             defaults={"supported_power_sources": ["solar", "direct_power"]},
         )
@@ -159,23 +161,16 @@ class FarmListCreateViewTests(TestCase):
 )
 class FarmSeedTests(TestCase):
     def test_seed_admin_farm_dispatches_crop_logic_flow_on_create(self):
-        SensorCatalog.objects.get_or_create(
-            name="Sensor 7 - Soil Moisture Sensor v1.2",
-            defaults={"supported_power_sources": ["solar", "direct_power"]},
-        )
         farm, created = seed_admin_farm()
 
         self.assertTrue(created)
         self.assertEqual(farm.farm_uuid.hex, "11111111111111111111111111111111")
         self.assertEqual(CropArea.objects.count(), 1)
-        self.assertEqual(farm.sensors.count(), 2)
+        self.assertEqual(farm.sensors.count(), 1)
         self.assertIsNotNone(farm.sensors.first().physical_device_uuid)
+        self.assertTrue(SensorCatalog.objects.filter(code="sensor_7_soil_moisture_sensor_v1_2").exists())
 
     def test_seed_admin_farm_does_not_dispatch_twice_for_existing_seed(self):
-        SensorCatalog.objects.get_or_create(
-            name="Sensor 7 - Soil Moisture Sensor v1.2",
-            defaults={"supported_power_sources": ["solar", "direct_power"]},
-        )
         first_farm, first_created = seed_admin_farm()
         second_farm, second_created = seed_admin_farm()
 
@@ -252,7 +247,7 @@ class FarmAccessProfileTests(TestCase):
         self.plan = SubscriptionPlan.objects.create(code="starter", name="Starter")
         self.farm_type = FarmType.objects.create(name="گلخانه ای")
         self.product = Product.objects.create(farm_type=self.farm_type, name="خیار")
-        self.sensor_catalog = SensorCatalog.objects.create(name="Climate Sensor")
+        self.sensor_catalog = SensorCatalog.objects.create(code="climate_sensor", name="Climate Sensor")
         self.farm = FarmHub.objects.create(
             owner=self.user,
             farm_type=self.farm_type,
@@ -314,24 +309,61 @@ class FarmAccessProfileTests(TestCase):
         response = FarmAccessProfileView.as_view()(request, farm_uuid=self.farm.farm_uuid)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["data"]["groups"]["pages"]["greenhouse-dashboard"]["enabled"], True)
-        self.assertEqual(response.data["data"]["groups"]["widgets"]["sensor-analytics"]["enabled"], True)
+        self.assertNotIn("features", response.data["data"])
+        self.assertNotIn("groups", response.data["data"])
+        self.assertEqual(len(response.data["data"]["matched_rules"]), 3)
         self.assertTrue(FarmAccessProfile.objects.filter(farm=self.farm).exists())
 
-    def test_sensor_rule_can_match_by_metadata_sensor_name(self):
+    def test_sensor_rule_can_match_by_metadata_sensor_code(self):
         sensor_page = AccessFeature.objects.create(
             code="sensor-page",
             name="Sensor Page",
             feature_type=AccessFeature.PAGE,
         )
         sensor_rule = AccessRule.objects.create(
-            code="sensor-page-by-name",
-            name="Sensor Page By Name",
+            code="sensor-page-by-code",
+            name="Sensor Page By Code",
             priority=40,
-            metadata={"sensor_catalog_names": [self.sensor_catalog.name]},
+            metadata={"sensor_catalog_codes": [self.sensor_catalog.code]},
         )
         sensor_rule.features.add(sensor_page)
 
         profile = build_farm_access_profile(self.farm)
 
         self.assertTrue(profile["features"]["sensor-page"]["enabled"])
+
+    def test_build_farm_access_profile_falls_back_to_default_plan(self):
+        default_plan = SubscriptionPlan.objects.create(code="gold", name="Gold", metadata={"is_default": True})
+        fallback_farm = FarmHub.objects.create(
+            owner=self.user,
+            farm_type=self.farm_type,
+            subscription_plan=None,
+            name="Fallback Plan Farm",
+        )
+        fallback_farm.products.add(self.product)
+        fallback_feature = AccessFeature.objects.create(
+            code="fallback-dashboard",
+            name="Fallback Dashboard",
+            feature_type=AccessFeature.PAGE,
+        )
+        fallback_rule = AccessRule.objects.create(code="gold-fallback-rule", name="Gold Fallback Rule", priority=5)
+        fallback_rule.features.add(fallback_feature)
+        fallback_rule.subscription_plans.add(default_plan)
+
+        profile = build_farm_access_profile(fallback_farm)
+
+        self.assertEqual(profile["subscription_plan"]["code"], "gold")
+        self.assertTrue(profile["features"]["fallback-dashboard"]["enabled"])
+
+    def test_farm_serializer_returns_default_plan_when_model_plan_is_null(self):
+        SubscriptionPlan.objects.create(code="gold", name="Gold", metadata={"is_default": True})
+        fallback_farm = FarmHub.objects.create(
+            owner=self.user,
+            farm_type=self.farm_type,
+            subscription_plan=None,
+            name="Serializer Fallback Farm",
+        )
+
+        payload = FarmHubSerializer(fallback_farm).data
+
+        self.assertEqual(payload["subscription_plan"]["code"], "gold")

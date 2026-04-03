@@ -12,8 +12,6 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
 class FarmAccessProfileSerializer(serializers.Serializer):
     farm_uuid = serializers.UUIDField()
     subscription_plan = SubscriptionPlanSerializer(allow_null=True)
-    features = serializers.DictField()
-    groups = serializers.DictField()
     matched_rules = serializers.ListField()
     resolved_from_profile = serializers.BooleanField()
 
@@ -31,4 +29,3 @@ class FarmAccessProfileCacheSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-

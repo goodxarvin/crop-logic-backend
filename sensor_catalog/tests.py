@@ -16,6 +16,7 @@ class SensorCatalogListViewTests(TestCase):
             phone_number="09120000002",
         )
         SensorCatalog.objects.update_or_create(
+            code="sensor_7_soil_moisture_sensor_v1_2",
             name="Sensor 7 - Soil Moisture Sensor v1.2",
             defaults={
                 "description": (
@@ -30,6 +31,7 @@ class SensorCatalogListViewTests(TestCase):
             },
         )
         SensorCatalog.objects.update_or_create(
+            code="legacy_sensor",
             name="Legacy Sensor",
             defaults={
                 "customizable_fields": [],
@@ -50,6 +52,6 @@ class SensorCatalogListViewTests(TestCase):
         self.assertEqual(response.data["code"], 200)
         self.assertEqual(len(response.data["data"]), 2)
         self.assertEqual(
-            {item["name"] for item in response.data["data"]},
-            {"Sensor 7 - Soil Moisture Sensor v1.2", "Legacy Sensor"},
+            {item["code"] for item in response.data["data"]},
+            {"sensor_7_soil_moisture_sensor_v1_2", "legacy_sensor"},
         )

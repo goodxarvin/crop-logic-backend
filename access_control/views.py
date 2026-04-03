@@ -9,7 +9,7 @@ from farm_hub.models import FarmHub
 
 from .models import SubscriptionPlan
 from .serializers import FarmAccessProfileSerializer, SubscriptionPlanSerializer
-from .services import build_farm_access_profile
+from .services import build_farm_access_profile_response
 
 
 class AccessControlBaseView(APIView):
@@ -52,6 +52,5 @@ class FarmAccessProfileView(AccessControlBaseView):
         if farm is None:
             return Response({"code": 404, "msg": "Farm not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        data = build_farm_access_profile(farm)
+        data = build_farm_access_profile_response(farm)
         return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
-

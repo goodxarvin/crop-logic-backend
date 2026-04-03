@@ -8,6 +8,7 @@ class SensorCatalogSerializer(serializers.ModelSerializer):
         model = SensorCatalog
         fields = [
             "uuid",
+            "code",
             "name",
             "description",
             "customizable_fields",

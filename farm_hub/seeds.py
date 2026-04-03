@@ -3,6 +3,7 @@ import uuid
 from django.db import transaction
 
 from account.seeds import seed_admin_user
+from sensor_catalog.management import seed_sensor_catalog
 from sensor_catalog.models import SensorCatalog
 
 from .catalog import CATALOG_SEED_DATA
@@ -16,32 +17,15 @@ ADMIN_FARM_DATA = {
     "is_active": True,
     "sensors": [
         {
-            "sensor_catalog_name": "Sensor 7 - Soil Moisture Sensor v1.2",
-            "physical_device_uuid": uuid.UUID("22222222-2222-2222-2222-222222222221"),
-            "name": "Station 1",
-            "sensor_type": "weather_station",
-            "is_active": True,
-            "specifications": {
-                "model": "CL-SENSE-PRO-X",
-                "firmware": "2.4.1",
-                "manufacturer": "CropLogic",
-            },
-            "power_source": {
-                "type": "hybrid",
-                "battery": {"capacity_mah": 12000, "voltage": 12},
-                "solar": {"panel_watt": 40, "controller": "MPPT"},
-            },
-        },
-        {
-            "sensor_catalog_name": "Sensor 7 - Soil Moisture Sensor v1.2",
+            "sensor_catalog_code": "sensor_7_soil_moisture_sensor_v1_2",
             "physical_device_uuid": uuid.UUID("22222222-2222-2222-2222-222222222222"),
             "name": "Soil Probe 1",
             "sensor_type": "soil_probe",
             "is_active": True,
             "specifications": {
-                "capabilities": ["soil_moisture", "soil_temperature", "ph", "ec"],
+                "capabilities": ["soil_moisture", "analog_output", "digital_output"],
             },
-            "power_source": {"type": "battery", "backup": "solar"},
+            "power_source": {"type": "solar"},
         },
     ],
 }
@@ -81,12 +65,13 @@ def _get_default_catalog():
     return FarmType.objects.get(name=default_farm_type_name), created_products[:2]
 
 
-def _get_sensor_catalog_by_name(name):
-    return SensorCatalog.objects.filter(name=name).first()
+def _get_sensor_catalog_by_code(code):
+    return SensorCatalog.objects.filter(code=code).first()
 
 
 @transaction.atomic
 def seed_admin_farm():
+    seed_sensor_catalog()
     owner, _ = seed_admin_user()
     farm_type, products = _get_default_catalog()
     farm, created = FarmHub.objects.update_or_create(
@@ -103,8 +88,8 @@ def seed_admin_farm():
     sensors = []
     for sensor_data in ADMIN_FARM_DATA["sensors"]:
         sensor_data = sensor_data.copy()
-        sensor_catalog_name = sensor_data.pop("sensor_catalog_name", None)
-        sensor_data["sensor_catalog"] = _get_sensor_catalog_by_name(sensor_catalog_name) if sensor_catalog_name else None
+        sensor_catalog_code = sensor_data.pop("sensor_catalog_code", None)
+        sensor_data["sensor_catalog"] = _get_sensor_catalog_by_code(sensor_catalog_code) if sensor_catalog_code else None
         sensors.append(farm.sensors.model(farm=farm, **sensor_data))
     farm.sensors.bulk_create(sensors)
     if created:

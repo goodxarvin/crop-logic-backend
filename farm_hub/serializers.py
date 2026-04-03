@@ -2,6 +2,7 @@ from rest_framework import serializers
 from access_control.models import SubscriptionPlan
 from access_control.serializers import SubscriptionPlanSerializer
 from access_control.catalog import GOLD_PLAN_CODE
+from access_control.services import get_effective_subscription_plan
 
 from .models import FarmHub, FarmSensor, FarmType, Product
 from sensor_catalog.models import SensorCatalog
@@ -58,7 +59,7 @@ class FarmSensorSerializer(serializers.ModelSerializer):
 class FarmHubSerializer(serializers.ModelSerializer):
     last_updated = serializers.DateTimeField(source="updated_at", read_only=True)
     farm_type = FarmTypeSerializer(read_only=True)
-    subscription_plan = SubscriptionPlanSerializer(read_only=True)
+    subscription_plan = serializers.SerializerMethodField()
     products = ProductSerializer(many=True, read_only=True)
     sensors = FarmSensorSerializer(many=True, read_only=True)
     area_uuid = serializers.UUIDField(source="current_crop_area.uuid", read_only=True)
@@ -77,6 +78,12 @@ class FarmHubSerializer(serializers.ModelSerializer):
             "last_updated",
         ]
         read_only_fields = ["farm_uuid", "last_updated"]
+
+    def get_subscription_plan(self, obj):
+        subscription_plan = get_effective_subscription_plan(obj)
+        if subscription_plan is None:
+            return None
+        return SubscriptionPlanSerializer(subscription_plan, context=self.context).data
 
 
 class FarmSensorWriteSerializer(serializers.ModelSerializer):

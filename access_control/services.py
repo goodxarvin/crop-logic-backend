@@ -1,10 +1,21 @@
 from django.utils import timezone
 
-from .models import AccessFeature, AccessRule, FarmAccessProfile
+from .catalog import GOLD_PLAN_CODE
+from .models import AccessFeature, AccessRule, FarmAccessProfile, SubscriptionPlan
 
 
 def _manager_id_set(manager):
     return {obj.id for obj in manager.all()}
+
+
+def get_effective_subscription_plan(farm):
+    if getattr(farm, "subscription_plan_id", None):
+        return farm.subscription_plan
+
+    return (
+        SubscriptionPlan.objects.filter(is_active=True, metadata__is_default=True).order_by("name").first()
+        or SubscriptionPlan.objects.filter(code=GOLD_PLAN_CODE, is_active=True).first()
+    )
 
 
 def rule_matches_farm(rule, farm, product_ids=None, sensor_catalog_ids=None):
@@ -13,7 +24,8 @@ def rule_matches_farm(rule, farm, product_ids=None, sensor_catalog_ids=None):
 
     subscription_plan_ids = _manager_id_set(rule.subscription_plans)
     if subscription_plan_ids:
-        if farm.subscription_plan_id is None or farm.subscription_plan_id not in subscription_plan_ids:
+        subscription_plan = get_effective_subscription_plan(farm)
+        if subscription_plan is None or subscription_plan.id not in subscription_plan_ids:
             return False
 
     farm_type_ids = _manager_id_set(rule.farm_types)
@@ -36,6 +48,14 @@ def rule_matches_farm(rule, farm, product_ids=None, sensor_catalog_ids=None):
         if not sensor_catalog_ids or sensor_catalog_rule_ids.isdisjoint(sensor_catalog_ids):
             return False
 
+    sensor_catalog_rule_codes = set(rule.metadata.get("sensor_catalog_codes", [])) if isinstance(rule.metadata, dict) else set()
+    if sensor_catalog_rule_codes:
+        farm_sensor_catalog_codes = set(
+            farm.sensors.exclude(sensor_catalog__code__isnull=True).values_list("sensor_catalog__code", flat=True)
+        )
+        if not farm_sensor_catalog_codes or sensor_catalog_rule_codes.isdisjoint(farm_sensor_catalog_codes):
+            return False
+
     sensor_catalog_rule_names = set(rule.metadata.get("sensor_catalog_names", [])) if isinstance(rule.metadata, dict) else set()
     if sensor_catalog_rule_names:
         farm_sensor_catalog_names = set(
@@ -48,6 +68,7 @@ def rule_matches_farm(rule, farm, product_ids=None, sensor_catalog_ids=None):
 
 
 def build_farm_access_profile(farm):
+    subscription_plan = get_effective_subscription_plan(farm)
     features = AccessFeature.objects.all().order_by("feature_type", "code")
     resolved = {
         feature.code: {
@@ -112,16 +133,26 @@ def build_farm_access_profile(farm):
     return {
         "farm_uuid": str(farm.farm_uuid),
         "subscription_plan": {
-            "uuid": str(farm.subscription_plan.uuid),
-            "code": farm.subscription_plan.code,
-            "name": farm.subscription_plan.name,
+            "uuid": str(subscription_plan.uuid),
+            "code": subscription_plan.code,
+            "name": subscription_plan.name,
         }
-        if farm.subscription_plan_id
+        if subscription_plan is not None
         else None,
         "features": profile.cached_features,
         "groups": profile.cached_groups,
         "matched_rules": profile.matched_rules,
         "resolved_from_profile": True,
+    }
+
+
+def build_farm_access_profile_response(farm):
+    profile_data = build_farm_access_profile(farm)
+    return {
+        "farm_uuid": profile_data["farm_uuid"],
+        "subscription_plan": profile_data["subscription_plan"],
+        "matched_rules": profile_data["matched_rules"],
+        "resolved_from_profile": profile_data["resolved_from_profile"],
     }
 
 

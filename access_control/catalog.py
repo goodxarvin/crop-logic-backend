@@ -1,5 +1,6 @@
 GOLD_PLAN_CODE = "gold"
 SENSOR_7_NAME = "Sensor 7 - Soil Moisture Sensor v1.2"
+SENSOR_7_CODE = "sensor_7_soil_moisture_sensor_v1_2"
 
 
 DEFAULT_SUBSCRIPTION_PLANS = [
@@ -13,21 +14,21 @@ DEFAULT_SUBSCRIPTION_PLANS = [
 
 
 DEFAULT_ACCESS_FEATURES = [
-    {"code": "dashboards", "name": "داشبوردها", "feature_type": "section"},
-    {"code": "data-section", "name": "بخش داده ها", "feature_type": "section"},
-    {"code": "water-data", "name": "دیتاهای آب", "feature_type": "page"},
-    {"code": "soil-information", "name": "اطلاعات خاک", "feature_type": "page"},
-    {"code": "crop-zoning", "name": "زون بندی کشت", "feature_type": "page"},
-    {"code": "simulator", "name": "شبیه ساز", "feature_type": "section"},
-    {"code": "plant-growth-simulator", "name": "شبیه ساز رشد گیاه", "feature_type": "page"},
-    {"code": "recommendations", "name": "توصیه ها", "feature_type": "section"},
-    {"code": "irrigation-recommendation", "name": "توصیه آبیاری", "feature_type": "page"},
-    {"code": "fertilization-recommendation", "name": "توصیه کوددهی", "feature_type": "page"},
-    {"code": "smart-assistant", "name": "دستیار هوشمند", "feature_type": "section"},
-    {"code": "farm-ai-assistant", "name": "دستیار هوشمند مزرعه", "feature_type": "page"},
-    {"code": "pest-detection", "name": "تشخیص آفات گیاهی", "feature_type": "page"},
-    {"code": "sensor-page", "name": "صفحه سنسور", "feature_type": "page"},
-    {"code": "greenhouse-dashboard", "name": "Greenhouse Dashboard", "feature_type": "page"},
+    {"code": "dashboards", "name": "داشبوردها", "feature_type": "section", "default_enabled": True},
+    {"code": "data-section", "name": "بخش داده ها", "feature_type": "section", "default_enabled": True},
+    {"code": "water-data", "name": "دیتاهای آب", "feature_type": "page", "default_enabled": True},
+    {"code": "soil-information", "name": "اطلاعات خاک", "feature_type": "page", "default_enabled": True},
+    {"code": "crop-zoning", "name": "زون بندی کشت", "feature_type": "page", "default_enabled": True},
+    {"code": "simulator", "name": "شبیه ساز", "feature_type": "section", "default_enabled": True},
+    {"code": "plant-growth-simulator", "name": "شبیه ساز رشد گیاه", "feature_type": "page", "default_enabled": True},
+    {"code": "recommendations", "name": "توصیه ها", "feature_type": "section", "default_enabled": True},
+    {"code": "irrigation-recommendation", "name": "توصیه آبیاری", "feature_type": "page", "default_enabled": True},
+    {"code": "fertilization-recommendation", "name": "توصیه کوددهی", "feature_type": "page", "default_enabled": True},
+    {"code": "smart-assistant", "name": "دستیار هوشمند", "feature_type": "section", "default_enabled": True},
+    {"code": "farm-ai-assistant", "name": "دستیار هوشمند مزرعه", "feature_type": "page", "default_enabled": True},
+    {"code": "pest-detection", "name": "تشخیص آفات گیاهی", "feature_type": "page", "default_enabled": True},
+    {"code": "sensor-page", "name": "صفحه سنسور", "feature_type": "page", "default_enabled": True},
+    {"code": "greenhouse-dashboard", "name": "Greenhouse Dashboard", "feature_type": "page", "default_enabled": True},
 ]
 
 
@@ -64,6 +65,7 @@ DEFAULT_ACCESS_RULES = [
         "priority": 20,
         "features": ["sensor-page"],
         "sensor_catalogs": [SENSOR_7_NAME],
-        "metadata": {"sensor_catalog_names": [SENSOR_7_NAME]},
+        "sensor_catalog_codes": [SENSOR_7_CODE],
+        "metadata": {"sensor_catalog_codes": [SENSOR_7_CODE]},
     },
 ]
