@@ -91,6 +91,13 @@ class FarmHub(models.Model):
         on_delete=models.PROTECT,
         related_name="farms",
     )
+    subscription_plan = models.ForeignKey(
+        "access_control.SubscriptionPlan",
+        on_delete=models.PROTECT,
+        related_name="farms",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
     current_crop_area = models.ForeignKey(

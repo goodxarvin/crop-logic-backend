@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from access_control.models import AccessFeature, AccessRule
 from farm_hub.models import FarmHub, FarmType
 
 from .mock_data import DEFAULT_CONFIG
@@ -30,6 +31,17 @@ class DashboardBaseTestCase(TestCase):
         self.farm_type = FarmType.objects.create(name="زراعی")
         self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="Farm 1")
         self.other_farm = FarmHub.objects.create(owner=self.other_user, farm_type=self.farm_type, name="Farm 2")
+        self.dashboard_feature = AccessFeature.objects.create(
+            code="greenhouse-dashboard",
+            name="Greenhouse Dashboard",
+            feature_type=AccessFeature.PAGE,
+        )
+        self.allow_dashboard_rule = AccessRule.objects.create(
+            code="allow-greenhouse-dashboard",
+            name="Allow Greenhouse Dashboard",
+            priority=10,
+        )
+        self.allow_dashboard_rule.features.add(self.dashboard_feature)
 
 
 class FarmDashboardConfigViewTests(DashboardBaseTestCase):
@@ -150,3 +162,19 @@ class FarmDashboardCardsViewTests(DashboardBaseTestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["farm_uuid"][0], "This field is required.")
+
+    def test_get_denies_access_when_feature_is_blocked(self):
+        deny_rule = AccessRule.objects.create(
+            code="deny-greenhouse-dashboard",
+            name="Deny Greenhouse Dashboard",
+            priority=20,
+            effect=AccessRule.DENY,
+        )
+        deny_rule.features.add(self.dashboard_feature)
+
+        request = self.factory.get(f"/api/farm-dashboard/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+
+        response = FarmDashboardCardsView.as_view()(request)
+
+        self.assertEqual(response.status_code, 403)

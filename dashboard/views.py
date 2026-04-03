@@ -70,6 +70,7 @@ class FarmDashboardConfigView(FarmAccessMixin, APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    required_feature_code = "greenhouse-dashboard"
 
     def get(self, request):
         farm = self._get_farm(request, request.query_params.get("farm_uuid"))
@@ -120,6 +121,7 @@ class FarmDashboardCardsView(FarmAccessMixin, APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    required_feature_code = "greenhouse-dashboard"
 
     def get(self, request):
         farm = self._get_farm(request, request.query_params.get("farm_uuid"))

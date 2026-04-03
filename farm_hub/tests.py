@@ -2,8 +2,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from access_control.models import AccessFeature, AccessRule, FarmAccessProfile, SubscriptionPlan
+from access_control.services import build_farm_access_profile
+from access_control.views import FarmAccessProfileView
 from crop_zoning.models import CropArea
-from farm_hub.models import FarmType, Product
+from farm_hub.models import FarmHub, FarmType, Product
 from farm_hub.seeds import seed_admin_farm
 from farm_hub.views import FarmListCreateView, FarmTypeListView, FarmTypeProductsView
 from sensor_catalog.models import SensorCatalog
@@ -41,6 +44,7 @@ class FarmListCreateViewTests(TestCase):
         )
         self.farm_type, _ = FarmType.objects.get_or_create(name="زراعی")
         self.wheat, _ = Product.objects.get_or_create(farm_type=self.farm_type, name="گندم")
+        self.plan = SubscriptionPlan.objects.create(code="gold", name="Gold")
         self.weather_station, _ = SensorCatalog.objects.get_or_create(
             name="Sensor 7 - Soil Moisture Sensor v1.2",
             defaults={"supported_power_sources": ["solar", "direct_power"]},
@@ -53,6 +57,7 @@ class FarmListCreateViewTests(TestCase):
             {
                 "name": "farm-1",
                 "farm_type_uuid": str(self.farm_type.uuid),
+                "subscription_plan_uuid": str(self.plan.uuid),
                 "product_uuids": [str(self.wheat.uuid)],
                 "sensors": [
                     {
@@ -75,6 +80,7 @@ class FarmListCreateViewTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["code"], 201)
         self.assertEqual(response.data["data"]["name"], "farm-1")
+        self.assertEqual(response.data["data"]["subscription_plan"]["code"], self.plan.code)
         self.assertIn("zoning", response.data["data"])
         self.assertIsNotNone(response.data["data"]["area_uuid"])
         self.assertEqual(len(response.data["data"]["sensors"]), 1)
@@ -128,6 +134,23 @@ class FarmListCreateViewTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("sensor_catalog_uuid", response.data["sensors"][0])
+
+    def test_create_farm_defaults_to_gold_plan_when_not_provided(self):
+        request = self.factory.post(
+            "/api/farm-hub/",
+            {
+                "name": "farm-default-plan",
+                "farm_type_uuid": str(self.farm_type.uuid),
+                "product_uuids": [str(self.wheat.uuid)],
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = FarmListCreateView.as_view()(request)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["data"]["subscription_plan"]["code"], "gold")
 
 
 @override_settings(
@@ -215,3 +238,100 @@ class FarmCatalogViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data["msg"], "Farm type not found.")
+
+
+class FarmAccessProfileTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="feature-user",
+            password="secret123",
+            email="feature@example.com",
+            phone_number="09120000002",
+        )
+        self.plan = SubscriptionPlan.objects.create(code="starter", name="Starter")
+        self.farm_type = FarmType.objects.create(name="گلخانه ای")
+        self.product = Product.objects.create(farm_type=self.farm_type, name="خیار")
+        self.sensor_catalog = SensorCatalog.objects.create(name="Climate Sensor")
+        self.farm = FarmHub.objects.create(
+            owner=self.user,
+            farm_type=self.farm_type,
+            subscription_plan=self.plan,
+            name="Feature Farm",
+        )
+        self.farm.products.add(self.product)
+        self.farm.sensors.create(name="Climate Node", sensor_catalog=self.sensor_catalog, sensor_type="climate")
+
+        self.greenhouse_dashboard = AccessFeature.objects.create(
+            code="greenhouse-dashboard",
+            name="Greenhouse Dashboard",
+            feature_type=AccessFeature.PAGE,
+        )
+        self.sensor_analytics = AccessFeature.objects.create(
+            code="sensor-analytics",
+            name="Sensor Analytics",
+            feature_type=AccessFeature.WIDGET,
+        )
+        self.legacy_reports = AccessFeature.objects.create(
+            code="legacy-reports",
+            name="Legacy Reports",
+            feature_type=AccessFeature.PAGE,
+            default_enabled=True,
+        )
+
+        plan_rule = AccessRule.objects.create(code="starter-greenhouse", name="Starter Greenhouse", priority=10)
+        plan_rule.features.add(self.greenhouse_dashboard)
+        plan_rule.subscription_plans.add(self.plan)
+        plan_rule.farm_types.add(self.farm_type)
+
+        sensor_rule = AccessRule.objects.create(code="sensor-analytics-rule", name="Sensor Analytics", priority=20)
+        sensor_rule.features.add(self.sensor_analytics)
+        sensor_rule.sensor_catalogs.add(self.sensor_catalog)
+
+        deny_rule = AccessRule.objects.create(
+            code="hide-legacy-reports",
+            name="Hide Legacy Reports",
+            priority=30,
+            effect=AccessRule.DENY,
+        )
+        deny_rule.features.add(self.legacy_reports)
+        deny_rule.products.add(self.product)
+
+    def test_build_farm_access_profile_resolves_combined_rules(self):
+        profile = build_farm_access_profile(self.farm)
+
+        self.assertEqual(profile["subscription_plan"]["code"], self.plan.code)
+        self.assertTrue(profile["features"]["greenhouse-dashboard"]["enabled"])
+        self.assertTrue(profile["features"]["sensor-analytics"]["enabled"])
+        self.assertFalse(profile["features"]["legacy-reports"]["enabled"])
+        self.assertEqual(profile["features"]["legacy-reports"]["source"], "hide-legacy-reports")
+        self.assertEqual(len(profile["matched_rules"]), 3)
+
+    def test_access_profile_view_returns_grouped_features(self):
+        request = self.factory.get(f"/api/access-control/farms/{self.farm.farm_uuid}/profile/")
+        force_authenticate(request, user=self.user)
+
+        response = FarmAccessProfileView.as_view()(request, farm_uuid=self.farm.farm_uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["groups"]["pages"]["greenhouse-dashboard"]["enabled"], True)
+        self.assertEqual(response.data["data"]["groups"]["widgets"]["sensor-analytics"]["enabled"], True)
+        self.assertTrue(FarmAccessProfile.objects.filter(farm=self.farm).exists())
+
+    def test_sensor_rule_can_match_by_metadata_sensor_name(self):
+        sensor_page = AccessFeature.objects.create(
+            code="sensor-page",
+            name="Sensor Page",
+            feature_type=AccessFeature.PAGE,
+        )
+        sensor_rule = AccessRule.objects.create(
+            code="sensor-page-by-name",
+            name="Sensor Page By Name",
+            priority=40,
+            metadata={"sensor_catalog_names": [self.sensor_catalog.name]},
+        )
+        sensor_rule.features.add(sensor_page)
+
+        profile = build_farm_access_profile(self.farm)
+
+        self.assertTrue(profile["features"]["sensor-page"]["enabled"])

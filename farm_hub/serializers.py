@@ -1,4 +1,7 @@
 from rest_framework import serializers
+from access_control.models import SubscriptionPlan
+from access_control.serializers import SubscriptionPlanSerializer
+from access_control.catalog import GOLD_PLAN_CODE
 
 from .models import FarmHub, FarmSensor, FarmType, Product
 from sensor_catalog.models import SensorCatalog
@@ -55,6 +58,7 @@ class FarmSensorSerializer(serializers.ModelSerializer):
 class FarmHubSerializer(serializers.ModelSerializer):
     last_updated = serializers.DateTimeField(source="updated_at", read_only=True)
     farm_type = FarmTypeSerializer(read_only=True)
+    subscription_plan = SubscriptionPlanSerializer(read_only=True)
     products = ProductSerializer(many=True, read_only=True)
     sensors = FarmSensorSerializer(many=True, read_only=True)
     area_uuid = serializers.UUIDField(source="current_crop_area.uuid", read_only=True)
@@ -67,6 +71,7 @@ class FarmHubSerializer(serializers.ModelSerializer):
             "name",
             "is_active",
             "farm_type",
+            "subscription_plan",
             "products",
             "sensors",
             "last_updated",
@@ -105,6 +110,7 @@ class FarmSensorWriteSerializer(serializers.ModelSerializer):
 class FarmHubCreateSerializer(serializers.ModelSerializer):
     area_geojson = serializers.JSONField(write_only=True, required=False)
     farm_type_uuid = serializers.UUIDField(write_only=True)
+    subscription_plan_uuid = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     product_uuids = serializers.ListField(
         child=serializers.UUIDField(),
         write_only=True,
@@ -118,6 +124,7 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
             "name",
             "is_active",
             "farm_type_uuid",
+            "subscription_plan_uuid",
             "product_uuids",
             "sensors",
             "area_geojson",
@@ -148,6 +155,7 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         farm_type_uuid = attrs.get("farm_type_uuid")
+        subscription_plan_uuid = attrs.get("subscription_plan_uuid", serializers.empty)
         product_uuids = attrs.get("product_uuids")
 
         if farm_type_uuid is None:
@@ -173,7 +181,21 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
                 {"product_uuids": [f"Products must belong to farm type `{farm_type.name}`."]}
             )
 
+        if subscription_plan_uuid is serializers.empty:
+            if self.instance is not None:
+                subscription_plan = self.instance.subscription_plan
+            else:
+                subscription_plan = SubscriptionPlan.objects.filter(code=GOLD_PLAN_CODE, is_active=True).first()
+        elif subscription_plan_uuid is None:
+            subscription_plan = None
+        else:
+            try:
+                subscription_plan = SubscriptionPlan.objects.get(uuid=subscription_plan_uuid, is_active=True)
+            except SubscriptionPlan.DoesNotExist as exc:
+                raise serializers.ValidationError({"subscription_plan_uuid": ["Subscription plan not found."]}) from exc
+
         attrs["farm_type"] = farm_type
+        attrs["subscription_plan"] = subscription_plan
         attrs["products"] = products
         return attrs
 
@@ -182,7 +204,9 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         sensors_data = validated_data.pop("sensors", [])
         products = validated_data.pop("products", [])
         validated_data["farm_type"] = validated_data.pop("farm_type")
+        validated_data["subscription_plan"] = validated_data.pop("subscription_plan", None)
         validated_data.pop("farm_type_uuid", None)
+        validated_data.pop("subscription_plan_uuid", None)
         validated_data.pop("product_uuids", None)
 
         farm = super().create(validated_data)
@@ -197,13 +221,17 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         sensors_data = validated_data.pop("sensors", None)
         products = validated_data.pop("products", None)
         farm_type = validated_data.pop("farm_type", None)
+        subscription_plan = validated_data.pop("subscription_plan", serializers.empty)
         validated_data.pop("farm_type_uuid", None)
+        validated_data.pop("subscription_plan_uuid", None)
         validated_data.pop("product_uuids", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if farm_type is not None:
             instance.farm_type = farm_type
+        if subscription_plan is not serializers.empty:
+            instance.subscription_plan = subscription_plan
         instance.save()
 
         if products is not None:

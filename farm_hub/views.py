@@ -24,6 +24,7 @@ class FarmHubBaseView(APIView):
         try:
             return FarmHub.objects.prefetch_related("products", "sensors", "sensors__sensor_catalog").select_related(
                 "farm_type",
+                "subscription_plan",
                 "current_crop_area",
             ).get(
                 farm_uuid=farm_uuid,
@@ -39,7 +40,11 @@ class FarmListCreateView(FarmHubBaseView):
         responses={200: code_response("FarmListResponse", data=FarmHubSerializer(many=True))},
     )
     def get(self, request):
-        farms = FarmHub.objects.filter(owner=request.user).select_related("farm_type", "current_crop_area").prefetch_related(
+        farms = FarmHub.objects.filter(owner=request.user).select_related(
+            "farm_type",
+            "subscription_plan",
+            "current_crop_area",
+        ).prefetch_related(
             "products",
             "sensors",
             "sensors__sensor_catalog",

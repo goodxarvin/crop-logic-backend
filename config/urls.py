@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/auth/", include("auth.urls")),
     path("api/account/", include("account.urls")),
     path("api/farm-hub/", include("farm_hub.urls")),
+    path("api/access-control/", include("access_control.urls")),
     path("api/sensor-catalog/", include("sensor_catalog.urls")),
     path("api/farm-dashboard-config/", include("dashboard.urls_config")),
     path("api/farm-dashboard/", include("dashboard.urls")),
@@ -19,4 +20,5 @@ urlpatterns = [
     path("api/irrigation-recommendation/", include("irrigation_recommendation.urls")),
     path("api/fertilization-recommendation/", include("fertilization_recommendation.urls")),
     path("api/farm-ai-assistant/", include("farm_ai_assistant.urls")),
+    path("api/notifications/", include("notifications.urls")),
 ]

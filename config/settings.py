@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "auth.apps.AuthConfig",
     "account.apps.AccountConfig",
     "farm_hub.apps.FarmHubConfig",
+    "access_control.apps.AccessControlConfig",
     "sensor_catalog.apps.SensorCatalogConfig",
     "dashboard",
     "crop_zoning",
@@ -36,6 +37,7 @@ INSTALLED_APPS = [
     "irrigation_recommendation",
     "fertilization_recommendation",
     "farm_ai_assistant",
+    "notifications.apps.NotificationsConfig",
     "external_api_adapter.apps.ExternalApiAdapterConfig",
     "rest_framework",
     "drf_spectacular",
@@ -114,6 +116,7 @@ CACHES = {
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
+        "access_control.permissions.FeatureAccessPermission",
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -153,7 +156,6 @@ EXTERNAL_SERVICES = {
     },
 }
 
-
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
@@ -166,6 +168,7 @@ CROP_ZONE_TASK_STALE_SECONDS = int(os.getenv("CROP_ZONE_TASK_STALE_SECONDS", "30
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
+NOTIFICATION_REDIS_URL = os.getenv("NOTIFICATION_REDIS_URL", CELERY_BROKER_URL)
 CELERY_TASK_DEFAULT_QUEUE = os.getenv("CELERY_TASK_DEFAULT_QUEUE", "default")
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1"))
