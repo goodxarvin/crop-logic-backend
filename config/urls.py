@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/auth/", include("auth.urls")),
     path("api/account/", include("account.urls")),
     path("api/farm-hub/", include("farm_hub.urls")),
+    path("api/sensor-catalog/", include("sensor_catalog.urls")),
     path("api/farm-dashboard-config/", include("dashboard.urls_config")),
     path("api/farm-dashboard/", include("dashboard.urls")),
     path("api/crop-zoning/", include("crop_zoning.urls")),

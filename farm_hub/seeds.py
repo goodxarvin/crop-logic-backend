@@ -3,7 +3,9 @@ import uuid
 from django.db import transaction
 
 from account.seeds import seed_admin_user
+from sensor_catalog.models import SensorCatalog
 
+from .catalog import CATALOG_SEED_DATA
 from .models import FarmHub, FarmType, Product
 from .services import dispatch_farm_zoning
 
@@ -12,19 +14,10 @@ ADMIN_FARM_UUID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 ADMIN_FARM_DATA = {
     "name": "Admin Smart Farm",
     "is_active": True,
-    "customization": {
-        "irrigation": {
-            "mode": "smart",
-            "report_interval_sec": 300,
-        },
-        "alerts": {
-            "sms": True,
-            "email": True,
-            "push": True,
-        },
-    },
     "sensors": [
         {
+            "sensor_catalog_name": "Sensor 7 - Soil Moisture Sensor v1.2",
+            "physical_device_uuid": uuid.UUID("22222222-2222-2222-2222-222222222221"),
             "name": "Station 1",
             "sensor_type": "weather_station",
             "is_active": True,
@@ -38,14 +31,10 @@ ADMIN_FARM_DATA = {
                 "battery": {"capacity_mah": 12000, "voltage": 12},
                 "solar": {"panel_watt": 40, "controller": "MPPT"},
             },
-            "customization": {
-                "thresholds": {
-                    "temperature_c": {"min": 10, "max": 36},
-                    "humidity_percent": {"min": 30, "max": 85},
-                }
-            },
         },
         {
+            "sensor_catalog_name": "Sensor 7 - Soil Moisture Sensor v1.2",
+            "physical_device_uuid": uuid.UUID("22222222-2222-2222-2222-222222222222"),
             "name": "Soil Probe 1",
             "sensor_type": "soil_probe",
             "is_active": True,
@@ -53,13 +42,6 @@ ADMIN_FARM_DATA = {
                 "capabilities": ["soil_moisture", "soil_temperature", "ph", "ec"],
             },
             "power_source": {"type": "battery", "backup": "solar"},
-            "customization": {
-                "depth_cm": [20, 40],
-                "thresholds": {
-                    "soil_moisture_percent": {"min": 25, "max": 70},
-                    "ph": {"min": 5.8, "max": 7.2},
-                },
-            },
         },
     ],
 }
@@ -82,10 +64,25 @@ ADMIN_FARM_AREA_GEOJSON = {
 
 
 def _get_default_catalog():
-    farm_type, _ = FarmType.objects.get_or_create(name="زراعی")
-    wheat, _ = Product.objects.get_or_create(farm_type=farm_type, name="گندم")
-    corn, _ = Product.objects.get_or_create(farm_type=farm_type, name="ذرت")
-    return farm_type, [wheat, corn]
+    default_farm_type_name = "زراعی"
+    created_products = []
+
+    for farm_type_name, products in CATALOG_SEED_DATA.items():
+        farm_type, _ = FarmType.objects.get_or_create(name=farm_type_name)
+        for product_data in products:
+            product, _ = Product.objects.update_or_create(
+                farm_type=farm_type,
+                name=product_data["name"],
+                defaults={key: value for key, value in product_data.items() if key != "name"},
+            )
+            if farm_type_name == default_farm_type_name:
+                created_products.append(product)
+
+    return FarmType.objects.get(name=default_farm_type_name), created_products[:2]
+
+
+def _get_sensor_catalog_by_name(name):
+    return SensorCatalog.objects.filter(name=name).first()
 
 
 @transaction.atomic
@@ -99,12 +96,19 @@ def seed_admin_farm():
             "farm_type": farm_type,
             "name": ADMIN_FARM_DATA["name"],
             "is_active": ADMIN_FARM_DATA["is_active"],
-            "customization": ADMIN_FARM_DATA["customization"],
         },
     )
     farm.products.set(products)
     farm.sensors.all().delete()
-    farm.sensors.bulk_create([farm.sensors.model(farm=farm, **sensor_data) for sensor_data in ADMIN_FARM_DATA["sensors"]])
+    sensors = []
+    for sensor_data in ADMIN_FARM_DATA["sensors"]:
+        sensor_data = sensor_data.copy()
+        sensor_catalog_name = sensor_data.pop("sensor_catalog_name", None)
+        sensor_data["sensor_catalog"] = _get_sensor_catalog_by_name(sensor_catalog_name) if sensor_catalog_name else None
+        sensors.append(farm.sensors.model(farm=farm, **sensor_data))
+    farm.sensors.bulk_create(sensors)
     if created:
-        dispatch_farm_zoning(ADMIN_FARM_AREA_GEOJSON, farm)
+        crop_area, _zoning_payload = dispatch_farm_zoning(ADMIN_FARM_AREA_GEOJSON, farm)
+        farm.current_crop_area = crop_area
+        farm.save(update_fields=["current_crop_area", "updated_at"])
     return farm, created

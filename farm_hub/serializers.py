@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import FarmHub, FarmSensor, FarmType, Product
+from sensor_catalog.models import SensorCatalog
 
 
 class FarmTypeSerializer(serializers.ModelSerializer):
@@ -12,22 +13,40 @@ class FarmTypeSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = ["uuid", "name", "description", "metadata"]
+        fields = [
+            "uuid",
+            "name",
+            "description",
+            "metadata",
+            "light",
+            "watering",
+            "soil",
+            "temperature",
+            "planting_season",
+            "harvest_time",
+            "spacing",
+            "fertilizer",
+            "health_profile",
+            "irrigation_profile",
+            "growth_profile",
+        ]
 
 
 class FarmSensorSerializer(serializers.ModelSerializer):
     last_updated = serializers.DateTimeField(source="updated_at", read_only=True)
+    sensor_catalog_uuid = serializers.UUIDField(source="sensor_catalog.uuid", read_only=True)
 
     class Meta:
         model = FarmSensor
         fields = [
             "uuid",
+            "sensor_catalog_uuid",
+            "physical_device_uuid",
             "name",
             "sensor_type",
             "is_active",
             "specifications",
             "power_source",
-            "customization",
             "last_updated",
         ]
         read_only_fields = ["uuid", "last_updated"]
@@ -38,14 +57,15 @@ class FarmHubSerializer(serializers.ModelSerializer):
     farm_type = FarmTypeSerializer(read_only=True)
     products = ProductSerializer(many=True, read_only=True)
     sensors = FarmSensorSerializer(many=True, read_only=True)
+    area_uuid = serializers.UUIDField(source="current_crop_area.uuid", read_only=True)
 
     class Meta:
         model = FarmHub
         fields = [
             "farm_uuid",
+            "area_uuid",
             "name",
             "is_active",
-            "customization",
             "farm_type",
             "products",
             "sensors",
@@ -55,16 +75,31 @@ class FarmHubSerializer(serializers.ModelSerializer):
 
 
 class FarmSensorWriteSerializer(serializers.ModelSerializer):
+    sensor_catalog_uuid = serializers.UUIDField(write_only=True, required=False)
+
     class Meta:
         model = FarmSensor
         fields = [
+            "sensor_catalog_uuid",
+            "physical_device_uuid",
             "name",
             "sensor_type",
             "is_active",
             "specifications",
             "power_source",
-            "customization",
         ]
+
+    def validate(self, attrs):
+        sensor_catalog_uuid = attrs.pop("sensor_catalog_uuid", None)
+        if sensor_catalog_uuid is not None:
+            try:
+                sensor_catalog = SensorCatalog.objects.get(uuid=sensor_catalog_uuid)
+            except SensorCatalog.DoesNotExist as exc:
+                raise serializers.ValidationError({"sensor_catalog_uuid": ["Sensor catalog not found."]}) from exc
+            attrs["sensor_catalog"] = sensor_catalog
+            attrs.setdefault("name", sensor_catalog.name)
+
+        return attrs
 
 
 class FarmHubCreateSerializer(serializers.ModelSerializer):
@@ -82,12 +117,17 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         fields = [
             "name",
             "is_active",
-            "customization",
             "farm_type_uuid",
             "product_uuids",
             "sensors",
             "area_geojson",
         ]
+
+    def to_internal_value(self, data):
+        if hasattr(data, "copy"):
+            data = data.copy()
+            data.pop("farm_uuid", None)
+        return super().to_internal_value(data)
 
     def validate_area_geojson(self, value):
         if not isinstance(value, dict):

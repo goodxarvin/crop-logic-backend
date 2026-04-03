@@ -28,7 +28,7 @@ INSTALLED_APPS = [
     "auth.apps.AuthConfig",
     "account.apps.AccountConfig",
     "farm_hub.apps.FarmHubConfig",
-    "plant.apps.PlantConfig",
+    "sensor_catalog.apps.SensorCatalogConfig",
     "dashboard",
     "crop_zoning",
     "plant_simulator",

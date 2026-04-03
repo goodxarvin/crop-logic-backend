@@ -6,8 +6,14 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
 from config.swagger import code_response
-from .models import FarmHub
-from .serializers import FarmHubCreateSerializer, FarmHubSerializer, FarmToggleSerializer
+from .models import FarmHub, FarmType, Product
+from .serializers import (
+    FarmHubCreateSerializer,
+    FarmHubSerializer,
+    FarmToggleSerializer,
+    FarmTypeSerializer,
+    ProductSerializer,
+)
 from .services import create_farm_with_zoning
 
 
@@ -16,7 +22,10 @@ class FarmHubBaseView(APIView):
 
     def _get_farm(self, request, farm_uuid):
         try:
-            return FarmHub.objects.prefetch_related("products", "sensors").select_related("farm_type").get(
+            return FarmHub.objects.prefetch_related("products", "sensors", "sensors__sensor_catalog").select_related(
+                "farm_type",
+                "current_crop_area",
+            ).get(
                 farm_uuid=farm_uuid,
                 owner=request.user,
             )
@@ -30,9 +39,10 @@ class FarmListCreateView(FarmHubBaseView):
         responses={200: code_response("FarmListResponse", data=FarmHubSerializer(many=True))},
     )
     def get(self, request):
-        farms = FarmHub.objects.filter(owner=request.user).select_related("farm_type").prefetch_related(
+        farms = FarmHub.objects.filter(owner=request.user).select_related("farm_type", "current_crop_area").prefetch_related(
             "products",
             "sensors",
+            "sensors__sensor_catalog",
         )
         data = FarmHubSerializer(farms, many=True).data
         return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
@@ -55,6 +65,36 @@ class FarmListCreateView(FarmHubBaseView):
         if zoning_payload is not None:
             data["zoning"] = zoning_payload
         return Response({"code": 201, "msg": "success", "data": data}, status=status.HTTP_201_CREATED)
+
+
+class FarmTypeListView(FarmHubBaseView):
+    @extend_schema(
+        tags=["Farm Hub"],
+        responses={200: code_response("FarmTypeListResponse", data=FarmTypeSerializer(many=True))},
+    )
+    def get(self, request):
+        farm_types = FarmType.objects.order_by("name")
+        data = FarmTypeSerializer(farm_types, many=True).data
+        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+
+
+class FarmTypeProductsView(FarmHubBaseView):
+    @extend_schema(
+        tags=["Farm Hub"],
+        responses={
+            200: code_response("FarmTypeProductsResponse", data=ProductSerializer(many=True)),
+            404: code_response("FarmTypeProductsNotFoundResponse"),
+        },
+    )
+    def get(self, request, farm_type_uuid):
+        try:
+            farm_type = FarmType.objects.get(uuid=farm_type_uuid)
+        except FarmType.DoesNotExist:
+            return Response({"code": 404, "msg": "Farm type not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        products = Product.objects.filter(farm_type=farm_type).order_by("name")
+        data = ProductSerializer(products, many=True).data
+        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
 
 
 class FarmDetailView(FarmHubBaseView):

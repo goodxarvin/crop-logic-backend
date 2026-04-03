@@ -5,7 +5,8 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from crop_zoning.models import CropArea
 from farm_hub.models import FarmType, Product
 from farm_hub.seeds import seed_admin_farm
-from farm_hub.views import FarmListCreateView
+from farm_hub.views import FarmListCreateView, FarmTypeListView, FarmTypeProductsView
+from sensor_catalog.models import SensorCatalog
 
 
 AREA_GEOJSON = {
@@ -40,22 +41,27 @@ class FarmListCreateViewTests(TestCase):
         )
         self.farm_type, _ = FarmType.objects.get_or_create(name="زراعی")
         self.wheat, _ = Product.objects.get_or_create(farm_type=self.farm_type, name="گندم")
+        self.weather_station, _ = SensorCatalog.objects.get_or_create(
+            name="Sensor 7 - Soil Moisture Sensor v1.2",
+            defaults={"supported_power_sources": ["solar", "direct_power"]},
+        )
 
     def test_create_farm_with_area_geojson_creates_crop_zoning_payload(self):
+        physical_device_uuid = "33333333-3333-3333-3333-333333333333"
         request = self.factory.post(
             "/api/farm-hub/",
             {
                 "name": "farm-1",
                 "farm_type_uuid": str(self.farm_type.uuid),
                 "product_uuids": [str(self.wheat.uuid)],
-                "customization": {"report_interval_sec": 300},
                 "sensors": [
                     {
+                        "sensor_catalog_uuid": str(self.weather_station.uuid),
+                        "physical_device_uuid": physical_device_uuid,
                         "name": "zone-sensor",
                         "sensor_type": "weather_station",
                         "specifications": {"model": "FH-1"},
                         "power_source": {"type": "battery"},
-                        "customization": {"report_interval_sec": 300},
                     }
                 ],
                 "area_geojson": AREA_GEOJSON,
@@ -70,13 +76,58 @@ class FarmListCreateViewTests(TestCase):
         self.assertEqual(response.data["code"], 201)
         self.assertEqual(response.data["data"]["name"], "farm-1")
         self.assertIn("zoning", response.data["data"])
+        self.assertIsNotNone(response.data["data"]["area_uuid"])
         self.assertEqual(len(response.data["data"]["sensors"]), 1)
+        self.assertEqual(response.data["data"]["sensors"][0]["sensor_catalog_uuid"], str(self.weather_station.uuid))
+        self.assertEqual(response.data["data"]["sensors"][0]["physical_device_uuid"], physical_device_uuid)
         self.assertGreater(response.data["data"]["zoning"]["zone_count"], 1)
         self.assertEqual(
             response.data["data"]["zoning"]["zone_count"],
             CropArea.objects.get().zone_count,
         )
         self.assertEqual(CropArea.objects.count(), 1)
+
+    def test_create_farm_ignores_client_farm_uuid_and_generates_new_one(self):
+        request = self.factory.post(
+            "/api/farm-hub/",
+            {
+                "farm_uuid": "11111111-1111-1111-1111-111111111111",
+                "name": "farm-2",
+                "farm_type_uuid": str(self.farm_type.uuid),
+                "product_uuids": [str(self.wheat.uuid)],
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = FarmListCreateView.as_view()(request)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertNotEqual(response.data["data"]["farm_uuid"], "11111111-1111-1111-1111-111111111111")
+        self.assertIsNotNone(response.data["data"]["area_uuid"])
+
+    def test_create_farm_rejects_unknown_sensor_catalog_uuid(self):
+        request = self.factory.post(
+            "/api/farm-hub/",
+            {
+                "name": "farm-3",
+                "farm_type_uuid": str(self.farm_type.uuid),
+                "product_uuids": [str(self.wheat.uuid)],
+                "sensors": [
+                    {
+                        "sensor_catalog_uuid": "44444444-4444-4444-4444-444444444444",
+                        "name": "zone-sensor",
+                    }
+                ],
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = FarmListCreateView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("sensor_catalog_uuid", response.data["sensors"][0])
 
 
 @override_settings(
@@ -85,14 +136,23 @@ class FarmListCreateViewTests(TestCase):
 )
 class FarmSeedTests(TestCase):
     def test_seed_admin_farm_dispatches_crop_logic_flow_on_create(self):
+        SensorCatalog.objects.get_or_create(
+            name="Sensor 7 - Soil Moisture Sensor v1.2",
+            defaults={"supported_power_sources": ["solar", "direct_power"]},
+        )
         farm, created = seed_admin_farm()
 
         self.assertTrue(created)
         self.assertEqual(farm.farm_uuid.hex, "11111111111111111111111111111111")
         self.assertEqual(CropArea.objects.count(), 1)
         self.assertEqual(farm.sensors.count(), 2)
+        self.assertIsNotNone(farm.sensors.first().physical_device_uuid)
 
     def test_seed_admin_farm_does_not_dispatch_twice_for_existing_seed(self):
+        SensorCatalog.objects.get_or_create(
+            name="Sensor 7 - Soil Moisture Sensor v1.2",
+            defaults={"supported_power_sources": ["solar", "direct_power"]},
+        )
         first_farm, first_created = seed_admin_farm()
         second_farm, second_created = seed_admin_farm()
 
@@ -100,3 +160,58 @@ class FarmSeedTests(TestCase):
         self.assertFalse(second_created)
         self.assertEqual(first_farm.id, second_farm.id)
         self.assertEqual(CropArea.objects.count(), 1)
+
+
+class FarmCatalogViewsTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="catalog-user",
+            password="secret123",
+            email="catalog@example.com",
+            phone_number="09120000001",
+        )
+        self.field_farm_type = FarmType.objects.create(name="زراعی")
+        self.tree_farm_type = FarmType.objects.create(name="درختی")
+        self.wheat = Product.objects.create(
+            farm_type=self.field_farm_type,
+            name="گندم",
+            planting_season="پاییز",
+            harvest_time="بهار",
+            health_profile={"moisture": {"ideal_value": 65}},
+        )
+        self.corn = Product.objects.create(farm_type=self.field_farm_type, name="ذرت")
+        Product.objects.create(farm_type=self.tree_farm_type, name="سیب")
+
+    def test_farm_type_list_returns_all_farm_types(self):
+        request = self.factory.get("/api/farm-hub/farm-types/")
+        force_authenticate(request, user=self.user)
+
+        response = FarmTypeListView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(len(response.data["data"]), 2)
+
+    def test_farm_type_products_returns_products_for_selected_type(self):
+        request = self.factory.get(f"/api/farm-hub/farm-types/{self.field_farm_type.uuid}/products/")
+        force_authenticate(request, user=self.user)
+
+        response = FarmTypeProductsView.as_view()(request, farm_type_uuid=self.field_farm_type.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual({item["name"] for item in response.data["data"]}, {self.wheat.name, self.corn.name})
+        wheat_payload = next(item for item in response.data["data"] if item["name"] == self.wheat.name)
+        self.assertEqual(wheat_payload["planting_season"], "پاییز")
+        self.assertEqual(wheat_payload["health_profile"]["moisture"]["ideal_value"], 65)
+
+    def test_farm_type_products_returns_404_for_unknown_type(self):
+        unknown_farm_type_uuid = "11111111-1111-1111-1111-111111111111"
+        request = self.factory.get(f"/api/farm-hub/farm-types/{unknown_farm_type_uuid}/products/")
+        force_authenticate(request, user=self.user)
+
+        response = FarmTypeProductsView.as_view()(request, farm_type_uuid=unknown_farm_type_uuid)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["msg"], "Farm type not found.")
