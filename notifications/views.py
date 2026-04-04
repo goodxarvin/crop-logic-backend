@@ -1,84 +1,67 @@
-import json
-import time
-
-from django.http import StreamingHttpResponse
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import serializers, status
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import extend_schema
 
 from config.swagger import code_response
+from farm_hub.models import FarmHub
 
-from .serializers import NotificationPublishSerializer
-from .services import get_notifications_redis_client, publish_notification
-
-
-def _sse_event(event_name, data):
-    return f"event: {event_name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+from .serializers import FarmNotificationSerializer
+from .services import create_notification_for_farm_uuid, long_poll_notifications
 
 
-class NotificationStreamView(APIView):
+class NotificationLongPollQuerySerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField()
+    since_id = serializers.IntegerField(required=False, min_value=1)
+    timeout = serializers.IntegerField(required=False, min_value=0, max_value=60)
+
+
+class ExternalNotificationCreateSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField()
+    title = serializers.CharField(max_length=255)
+    message = serializers.CharField()
+    level = serializers.CharField(max_length=32, required=False, default="info")
+    metadata = serializers.JSONField(required=False)
+
+
+class NotificationLongPollView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
         tags=["Notifications"],
-        parameters=[
-            OpenApiParameter(
-                name="channel",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Redis channel to subscribe. Default is user-{current_user_id}.",
-            ),
-        ],
-        responses={200: OpenApiTypes.STR},
+        parameters=[NotificationLongPollQuerySerializer],
+        responses={
+            200: code_response("NotificationLongPollResponse", data=FarmNotificationSerializer(many=True)),
+            404: code_response("NotificationLongPollNotFoundResponse"),
+            503: code_response("NotificationLongPollNotificationsUnavailableResponse"),
+        },
     )
     def get(self, request):
-        channel = request.query_params.get("channel") or f"user-{request.user.id}"
-
-        def stream():
-            redis_client = get_notifications_redis_client()
-            pubsub = redis_client.pubsub()
-            pubsub.subscribe(channel)
-            try:
-                yield ": connected\n\n"
-                while True:
-                    message = pubsub.get_message(ignore_subscribe_messages=True, timeout=15.0)
-                    if message and message.get("type") == "message":
-                        try:
-                            payload = json.loads(message["data"])
-                        except (TypeError, json.JSONDecodeError):
-                            payload = {
-                                "event": "notification",
-                                "message": str(message["data"]),
-                            }
-                        yield _sse_event(payload.get("event", "notification"), payload)
-                    else:
-                        yield ": keepalive\n\n"
-                    time.sleep(0.1)
-            except GeneratorExit:
-                return
-            finally:
-                pubsub.close()
-
-        response = StreamingHttpResponse(stream(), content_type="text/event-stream")
-        response["Cache-Control"] = "no-cache"
-        response["X-Accel-Buffering"] = "no"
-        return response
-
-
-class NotificationPublishView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        tags=["Notifications"],
-        request=NotificationPublishSerializer,
-        responses={200: code_response("NotificationPublishResponse", data=OpenApiTypes.OBJECT)},
-    )
-    def post(self, request):
-        serializer = NotificationPublishSerializer(data=request.data)
+        serializer = NotificationLongPollQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
-        payload = publish_notification(**serializer.validated_data)
-        return Response({"code": 200, "msg": "success", "data": payload}, status=status.HTTP_200_OK)
+
+        farm = FarmHub.objects.filter(
+            farm_uuid=serializer.validated_data["farm_uuid"],
+            owner=request.user,
+        ).first()
+        if farm is None:
+            return Response({"code": 404, "msg": "Farm not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            notifications = long_poll_notifications(
+                farm=farm,
+                since_id=serializer.validated_data.get("since_id"),
+                timeout_seconds=serializer.validated_data.get("timeout", 15),
+            )
+        except ValueError as exc:
+            if str(exc) == "Notifications table is not migrated.":
+                return Response(
+                    {"code": 503, "msg": "Notifications table is not ready. Run migrations."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            raise
+        data = FarmNotificationSerializer(notifications, many=True).data
+        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+
+

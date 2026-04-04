@@ -1,33 +1,50 @@
-import json
-import uuid
-from datetime import datetime, timezone
+import time
 
-from django.conf import settings
-from redis import Redis
+from django.db import OperationalError, ProgrammingError
+from django.db.models import QuerySet
 
+from farm_hub.models import FarmHub
 
-def get_notifications_redis_client():
-    redis_url = getattr(settings, "NOTIFICATION_REDIS_URL", None) or _default_redis_url()
-    return Redis.from_url(redis_url, decode_responses=True)
+from .models import FarmNotification
 
 
-def publish_notification(channel, title, message, *, level="info", metadata=None, event="notification"):
-    payload = {
-        "id": str(uuid.uuid4()),
-        "event": event,
-        "title": title,
-        "message": message,
-        "level": level,
-        "metadata": metadata or {},
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    redis_client = get_notifications_redis_client()
-    redis_client.publish(channel, json.dumps(payload))
-    return payload
+DEFAULT_POLL_TIMEOUT_SECONDS = 15
+DEFAULT_POLL_INTERVAL_SECONDS = 1
 
 
-def _default_redis_url():
-    broker_url = getattr(settings, "CELERY_BROKER_URL", "")
-    if isinstance(broker_url, str) and broker_url.startswith("redis://"):
-        return broker_url
-    return "redis://127.0.0.1:6379/1"
+def create_notification_for_farm_uuid(*, farm_uuid, title, message, level="info", metadata=None):
+    farm = FarmHub.objects.filter(farm_uuid=farm_uuid).first()
+    if farm is None:
+        raise ValueError("Farm not found.")
+
+    try:
+        return FarmNotification.objects.create(
+            farm=farm,
+            title=title,
+            message=message,
+            level=level,
+            metadata=metadata or {},
+        )
+    except (ProgrammingError, OperationalError) as exc:
+        raise ValueError("Notifications table is not migrated.") from exc
+
+
+def get_notifications_for_farm(*, farm: FarmHub, since_id=None) -> QuerySet[FarmNotification]:
+    try:
+        queryset = FarmNotification.objects.filter(farm=farm)
+        if since_id is not None:
+            queryset = queryset.filter(id__gt=since_id)
+        return queryset.order_by("created_at", "id")
+    except (ProgrammingError, OperationalError) as exc:
+        raise ValueError("Notifications table is not migrated.") from exc
+
+
+def long_poll_notifications(*, farm: FarmHub, since_id=None, timeout_seconds=DEFAULT_POLL_TIMEOUT_SECONDS, interval_seconds=DEFAULT_POLL_INTERVAL_SECONDS):
+    deadline = time.monotonic() + max(timeout_seconds, 0)
+    while True:
+        notifications = list(get_notifications_for_farm(farm=farm, since_id=since_id))
+        if notifications:
+            return notifications
+        if time.monotonic() >= deadline:
+            return []
+        time.sleep(max(interval_seconds, 0))

@@ -1,8 +1,7 @@
 from django.urls import path
 
-from .views import NotificationPublishView, NotificationStreamView
+from .views import  NotificationLongPollView
 
 urlpatterns = [
-    path("stream/", NotificationStreamView.as_view(), name="notifications-stream"),
-    path("publish/", NotificationPublishView.as_view(), name="notifications-publish"),
+    path("long-poll/", NotificationLongPollView.as_view(), name="notification-long-poll"),
 ]

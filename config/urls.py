@@ -21,4 +21,5 @@ urlpatterns = [
     path("api/fertilization-recommendation/", include("fertilization_recommendation.urls")),
     path("api/farm-ai-assistant/", include("farm_ai_assistant.urls")),
     path("api/notifications/", include("notifications.urls")),
+    path("api/sensor-external-api/", include("sensor_external_api.urls")),
 ]

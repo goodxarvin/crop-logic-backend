@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "farm_ai_assistant",
     "notifications.apps.NotificationsConfig",
     "external_api_adapter.apps.ExternalApiAdapterConfig",
+    "sensor_external_api.apps.SensorExternalApiConfig",
     "rest_framework",
     "drf_spectacular",
     "drf_spectacular_sidecar",
@@ -134,6 +135,19 @@ SPECTACULAR_SETTINGS = {
     "REDOC_DIST": "SIDECAR",
     "SCHEMA_PATH_PREFIX": r"/api/",
     "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "SensorExternalApiKey": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key",
+                "description": "Use API key 12345 for sensor external API endpoints.",
+            }
+        }
+    },
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+    },
 }
 
 
@@ -169,6 +183,8 @@ CROP_ZONE_TASK_STALE_SECONDS = int(os.getenv("CROP_ZONE_TASK_STALE_SECONDS", "30
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
 NOTIFICATION_REDIS_URL = os.getenv("NOTIFICATION_REDIS_URL", CELERY_BROKER_URL)
+EXTERNAL_NOTIFICATION_API_KEY = os.getenv("EXTERNAL_NOTIFICATION_API_KEY", "12345")
+SENSOR_EXTERNAL_API_KEY = os.getenv("SENSOR_EXTERNAL_API_KEY", "12345")
 CELERY_TASK_DEFAULT_QUEUE = os.getenv("CELERY_TASK_DEFAULT_QUEUE", "default")
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1"))
