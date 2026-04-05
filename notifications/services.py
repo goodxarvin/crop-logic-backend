@@ -39,6 +39,17 @@ def get_notifications_for_farm(*, farm: FarmHub, since_id=None) -> QuerySet[Farm
         raise ValueError("Notifications table is not migrated.") from exc
 
 
+def mark_notifications_as_read(*, farm: FarmHub, slice_id: int) -> int:
+    try:
+        return FarmNotification.objects.filter(
+            farm=farm,
+            id__lte=slice_id,
+            is_read=False,
+        ).update(is_read=True)
+    except (ProgrammingError, OperationalError) as exc:
+        raise ValueError("Notifications table is not migrated.") from exc
+
+
 def long_poll_notifications(*, farm: FarmHub, since_id=None, timeout_seconds=DEFAULT_POLL_TIMEOUT_SECONDS, interval_seconds=DEFAULT_POLL_INTERVAL_SECONDS):
     deadline = time.monotonic() + max(timeout_seconds, 0)
     while True:

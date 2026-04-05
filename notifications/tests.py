@@ -8,8 +8,8 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from farm_hub.models import FarmHub, FarmType
 
 from .models import FarmNotification
-from .services import create_notification_for_farm_uuid, long_poll_notifications
-from .views import ExternalNotificationIngestView, NotificationLongPollView
+from .services import create_notification_for_farm_uuid, long_poll_notifications, mark_notifications_as_read
+from .views import ExternalNotificationIngestView, NotificationLongPollView, NotificationMarkReadView
 
 
 class NotificationServiceTests(TestCase):
@@ -56,6 +56,21 @@ class NotificationServiceTests(TestCase):
         self.assertEqual(len(notifications), 1)
         self.assertEqual(notifications[0].title, "A")
 
+    def test_mark_notifications_as_read_marks_until_slice_id(self):
+        first = FarmNotification.objects.create(farm=self.farm, title="A", message="B")
+        second = FarmNotification.objects.create(farm=self.farm, title="C", message="D")
+        third = FarmNotification.objects.create(farm=self.farm, title="E", message="F")
+
+        marked_count = mark_notifications_as_read(farm=self.farm, slice_id=second.id)
+
+        self.assertEqual(marked_count, 2)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        third.refresh_from_db()
+        self.assertTrue(first.is_read)
+        self.assertTrue(second.is_read)
+        self.assertFalse(third.is_read)
+
 
 class NotificationLongPollViewTests(TestCase):
     def setUp(self):
@@ -80,7 +95,7 @@ class NotificationLongPollViewTests(TestCase):
         )
 
     def test_long_poll_view_returns_notifications_for_owned_farm(self):
-        FarmNotification.objects.create(farm=self.farm, title="Alert", message="Check sensor")
+        notification = FarmNotification.objects.create(farm=self.farm, title="Alert", message="Check sensor")
         request = self.factory.get(f"/api/notifications/long-poll/?farm_uuid={self.farm.farm_uuid}&timeout=0")
         force_authenticate(request, user=self.user)
 
@@ -89,6 +104,8 @@ class NotificationLongPollViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["data"]), 1)
         self.assertEqual(response.data["data"][0]["title"], "Alert")
+        self.assertEqual(response.data["data"][0]["since_id"], notification.id)
+        self.assertFalse(response.data["data"][0]["is_read"])
 
     def test_long_poll_view_returns_404_for_unowned_farm(self):
         request = self.factory.get(f"/api/notifications/long-poll/?farm_uuid={self.farm.farm_uuid}&timeout=0")
@@ -112,6 +129,71 @@ class NotificationLongPollViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         mocked_long_poll.assert_called_once()
         self.assertEqual(mocked_long_poll.call_args.kwargs["since_id"], 5)
+
+
+class NotificationMarkReadViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="notif-mark-user",
+            password="secret123",
+            email="notif-mark@example.com",
+            phone_number="09120000015",
+        )
+        self.other_user = get_user_model().objects.create_user(
+            username="notif-mark-other-user",
+            password="secret123",
+            email="notif-mark-other@example.com",
+            phone_number="09120000016",
+        )
+        self.farm_type = FarmType.objects.create(name="باغ")
+        self.farm = FarmHub.objects.create(
+            owner=self.user,
+            farm_type=self.farm_type,
+            name="Farm D",
+        )
+
+    def test_mark_read_view_marks_notifications_up_to_slice_id(self):
+        first = FarmNotification.objects.create(farm=self.farm, title="Alert 1", message="Check sensor")
+        second = FarmNotification.objects.create(farm=self.farm, title="Alert 2", message="Check pump")
+        third = FarmNotification.objects.create(farm=self.farm, title="Alert 3", message="Check valve")
+        request = self.factory.post(
+            "/api/notifications/mark-as-read/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "slice_id": second.id,
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = NotificationMarkReadView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["marked_count"], 2)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        third.refresh_from_db()
+        self.assertTrue(first.is_read)
+        self.assertTrue(second.is_read)
+        self.assertFalse(third.is_read)
+
+    def test_mark_read_view_returns_404_for_unowned_farm(self):
+        notification = FarmNotification.objects.create(farm=self.farm, title="Alert", message="Check sensor")
+        request = self.factory.post(
+            "/api/notifications/mark-as-read/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "slice_id": notification.id,
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.other_user)
+
+        response = NotificationMarkReadView.as_view()(request)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["msg"], "Farm not found.")
 
 
 @override_settings(EXTERNAL_NOTIFICATION_API_KEY="12345")

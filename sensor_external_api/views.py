@@ -4,6 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
+from rest_framework.permissions import IsAuthenticated
 
 from config.swagger import code_response
 from notifications.serializers import FarmNotificationSerializer
@@ -73,8 +74,8 @@ class SensorExternalAPIView(APIView):
 
 
 class SensorExternalRequestLogListAPIView(APIView):
-    authentication_classes = [SensorExternalAPIKeyAuthentication]
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
+
     pagination_class = SensorExternalRequestLogPagination
 
     @extend_schema(
@@ -83,14 +84,7 @@ class SensorExternalRequestLogListAPIView(APIView):
             OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
             OpenApiParameter(name="page", type=OpenApiTypes.INT, location=OpenApiParameter.QUERY, required=False),
             OpenApiParameter(name="page_size", type=OpenApiTypes.INT, location=OpenApiParameter.QUERY, required=False),
-            OpenApiParameter(
-                name="X-API-Key",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.HEADER,
-                required=True,
-                default="12345",
-                description="API key for sensor external API.",
-            ),
+
         ],
         responses={
             200: code_response(
