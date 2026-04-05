@@ -1,6 +1,7 @@
 from django.conf import settings
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import serializers, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,6 +19,16 @@ class NotificationLongPollQuerySerializer(serializers.Serializer):
     timeout = serializers.IntegerField(required=False, min_value=0, max_value=60)
 
 
+class NotificationListQuerySerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField()
+    page = serializers.IntegerField(required=False, min_value=1)
+    page_size = serializers.IntegerField(required=False, min_value=1, max_value=100)
+
+
+class NotificationPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
 
 class NotificationMarkReadSerializer(serializers.Serializer):
@@ -67,6 +78,41 @@ class NotificationLongPollView(APIView):
             raise
         data = FarmNotificationSerializer(notifications, many=True).data
         return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+
+
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+    pagination_class = NotificationPagination
+
+    @extend_schema(
+        tags=["Notifications"],
+        parameters=[NotificationListQuerySerializer],
+        responses={
+            200: code_response("NotificationListResponse"),
+            404: code_response("NotificationListNotFoundResponse"),
+        },
+    )
+    def get(self, request):
+        serializer = NotificationListQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        farm = get_owned_farm(
+            farm_uuid=serializer.validated_data["farm_uuid"],
+            user=request.user,
+        )
+        if farm is None:
+            return Response({"code": 404, "msg": "Farm not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        paginator = self.pagination_class()
+        notifications = farm.notifications.all().order_by("-created_at", "-id")
+        page = paginator.paginate_queryset(notifications, request, view=self)
+        data = FarmNotificationSerializer(page, many=True).data
+
+        return paginator.get_paginated_response({
+            "code": 200,
+            "msg": "success",
+            "data": data,
+        })
 
 
 class NotificationMarkReadView(APIView):

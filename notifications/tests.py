@@ -8,8 +8,8 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from farm_hub.models import FarmHub, FarmType
 
 from .models import FarmNotification
-from .services import create_notification_for_farm_uuid, long_poll_notifications, mark_notifications_as_read
-from .views import ExternalNotificationIngestView, NotificationLongPollView, NotificationMarkReadView
+from .services import create_notification_for_farm_uuid, get_prioritized_notifications_for_farm, long_poll_notifications, mark_notifications_as_read
+from .views import ExternalNotificationIngestView, NotificationListView, NotificationLongPollView, NotificationMarkReadView
 
 
 class NotificationServiceTests(TestCase):
@@ -72,6 +72,26 @@ class NotificationServiceTests(TestCase):
         self.assertFalse(third.is_read)
 
 
+    def test_get_prioritized_notifications_for_farm_returns_unread_first_and_fills_with_read(self):
+        unread_one = FarmNotification.objects.create(farm=self.farm, title="Unread 1", message="A")
+        unread_two = FarmNotification.objects.create(farm=self.farm, title="Unread 2", message="B")
+        read_one = FarmNotification.objects.create(farm=self.farm, title="Read 1", message="C", is_read=True)
+        read_two = FarmNotification.objects.create(farm=self.farm, title="Read 2", message="D", is_read=True)
+
+        notifications = list(get_prioritized_notifications_for_farm(farm=self.farm, limit=5))
+
+        self.assertEqual([notification.id for notification in notifications], [unread_one.id, unread_two.id, read_one.id, read_two.id])
+
+    def test_long_poll_notifications_limits_to_five_unread_notifications(self):
+        for index in range(6):
+            FarmNotification.objects.create(farm=self.farm, title=f"Unread {index}", message="B")
+
+        notifications = long_poll_notifications(farm=self.farm, timeout_seconds=0, limit=5)
+
+        self.assertEqual(len(notifications), 5)
+        self.assertTrue(all(notification.is_read is False for notification in notifications))
+
+
 class NotificationLongPollViewTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -106,6 +126,23 @@ class NotificationLongPollViewTests(TestCase):
         self.assertEqual(response.data["data"][0]["title"], "Alert")
         self.assertEqual(response.data["data"][0]["since_id"], notification.id)
         self.assertFalse(response.data["data"][0]["is_read"])
+
+    def test_long_poll_view_returns_unread_first_then_read_when_unread_is_less_than_five(self):
+        unread_one = FarmNotification.objects.create(farm=self.farm, title="Unread 1", message="A")
+        unread_two = FarmNotification.objects.create(farm=self.farm, title="Unread 2", message="B")
+        read_one = FarmNotification.objects.create(farm=self.farm, title="Read 1", message="C", is_read=True)
+        read_two = FarmNotification.objects.create(farm=self.farm, title="Read 2", message="D", is_read=True)
+        request = self.factory.get(f"/api/notifications/long-poll/?farm_uuid={self.farm.farm_uuid}&timeout=0")
+        force_authenticate(request, user=self.user)
+
+        response = NotificationLongPollView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [item["since_id"] for item in response.data["data"]],
+            [unread_one.id, unread_two.id, read_one.id, read_two.id],
+        )
+        self.assertEqual([item["is_read"] for item in response.data["data"]], [False, False, True, True])
 
     def test_long_poll_view_returns_404_for_unowned_farm(self):
         request = self.factory.get(f"/api/notifications/long-poll/?farm_uuid={self.farm.farm_uuid}&timeout=0")
@@ -191,6 +228,54 @@ class NotificationMarkReadViewTests(TestCase):
         force_authenticate(request, user=self.other_user)
 
         response = NotificationMarkReadView.as_view()(request)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["msg"], "Farm not found.")
+
+
+class NotificationListViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="notif-list-user",
+            password="secret123",
+            email="notif-list@example.com",
+            phone_number="09120000017",
+        )
+        self.other_user = get_user_model().objects.create_user(
+            username="notif-list-other-user",
+            password="secret123",
+            email="notif-list-other@example.com",
+            phone_number="09120000018",
+        )
+        self.farm_type = FarmType.objects.create(name="مرغداری")
+        self.farm = FarmHub.objects.create(
+            owner=self.user,
+            farm_type=self.farm_type,
+            name="Farm E",
+        )
+
+    def test_list_view_returns_paginated_notifications_for_owned_farm(self):
+        for index in range(12):
+            FarmNotification.objects.create(farm=self.farm, title=f"Alert {index}", message="Check sensor")
+
+        request = self.factory.get(
+            f"/api/notifications/list/?farm_uuid={self.farm.farm_uuid}&page=2&page_size=5"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = NotificationListView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 12)
+        self.assertEqual(len(response.data["results"]["data"]), 5)
+        self.assertEqual(response.data["results"]["code"], 200)
+
+    def test_list_view_returns_404_for_unowned_farm(self):
+        request = self.factory.get(f"/api/notifications/list/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.other_user)
+
+        response = NotificationListView.as_view()(request)
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data["msg"], "Farm not found.")
