@@ -16,7 +16,9 @@ from .serializers import (
     SensorExternalRequestSerializer,
 )
 from .services import (
+    FarmDataForwardError,
     create_sensor_external_notification,
+    forward_sensor_payload_to_farm_data,
     get_farm_sensor_map_for_logs,
     get_sensor_external_request_logs_for_farm,
 )
@@ -61,6 +63,10 @@ class SensorExternalAPIView(APIView):
                 physical_device_uuid=serializer.validated_data["uuid"],
                 payload=serializer.validated_data.get("payload"),
             )
+            forward_sensor_payload_to_farm_data(
+                physical_device_uuid=serializer.validated_data["uuid"],
+                payload=serializer.validated_data.get("payload"),
+            )
         except ValueError as exc:
             if "not migrated" in str(exc):
                 return Response(
@@ -68,6 +74,11 @@ class SensorExternalAPIView(APIView):
                     status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
             return Response({"code": 404, "msg": "Physical device not found."}, status=status.HTTP_404_NOT_FOUND)
+        except FarmDataForwardError as exc:
+            return Response(
+                {"code": 503, "msg": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         data = FarmNotificationSerializer(notification).data
         return Response({"code": 201, "msg": "success", "data": data}, status=status.HTTP_201_CREATED)

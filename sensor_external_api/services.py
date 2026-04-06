@@ -1,9 +1,15 @@
+import requests
+from django.conf import settings
 from django.db import OperationalError, ProgrammingError, transaction
 
 from farm_hub.models import FarmSensor
 from notifications.services import create_notification_for_farm_uuid
 
 from .models import SensorExternalRequestLog
+
+
+class FarmDataForwardError(Exception):
+    pass
 
 
 def get_sensor_external_request_logs_for_farm(*, farm_uuid):
@@ -60,7 +66,7 @@ def get_latest_sensor_external_request_log(*, farm_uuid, sensor_catalog_uuid, ph
 def create_sensor_external_notification(*, physical_device_uuid, payload=None):
     payload = payload or {}
     sensor = (
-        FarmSensor.objects.select_related("farm", "sensor_catalog")
+        FarmSensor.objects.select_related("farm", "farm__current_crop_area", "sensor_catalog")
         .filter(physical_device_uuid=physical_device_uuid)
         .first()
     )
@@ -89,3 +95,79 @@ def create_sensor_external_notification(*, physical_device_uuid, payload=None):
             )
     except (ProgrammingError, OperationalError) as exc:
         raise ValueError("Sensor external API tables are not migrated.") from exc
+
+
+def forward_sensor_payload_to_farm_data(*, physical_device_uuid, payload=None):
+    payload = payload or {}
+    sensor = (
+        FarmSensor.objects.select_related("farm", "farm__current_crop_area")
+        .filter(physical_device_uuid=physical_device_uuid)
+        .first()
+    )
+    if sensor is None:
+        raise ValueError("Physical device not found.")
+
+    farm_boundary = _get_farm_boundary(sensor=sensor)
+    url = _build_farm_data_url()
+    api_key = getattr(settings, "FARM_DATA_API_KEY", "")
+    if not api_key:
+        raise FarmDataForwardError("FARM_DATA_API_KEY is not configured.")
+
+    request_payload = {
+        "farm_uuid": str(sensor.farm.farm_uuid),
+        "farm_boundary": farm_boundary,
+        "sensor_payload": {
+            sensor.name or str(sensor.physical_device_uuid): payload,
+        },
+    }
+
+    try:
+        response = requests.post(
+            url,
+            json=request_payload,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "X-API-Key": api_key,
+                "Authorization": f"Api-Key {api_key}",
+            },
+            timeout=getattr(settings, "FARM_DATA_API_TIMEOUT", 30),
+        )
+    except requests.RequestException as exc:
+        raise FarmDataForwardError(f"Farm data API request failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        try:
+            response_body = response.json()
+        except ValueError:
+            response_body = response.text
+        raise FarmDataForwardError(
+            f"Farm data API returned status {response.status_code}: {response_body}"
+        )
+
+    return request_payload
+
+
+def _get_farm_boundary(*, sensor):
+    crop_area = sensor.farm.current_crop_area or sensor.farm.crop_areas.order_by("-created_at", "-id").first()
+    if crop_area is None:
+        raise FarmDataForwardError("Farm boundary is not configured for this farm.")
+
+    geometry = crop_area.geometry or {}
+    if geometry.get("type") == "Feature":
+        geometry = geometry.get("geometry") or {}
+
+    if geometry.get("type") != "Polygon":
+        raise FarmDataForwardError("Farm boundary geometry must be a Polygon.")
+
+    return geometry
+
+
+def _build_farm_data_url():
+    base_url = getattr(settings, "AI_SERVICE_BASE_URL", "").rstrip("/")
+    path =  "/api/farm-data/"
+
+    if not base_url:
+        raise FarmDataForwardError("FARM_DATA_API_HOST is not configured.")
+
+    return f"{base_url}/{path.lstrip('/')}"

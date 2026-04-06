@@ -1,7 +1,10 @@
+import requests
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory
+from unittest.mock import Mock, patch
 
+from crop_zoning.models import CropArea
 from farm_hub.models import FarmHub, FarmSensor, FarmType
 from notifications.models import FarmNotification
 from sensor_catalog.models import SensorCatalog
@@ -11,7 +14,12 @@ from .services import get_latest_sensor_external_request_log
 from .views import SensorExternalAPIView, SensorExternalRequestLogListAPIView
 
 
-@override_settings(SENSOR_EXTERNAL_API_KEY="12345")
+@override_settings(
+    SENSOR_EXTERNAL_API_KEY="12345",
+    FARM_DATA_API_HOST="http://localhost",
+    FARM_DATA_API_PORT="8020",
+    FARM_DATA_API_KEY="farm-data-key",
+)
 class SensorExternalAPIViewTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -31,11 +39,38 @@ class SensorExternalAPIViewTests(TestCase):
             code="ext-sensor-v1",
             name="External Sensor",
         )
+        self.crop_area = CropArea.objects.create(
+            farm=self.farm,
+            geometry={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [51.39, 35.7],
+                        [51.41, 35.7],
+                        [51.41, 35.72],
+                        [51.39, 35.72],
+                        [51.39, 35.7],
+                    ]
+                ],
+            },
+            points=[
+                [51.39, 35.7],
+                [51.41, 35.7],
+                [51.41, 35.72],
+                [51.39, 35.72],
+            ],
+            center={"lat": 35.71, "lng": 51.4},
+            area_sqm=1000,
+            area_hectares=0.1,
+            chunk_area_sqm=1000,
+        )
+        self.farm.current_crop_area = self.crop_area
+        self.farm.save(update_fields=["current_crop_area"])
         self.sensor = FarmSensor.objects.create(
             farm=self.farm,
             sensor_catalog=self.sensor_catalog,
             physical_device_uuid="11111111-1111-1111-1111-111111111111",
-            name="External device",
+            name="sensor-7-1",
             sensor_type="weather_station",
         )
 
@@ -50,7 +85,9 @@ class SensorExternalAPIViewTests(TestCase):
 
         self.assertEqual(response.status_code, 401)
 
-    def test_creates_notification_and_request_log_for_device_uuid(self):
+    @patch("sensor_external_api.services.requests.post")
+    def test_creates_notification_and_request_log_for_device_uuid(self, mock_post):
+        mock_post.return_value = Mock(status_code=201)
         request = self.factory.post(
             "/api/sensor-external-api/",
             {"uuid": str(self.sensor.physical_device_uuid), "payload": {"temp": 12}},
@@ -75,6 +112,23 @@ class SensorExternalAPIViewTests(TestCase):
                 payload={"temp": 12},
             ).exists()
         )
+        mock_post.assert_called_once_with(
+            "http://localhost:8020/api/farm-data/",
+            json={
+                "farm_uuid": str(self.farm.farm_uuid),
+                "farm_boundary": self.crop_area.geometry,
+                "sensor_payload": {
+                    "sensor-7-1": {"temp": 12},
+                },
+            },
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "X-API-Key": "farm-data-key",
+                "Authorization": "Api-Key farm-data-key",
+            },
+            timeout=30,
+        )
 
     def test_returns_404_for_unknown_device_uuid(self):
         request = self.factory.post(
@@ -87,6 +141,23 @@ class SensorExternalAPIViewTests(TestCase):
         response = SensorExternalAPIView.as_view()(request)
 
         self.assertEqual(response.status_code, 404)
+
+    @patch("sensor_external_api.services.requests.post")
+    def test_returns_503_when_farm_data_api_is_unavailable(self, mock_post):
+        mock_post.side_effect = requests.RequestException("connection error")
+
+        request = self.factory.post(
+            "/api/sensor-external-api/",
+            {"uuid": str(self.sensor.physical_device_uuid), "payload": {"temp": 12}},
+            format="json",
+            HTTP_X_API_KEY="12345",
+        )
+
+        response = SensorExternalAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["code"], 503)
+        self.assertIn("Farm data API request failed", response.data["msg"])
 
 
 class SensorExternalServiceTests(TestCase):
