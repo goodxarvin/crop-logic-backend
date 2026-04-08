@@ -2,7 +2,10 @@ from django.urls import path
 
 from .views import (
     AreaView,
+    CultivationRiskView,
     ProductsView,
+    SoilQualityView,
+    WaterNeedView,
     ZoneDetailsView,
     ZonesCultivationRiskView,
     ZonesInitialView,
@@ -12,6 +15,9 @@ from .views import (
 
 urlpatterns = [
     path("area/", AreaView.as_view(), name="crop-zoning-area"),
+    path("water-need/", WaterNeedView.as_view(), name="crop-zoning-water-need"),
+    path("soil-quality/", SoilQualityView.as_view(), name="crop-zoning-soil-quality"),
+    path("cultivation-risk/", CultivationRiskView.as_view(), name="crop-zoning-cultivation-risk"),
     path("products/", ProductsView.as_view(), name="crop-zoning-products"),
     # path("zones/initial/", ZonesInitialView.as_view(), name="crop-zoning-zones-initial"),
     # path(

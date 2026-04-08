@@ -514,10 +514,37 @@ def build_initial_zone_payload(zone):
 
 
 def build_area_zone_payload(zone):
+    base_payload = _build_area_layer_zone_base_payload(zone)
     recommendation = getattr(zone, "recommendation", None)
     water_need_layer = getattr(zone, "water_need_layer", None)
     soil_quality_layer = getattr(zone, "soil_quality_layer", None)
     cultivation_risk_layer = getattr(zone, "cultivation_risk_layer", None)
+    base_payload.update(
+        {
+            "crop": recommendation.product.product_id if recommendation else "",
+            "matchPercent": recommendation.match_percent if recommendation else 0,
+            "waterNeed": recommendation.water_need if recommendation else "",
+            "estimatedProfit": recommendation.estimated_profit if recommendation else "",
+            "waterNeedLayer": {
+                "level": getattr(water_need_layer, "level", ""),
+                "value": getattr(water_need_layer, "value", ""),
+                "color": getattr(water_need_layer, "color", ""),
+            },
+            "soilQualityLayer": {
+                "level": getattr(soil_quality_layer, "level", ""),
+                "score": getattr(soil_quality_layer, "score", 0),
+                "color": getattr(soil_quality_layer, "color", ""),
+            },
+            "cultivationRiskLayer": {
+                "level": getattr(cultivation_risk_layer, "level", ""),
+                "color": getattr(cultivation_risk_layer, "color", ""),
+            },
+        }
+    )
+    return base_payload
+
+
+def _build_area_layer_zone_base_payload(zone):
     return {
         "zoneId": zone.zone_id,
         "zoneUuid": str(zone.uuid),
@@ -528,25 +555,39 @@ def build_area_zone_payload(zone):
         "sequence": zone.sequence,
         "processing_status": zone.processing_status,
         "processing_error": zone.processing_error,
-        "crop": recommendation.product.product_id if recommendation else "",
-        "matchPercent": recommendation.match_percent if recommendation else 0,
-        "waterNeed": recommendation.water_need if recommendation else "",
-        "estimatedProfit": recommendation.estimated_profit if recommendation else "",
-        "waterNeedLayer": {
-            "level": getattr(water_need_layer, "level", ""),
-            "value": getattr(water_need_layer, "value", ""),
-            "color": getattr(water_need_layer, "color", ""),
-        },
-        "soilQualityLayer": {
-            "level": getattr(soil_quality_layer, "level", ""),
-            "score": getattr(soil_quality_layer, "score", 0),
-            "color": getattr(soil_quality_layer, "color", ""),
-        },
-        "cultivationRiskLayer": {
-            "level": getattr(cultivation_risk_layer, "level", ""),
-            "color": getattr(cultivation_risk_layer, "color", ""),
-        },
     }
+
+
+def build_water_need_area_zone_payload(zone):
+    base_payload = _build_area_layer_zone_base_payload(zone)
+    water_need_layer = getattr(zone, "water_need_layer", None)
+    base_payload["waterNeedLayer"] = {
+        "level": getattr(water_need_layer, "level", ""),
+        "value": getattr(water_need_layer, "value", ""),
+        "color": getattr(water_need_layer, "color", ""),
+    }
+    return base_payload
+
+
+def build_soil_quality_area_zone_payload(zone):
+    base_payload = _build_area_layer_zone_base_payload(zone)
+    soil_quality_layer = getattr(zone, "soil_quality_layer", None)
+    base_payload["soilQualityLayer"] = {
+        "level": getattr(soil_quality_layer, "level", ""),
+        "score": getattr(soil_quality_layer, "score", 0),
+        "color": getattr(soil_quality_layer, "color", ""),
+    }
+    return base_payload
+
+
+def build_cultivation_risk_area_zone_payload(zone):
+    base_payload = _build_area_layer_zone_base_payload(zone)
+    cultivation_risk_layer = getattr(zone, "cultivation_risk_layer", None)
+    base_payload["cultivationRiskLayer"] = {
+        "level": getattr(cultivation_risk_layer, "level", ""),
+        "color": getattr(cultivation_risk_layer, "color", ""),
+    }
+    return base_payload
 
 
 def persist_zone_analysis_metrics(zone, metrics):
@@ -949,94 +990,7 @@ def _zones_queryset(zone_ids=None):
     return queryset
 
 
-def get_latest_area_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
-    area = area or CropArea.objects.order_by("-created_at", "-id").first()
-    if area:
-        status_zones = list(area.zones.only("zone_id", "task_id", "processing_status", "processing_error"))
-        total_zones = len(status_zones)
-        completed_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_COMPLETED)
-        processing_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_PROCESSING)
-        failed_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_FAILED)
-        pending_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_PENDING)
-        total_pages = math.ceil(total_zones / page_size) if total_zones else 0
-        start_index = (page - 1) * page_size
-        end_index = start_index + page_size
-        zones = list(_zones_queryset().filter(crop_area=area)[start_index:end_index])
-
-        if failed_zones:
-            task_status = "FAILURE"
-        elif total_zones and completed_zones == total_zones:
-            task_status = "SUCCESS"
-        elif processing_zones or completed_zones:
-            task_status = "PROCESSING"
-        else:
-            task_status = "PENDING"
-
-        current_stage = "waiting_to_start"
-        if failed_zones:
-            current_stage = "failed"
-        elif total_zones and completed_zones == total_zones:
-            current_stage = "completed"
-        elif processing_zones:
-            current_stage = "processing_zones"
-        elif pending_zones and completed_zones:
-            current_stage = "continuing_processing"
-        elif pending_zones:
-            current_stage = "queued"
-
-        progress_percent = 0
-        if total_zones:
-            progress_percent = round((completed_zones / total_zones) * 100, 2)
-
-        return {
-            "task": {
-                "status": task_status,
-                "stage": current_stage,
-                "stage_label": {
-                    "waiting_to_start": "در انتظار شروع پردازش",
-                    "queued": "تسک ساخته شده و در صف پردازش است",
-                    "processing_zones": "در حال پردازش زون‌ها",
-                    "continuing_processing": "بخشی از زون‌ها پردازش شده و بقیه در صف هستند",
-                    "completed": "پردازش همه زون‌ها کامل شده است",
-                    "failed": "پردازش بعضی زون‌ها با خطا مواجه شده است",
-                }[current_stage],
-                "area_uuid": str(area.uuid),
-                "total_zones": total_zones,
-                "completed_zones": completed_zones,
-                "processing_zones": processing_zones,
-                "pending_zones": pending_zones,
-                "failed_zones": failed_zones,
-                "remaining_zones": max(total_zones - completed_zones, 0),
-                "progress_percent": progress_percent,
-                "summary": {
-                    "done": completed_zones,
-                    "in_progress": processing_zones,
-                    "remaining": pending_zones,
-                    "failed": failed_zones,
-                },
-                "message": f"از مجموع {total_zones} زون، {completed_zones} زون پردازش شده، {processing_zones} زون در حال پردازش و {pending_zones} زون باقی مانده است.",
-                "failed_zone_errors": [
-                    {
-                        "zoneId": zone.zone_id,
-                        "error": zone.processing_error,
-                    }
-                    for zone in status_zones
-                    if zone.processing_status == CropZone.STATUS_FAILED and zone.processing_error
-                ],
-                "cell_side_km": round(math.sqrt(max(area.chunk_area_sqm, 1)) / 1000.0, 4),
-            },
-            "area": area.geometry,
-            "zones": [build_area_zone_payload(zone) for zone in zones],
-            "pagination": {
-                "page": page,
-                "page_size": page_size,
-                "total_pages": total_pages,
-                "total_zones": total_zones,
-                "returned_zones": len(zones),
-                "has_next": page < total_pages,
-                "has_previous": page > 1 and total_pages > 0,
-            },
-        }
+def _get_idle_area_payload(page, page_size):
     return {
         "task": {
             "status": "IDLE",
@@ -1061,6 +1015,129 @@ def get_latest_area_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE)
             "has_previous": False,
         },
     }
+
+
+def _build_latest_area_layer_payload(zone_builder, area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    area = area or CropArea.objects.order_by("-created_at", "-id").first()
+    if not area:
+        return _get_idle_area_payload(page, page_size)
+
+    status_zones = list(area.zones.only("zone_id", "task_id", "processing_status", "processing_error"))
+    total_zones = len(status_zones)
+    completed_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_COMPLETED)
+    processing_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_PROCESSING)
+    failed_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_FAILED)
+    pending_zones = sum(1 for zone in status_zones if zone.processing_status == CropZone.STATUS_PENDING)
+    total_pages = math.ceil(total_zones / page_size) if total_zones else 0
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+    zones = list(_zones_queryset().filter(crop_area=area)[start_index:end_index])
+
+    if failed_zones:
+        task_status = "FAILURE"
+    elif total_zones and completed_zones == total_zones:
+        task_status = "SUCCESS"
+    elif processing_zones or completed_zones:
+        task_status = "PROCESSING"
+    else:
+        task_status = "PENDING"
+
+    current_stage = "waiting_to_start"
+    if failed_zones:
+        current_stage = "failed"
+    elif total_zones and completed_zones == total_zones:
+        current_stage = "completed"
+    elif processing_zones:
+        current_stage = "processing_zones"
+    elif pending_zones and completed_zones:
+        current_stage = "continuing_processing"
+    elif pending_zones:
+        current_stage = "queued"
+
+    progress_percent = 0
+    if total_zones:
+        progress_percent = round((completed_zones / total_zones) * 100, 2)
+
+    return {
+        "task": {
+            "status": task_status,
+            "stage": current_stage,
+            "stage_label": {
+                "waiting_to_start": "در انتظار شروع پردازش",
+                "queued": "تسک ساخته شده و در صف پردازش است",
+                "processing_zones": "در حال پردازش زون‌ها",
+                "continuing_processing": "بخشی از زون‌ها پردازش شده و بقیه در صف هستند",
+                "completed": "پردازش همه زون‌ها کامل شده است",
+                "failed": "پردازش بعضی زون‌ها با خطا مواجه شده است",
+            }[current_stage],
+            "area_uuid": str(area.uuid),
+            "total_zones": total_zones,
+            "completed_zones": completed_zones,
+            "processing_zones": processing_zones,
+            "pending_zones": pending_zones,
+            "failed_zones": failed_zones,
+            "remaining_zones": max(total_zones - completed_zones, 0),
+            "progress_percent": progress_percent,
+            "summary": {
+                "done": completed_zones,
+                "in_progress": processing_zones,
+                "remaining": pending_zones,
+                "failed": failed_zones,
+            },
+            "message": f"از مجموع {total_zones} زون، {completed_zones} زون پردازش شده، {processing_zones} زون در حال پردازش و {pending_zones} زون باقی مانده است.",
+            "failed_zone_errors": [
+                {
+                    "zoneId": zone.zone_id,
+                    "error": zone.processing_error,
+                }
+                for zone in status_zones
+                if zone.processing_status == CropZone.STATUS_FAILED and zone.processing_error
+            ],
+            "cell_side_km": round(math.sqrt(max(area.chunk_area_sqm, 1)) / 1000.0, 4),
+        },
+        "area": area.geometry,
+        "zones": [zone_builder(zone) for zone in zones],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "total_zones": total_zones,
+            "returned_zones": len(zones),
+            "has_next": page < total_pages,
+            "has_previous": page > 1 and total_pages > 0,
+        },
+    }
+
+
+def get_latest_area_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    return _build_latest_area_layer_payload(build_area_zone_payload, area=area, page=page, page_size=page_size)
+
+
+def get_latest_water_need_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    return _build_latest_area_layer_payload(
+        build_water_need_area_zone_payload,
+        area=area,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def get_latest_soil_quality_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    return _build_latest_area_layer_payload(
+        build_soil_quality_area_zone_payload,
+        area=area,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def get_latest_cultivation_risk_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    return _build_latest_area_layer_payload(
+        build_cultivation_risk_area_zone_payload,
+        area=area,
+        page=page,
+        page_size=page_size,
+    )
 
 
 def get_initial_zones_payload(crop_area):

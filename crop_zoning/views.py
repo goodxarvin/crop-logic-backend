@@ -10,10 +10,13 @@ from config.swagger import status_response
 from .services import (
     create_zones_and_dispatch,
     ensure_latest_area_ready_for_processing,
+    get_latest_cultivation_risk_payload,
     get_cultivation_risk_payload,
     get_default_area_feature,
     get_initial_zones_payload,
     get_latest_area_payload,
+    get_latest_soil_quality_payload,
+    get_latest_water_need_payload,
     get_products_payload,
     get_soil_quality_payload,
     get_water_need_payload,
@@ -22,38 +25,34 @@ from .services import (
 )
 
 
-class AreaView(APIView):
-    @extend_schema(
-        tags=["Crop Zoning"],
-        parameters=[
-            OpenApiParameter(
-                name="farm_uuid",
-                type=OpenApiTypes.UUID,
-                location=OpenApiParameter.QUERY,
-                required=True,
-                description="UUID مزرعه برای گرفتن يا ساخت آخرين پردازش محدوده همان مزرعه.",
-            ),
-            OpenApiParameter(
-                name="page",
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="شماره صفحه زون ها. مقدار پيش فرض 1 است.",
-            ),
-            OpenApiParameter(
-                name="page_size",
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="تعداد زون در هر صفحه. مقدار پيش فرض 10 است.",
-            ),
-        ],
-        responses={
-            200: status_response("CropZoningAreaResponse", data=serializers.JSONField()),
-            400: status_response("CropZoningAreaValidationError", data=serializers.JSONField()),
-            500: status_response("CropZoningAreaServerError", data=serializers.JSONField()),
-        },
-    )
+AREA_QUERY_PARAMETERS = [
+    OpenApiParameter(
+        name="farm_uuid",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        required=True,
+        description="UUID مزرعه برای گرفتن يا ساخت آخرين پردازش محدوده همان مزرعه.",
+    ),
+    OpenApiParameter(
+        name="page",
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description="شماره صفحه زون ها. مقدار پيش فرض 1 است.",
+    ),
+    OpenApiParameter(
+        name="page_size",
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description="تعداد زون در هر صفحه. مقدار پيش فرض 10 است.",
+    ),
+]
+
+
+class BaseAreaDataView(APIView):
+    payload_getter = None
+
     def get(self, request):
         farm_uuid = request.query_params.get("farm_uuid")
         try:
@@ -65,9 +64,73 @@ class AreaView(APIView):
             return Response({"status": "error", "message": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(
-            {"status": "success", "data": get_latest_area_payload(crop_area, page=page, page_size=page_size)},
+            {"status": "success", "data": self.payload_getter(crop_area, page=page, page_size=page_size)},
             status=status.HTTP_200_OK,
         )
+
+
+class AreaView(BaseAreaDataView):
+    payload_getter = staticmethod(get_latest_area_payload)
+
+    @extend_schema(
+        tags=["Crop Zoning"],
+        parameters=AREA_QUERY_PARAMETERS,
+        responses={
+            200: status_response("CropZoningAreaResponse", data=serializers.JSONField()),
+            400: status_response("CropZoningAreaValidationError", data=serializers.JSONField()),
+            500: status_response("CropZoningAreaServerError", data=serializers.JSONField()),
+        },
+    )
+    def get(self, request):
+        return super().get(request)
+
+
+class WaterNeedView(BaseAreaDataView):
+    payload_getter = staticmethod(get_latest_water_need_payload)
+
+    @extend_schema(
+        tags=["Crop Zoning"],
+        parameters=AREA_QUERY_PARAMETERS,
+        responses={
+            200: status_response("CropZoningWaterNeedResponse", data=serializers.JSONField()),
+            400: status_response("CropZoningWaterNeedValidationError", data=serializers.JSONField()),
+            500: status_response("CropZoningWaterNeedServerError", data=serializers.JSONField()),
+        },
+    )
+    def get(self, request):
+        return super().get(request)
+
+
+class SoilQualityView(BaseAreaDataView):
+    payload_getter = staticmethod(get_latest_soil_quality_payload)
+
+    @extend_schema(
+        tags=["Crop Zoning"],
+        parameters=AREA_QUERY_PARAMETERS,
+        responses={
+            200: status_response("CropZoningSoilQualityResponse", data=serializers.JSONField()),
+            400: status_response("CropZoningSoilQualityValidationError", data=serializers.JSONField()),
+            500: status_response("CropZoningSoilQualityServerError", data=serializers.JSONField()),
+        },
+    )
+    def get(self, request):
+        return super().get(request)
+
+
+class CultivationRiskView(BaseAreaDataView):
+    payload_getter = staticmethod(get_latest_cultivation_risk_payload)
+
+    @extend_schema(
+        tags=["Crop Zoning"],
+        parameters=AREA_QUERY_PARAMETERS,
+        responses={
+            200: status_response("CropZoningCultivationRiskResponse", data=serializers.JSONField()),
+            400: status_response("CropZoningCultivationRiskValidationError", data=serializers.JSONField()),
+            500: status_response("CropZoningCultivationRiskServerError", data=serializers.JSONField()),
+        },
+    )
+    def get(self, request):
+        return super().get(request)
 
 
 class ProductsView(APIView):

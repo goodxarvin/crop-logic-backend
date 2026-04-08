@@ -8,7 +8,13 @@ from kombu.exceptions import OperationalError
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from crop_zoning.models import CropArea, CropZone
-from crop_zoning.views import AreaView, ZonesInitialView
+from crop_zoning.views import (
+    AreaView,
+    CultivationRiskView,
+    SoilQualityView,
+    WaterNeedView,
+    ZonesInitialView,
+)
 from farm_hub.models import FarmHub, FarmType
 
 
@@ -313,3 +319,101 @@ class AreaViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         mock_dispatch.assert_called_once_with(zone_ids=[stale_zone.id], force=True)
+
+
+@override_settings(
+    USE_EXTERNAL_API_MOCK=True,
+    CROP_ZONE_CHUNK_AREA_SQM=200000,
+)
+class LayerAreaViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="layer-farmer",
+            password="secret123",
+            email="layer@example.com",
+            phone_number="09120000002",
+        )
+        self.farm_type = FarmType.objects.create(name="باغی")
+        self.farm = FarmHub.objects.create(owner=self.user, name="layer-farm", farm_type=self.farm_type)
+
+    def _create_area(self, **kwargs):
+        defaults = {
+            "farm": self.farm,
+            "geometry": AREA_GEOJSON,
+            "points": AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
+            "center": {"longitude": 51.40874867, "latitude": 35.69575533},
+            "area_sqm": 300000,
+            "area_hectares": 30,
+            "chunk_area_sqm": 200000,
+            "zone_count": 1,
+        }
+        defaults.update(kwargs)
+        return CropArea.objects.create(**defaults)
+
+    def _create_completed_zone(self):
+        crop_area = self._create_area()
+        CropZone.objects.create(
+            crop_area=crop_area,
+            zone_id="zone-0",
+            geometry=AREA_GEOJSON["geometry"],
+            points=AREA_GEOJSON["geometry"]["coordinates"][0][:-1],
+            center={"longitude": 51.4087, "latitude": 35.6957},
+            area_sqm=300000,
+            area_hectares=30,
+            sequence=0,
+            processing_status=CropZone.STATUS_COMPLETED,
+            task_id="celery-task-1",
+        )
+        return crop_area
+
+    def _request(self, path):
+        request = self.factory.get(f"{path}?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+        return request
+
+    def test_water_need_view_requires_farm_uuid(self):
+        request = self.factory.get("/api/crop-zoning/water-need/")
+        force_authenticate(request, user=self.user)
+
+        response = WaterNeedView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["message"], "farm_uuid is required.")
+
+    def test_water_need_view_returns_area_style_payload(self):
+        self._create_completed_zone()
+
+        response = WaterNeedView.as_view()(self._request("/api/crop-zoning/water-need/"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["task"]["status"], "SUCCESS")
+        self.assertEqual(response.data["data"]["area"], AREA_GEOJSON)
+        self.assertEqual(len(response.data["data"]["zones"]), 1)
+        self.assertIn("waterNeedLayer", response.data["data"]["zones"][0])
+        self.assertNotIn("soilQualityLayer", response.data["data"]["zones"][0])
+        self.assertNotIn("cultivationRiskLayer", response.data["data"]["zones"][0])
+
+    def test_soil_quality_view_returns_area_style_payload(self):
+        self._create_completed_zone()
+
+        response = SoilQualityView.as_view()(self._request("/api/crop-zoning/soil-quality/"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["task"]["status"], "SUCCESS")
+        self.assertEqual(len(response.data["data"]["zones"]), 1)
+        self.assertIn("soilQualityLayer", response.data["data"]["zones"][0])
+        self.assertNotIn("waterNeedLayer", response.data["data"]["zones"][0])
+        self.assertNotIn("cultivationRiskLayer", response.data["data"]["zones"][0])
+
+    def test_cultivation_risk_view_returns_area_style_payload(self):
+        self._create_completed_zone()
+
+        response = CultivationRiskView.as_view()(self._request("/api/crop-zoning/cultivation-risk/"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["task"]["status"], "SUCCESS")
+        self.assertEqual(len(response.data["data"]["zones"]), 1)
+        self.assertIn("cultivationRiskLayer", response.data["data"]["zones"][0])
+        self.assertNotIn("waterNeedLayer", response.data["data"]["zones"][0])
+        self.assertNotIn("soilQualityLayer", response.data["data"]["zones"][0])
