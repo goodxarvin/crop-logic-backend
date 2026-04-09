@@ -41,6 +41,7 @@ class FarmFeatureAuthorizationView(APIView):
                 user=request.user,
                 features=serializer.validated_data["features"],
                 action=serializer.validated_data["action"],
+                route=request.path,
             )
         except AccessControlServiceUnavailable as exc:
             return Response(

@@ -1,7 +1,12 @@
+import hashlib
+import json
+from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.http import QueryDict
 from farm_hub.models import FarmHub
@@ -27,6 +32,38 @@ ACTION_MAP = {
     "PATCH": "edit",
     "DELETE": "delete",
 }
+
+
+def _get_authz_cache_timeout():
+    return int(getattr(settings, "ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT", 300))
+
+
+@lru_cache(maxsize=1)
+def load_route_feature_map():
+    feature_map_path = Path(settings.BASE_DIR) / "config" / "feature.json"
+    with feature_map_path.open("r", encoding="utf-8") as feature_map_file:
+        return json.load(feature_map_file)
+
+
+def get_route_feature_code(app_label):
+    if not app_label:
+        return None
+    return load_route_feature_map().get(app_label)
+
+
+def _get_authorization_cache_key(farm, user, features, action, route):
+    raw_key = json.dumps(
+        {
+            "farm_uuid": str(getattr(farm, "farm_uuid", "")),
+            "user_id": getattr(user, "id", None),
+            "features": sorted(features),
+            "action": action,
+            "route": route or "",
+        },
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    return f"access-control:authz:{digest}"
 
 
 def get_default_subscription_plan():
@@ -153,6 +190,18 @@ def build_farm_access_profile(farm):
 
 
 def build_opa_resource(farm):
+    if farm is None:
+        return {
+            "farm_id": None,
+            "subscription_plan_codes": [],
+            "farm_types": [],
+            "crop_types": [],
+            "cultivation_types": [],
+            "sensor_codes": [],
+            "power_sensor": [],
+            "customization": [],
+        }
+
     subscription_plan = get_effective_subscription_plan(farm)
     sensor_codes = list(
         farm.sensors.exclude(sensor_catalog__isnull=True).values_list("sensor_catalog__code", flat=True)
@@ -199,23 +248,24 @@ def _opa_url(path):
     return urljoin(f"{base_url.rstrip('/')}/", path.lstrip("/"))
 
 
-def build_authorization_input(farm, user, features, action):
+def build_authorization_input(farm, user, features, action, route=None):
     return {
         "user": build_opa_user(user),
         "resource": build_opa_resource(farm),
         "features": list(features),
         "action": action,
+        "route": route,
     }
 
 
-def request_opa_batch_authorization(farm, user, features, action):
+def request_opa_batch_authorization(farm, user, features, action, route=None):
     if not getattr(settings, "ACCESS_CONTROL_AUTHZ_ENABLED", True):
         return {"decisions": {feature: True for feature in features}}
 
     if not features:
         return {"decisions": {}}
 
-    payload = {"input": build_authorization_input(farm, user, features, action)}
+    payload = {"input": build_authorization_input(farm, user, features, action, route=route)}
 
     try:
         response = requests.post(
@@ -238,6 +288,17 @@ def normalize_opa_batch_result(data, features):
     if isinstance(decisions, dict):
         return {feature: bool(decisions.get(feature, False)) for feature in features}
 
+    feature_results = data.get("features")
+    if isinstance(feature_results, dict):
+        normalized = {}
+        for feature in features:
+            feature_result = feature_results.get(feature, {})
+            if isinstance(feature_result, dict):
+                normalized[feature] = bool(feature_result.get("allow", False))
+            else:
+                normalized[feature] = bool(feature_result)
+        return normalized
+
     allowed_features = data.get("allowed_features")
     if isinstance(allowed_features, list):
         allowed = set(allowed_features)
@@ -249,18 +310,59 @@ def normalize_opa_batch_result(data, features):
     raise AccessControlServiceUnavailable("OPA authorization service returned an unsupported payload.")
 
 
-def batch_authorize_features(farm, user, features, action):
-    result = request_opa_batch_authorization(farm, user, features, action)
-    return normalize_opa_batch_result(result, features)
+def batch_authorize_features(farm, user, features, action, route=None):
+    if not features:
+        return {}
+
+    cache_key = _get_authorization_cache_key(farm, user, features, action, route)
+
+    try:
+        cached_result = cache.get(cache_key)
+    except Exception:
+        cached_result = None
+
+    if isinstance(cached_result, dict):
+        return {feature: bool(cached_result.get(feature, False)) for feature in features}
+
+    result = request_opa_batch_authorization(farm, user, features, action, route=route)
+    decisions = normalize_opa_batch_result(result, features)
+
+    try:
+        cache.set(cache_key, decisions, timeout=_get_authz_cache_timeout())
+    except Exception:
+        pass
+
+    return decisions
 
 
-def authorize_feature(farm, user, feature_code, action):
-    return batch_authorize_features(farm, user, [feature_code], action).get(feature_code, False)
+def authorize_feature(farm, user, feature_code, action, route=None):
+    return batch_authorize_features(farm, user, [feature_code], action, route=route).get(feature_code, False)
 
 
 def get_request_data(request):
-    if isinstance(request.data, QueryDict):
-        return request.data
-    if isinstance(request.data, dict):
-        return request.data
+    request_data = getattr(request, "data", None)
+    if isinstance(request_data, QueryDict):
+        return request_data
+    if isinstance(request_data, dict):
+        return request_data
+
+    cached_body = getattr(request, "_access_control_request_data", None)
+    if isinstance(cached_body, dict):
+        return cached_body
+
+    content_type = (getattr(request, "content_type", "") or "").split(";")[0].strip().lower()
+    body = getattr(request, "body", b"") or b""
+    if not body:
+        return {}
+
+    if content_type == "application/json":
+        try:
+            parsed_body = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return {}
+        if isinstance(parsed_body, dict):
+            request._access_control_request_data = parsed_body
+            return parsed_body
+        return {}
+
     return {}

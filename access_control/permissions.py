@@ -33,7 +33,13 @@ class FeatureAccessPermission(BasePermission):
             return False
 
         try:
-            allowed = authorize_feature(farm, request.user, feature_code, get_authorization_action(request.method))
+            allowed = authorize_feature(
+                farm,
+                request.user,
+                feature_code,
+                get_authorization_action(request.method),
+                route=request.path,
+            )
         except AccessControlServiceUnavailable as exc:
             self.message = str(exc)
             return False

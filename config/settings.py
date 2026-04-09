@@ -53,6 +53,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "access_control.middleware.RouteFeatureAccessMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -109,8 +110,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "croplogic-auth-otp",
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.getenv("CACHE_URL", os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")),
+        "KEY_PREFIX": "croplogic",
     }
 }
 
@@ -166,6 +168,7 @@ ACCESS_CONTROL_AUTHZ_BASE_URL = os.getenv(
 )
 ACCESS_CONTROL_AUTHZ_BATCH_PATH = os.getenv("ACCESS_CONTROL_AUTHZ_BATCH_PATH", "/v1/data/croplogic/authz/batch_decision")
 ACCESS_CONTROL_AUTHZ_TIMEOUT = int(os.getenv("ACCESS_CONTROL_AUTHZ_TIMEOUT", str(EXTERNAL_API_TIMEOUT)))
+ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT = int(os.getenv("ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT", "300"))
 
 EXTERNAL_SERVICES = {
     "ai": {
