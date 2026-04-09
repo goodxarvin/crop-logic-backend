@@ -7,50 +7,63 @@ from drf_spectacular.utils import extend_schema
 from config.swagger import code_response
 from farm_hub.models import FarmHub
 
-from .models import SubscriptionPlan
-from .serializers import FarmAccessProfileSerializer, SubscriptionPlanSerializer
-from .services import build_farm_access_profile_response
+from .serializers import FeatureAuthorizationRequestSerializer
+from .services import AccessControlServiceUnavailable, request_opa_batch_authorization
 
 
-class AccessControlBaseView(APIView):
+class FarmFeatureAuthorizationView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def _get_farm(self, request, farm_uuid):
+    @extend_schema(
+        tags=["Access Control"],
+        request=FeatureAuthorizationRequestSerializer,
+        responses={200: code_response("FarmFeatureAuthorizationResponse")},
+    )
+    def post(self, request, farm_uuid):
+        serializer = FeatureAuthorizationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
         try:
-            return FarmHub.objects.prefetch_related("products", "sensors", "sensors__sensor_catalog").select_related(
-                "farm_type",
-                "subscription_plan",
+            farm = FarmHub.objects.select_related("subscription_plan", "farm_type").prefetch_related(
+                "products",
+                "sensors",
+                "sensors__sensor_catalog",
             ).get(
                 farm_uuid=farm_uuid,
                 owner=request.user,
             )
         except FarmHub.DoesNotExist:
-            return None
-
-
-class SubscriptionPlanListView(AccessControlBaseView):
-    @extend_schema(
-        tags=["Access Control"],
-        responses={200: code_response("SubscriptionPlanListResponse", data=SubscriptionPlanSerializer(many=True))},
-    )
-    def get(self, request):
-        plans = SubscriptionPlan.objects.filter(is_active=True).order_by("name")
-        data = SubscriptionPlanSerializer(plans, many=True).data
-        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
-
-
-class FarmAccessProfileView(AccessControlBaseView):
-    @extend_schema(
-        tags=["Access Control"],
-        responses={
-            200: code_response("FarmAccessProfileResponse", data=FarmAccessProfileSerializer()),
-            404: code_response("FarmAccessProfileNotFoundResponse"),
-        },
-    )
-    def get(self, request, farm_uuid):
-        farm = self._get_farm(request, farm_uuid)
-        if farm is None:
             return Response({"code": 404, "msg": "Farm not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        data = build_farm_access_profile_response(farm)
-        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+        try:
+            opa_result = request_opa_batch_authorization(
+                farm=farm,
+                user=request.user,
+                features=serializer.validated_data["features"],
+                action=serializer.validated_data["action"],
+            )
+        except AccessControlServiceUnavailable as exc:
+            return Response(
+                {"code": 503, "msg": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": {
+                    "farm_uuid": str(farm.farm_uuid),
+                    "user": {
+                        "id": request.user.id,
+                        "username": request.user.username,
+                        "email": request.user.email,
+                        "phone_number": getattr(request.user, "phone_number", ""),
+                    },
+                    "features": serializer.validated_data["features"],
+                    "action": serializer.validated_data["action"],
+                    "decision": opa_result,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

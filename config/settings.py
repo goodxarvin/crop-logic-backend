@@ -159,6 +159,14 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG
 USE_EXTERNAL_API_MOCK = os.getenv("USE_EXTERNAL_API_MOCK", "false").lower() == "true"
 EXTERNAL_API_TIMEOUT = int(os.getenv("EXTERNAL_API_TIMEOUT", "30"))
 
+ACCESS_CONTROL_AUTHZ_ENABLED = os.getenv("ACCESS_CONTROL_AUTHZ_ENABLED", "true").lower() == "true"
+ACCESS_CONTROL_AUTHZ_BASE_URL = os.getenv(
+    "ACCESS_CONTROL_AUTHZ_BASE_URL",
+    "http://croplogic-accsess-opa:8181",
+)
+ACCESS_CONTROL_AUTHZ_BATCH_PATH = os.getenv("ACCESS_CONTROL_AUTHZ_BATCH_PATH", "/v1/data/croplogic/authz/batch_decision")
+ACCESS_CONTROL_AUTHZ_TIMEOUT = int(os.getenv("ACCESS_CONTROL_AUTHZ_TIMEOUT", str(EXTERNAL_API_TIMEOUT)))
+
 EXTERNAL_SERVICES = {
     "ai": {
         "base_url": os.getenv("AI_SERVICE_BASE_URL", ""),

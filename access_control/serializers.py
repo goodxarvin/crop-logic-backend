@@ -1,31 +1,17 @@
 from rest_framework import serializers
 
-from .models import FarmAccessProfile, SubscriptionPlan
+from .models import SubscriptionPlan
 
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubscriptionPlan
-        fields = ["uuid", "code", "name", "description", "metadata", "is_active"]
+        fields = ["uuid", "code", "name"]
 
 
-class FarmAccessProfileSerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField()
-    subscription_plan = SubscriptionPlanSerializer(allow_null=True)
-    matched_rules = serializers.ListField()
-    resolved_from_profile = serializers.BooleanField()
-
-
-class FarmAccessProfileCacheSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = FarmAccessProfile
-        fields = [
-            "farm",
-            "cached_features",
-            "cached_groups",
-            "matched_rules",
-            "metadata",
-            "last_resolved_at",
-            "created_at",
-            "updated_at",
-        ]
+class FeatureAuthorizationRequestSerializer(serializers.Serializer):
+    features = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=False,
+    )
+    action = serializers.CharField(required=False, allow_blank=False, default="view")

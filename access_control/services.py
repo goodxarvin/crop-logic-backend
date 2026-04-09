@@ -1,100 +1,109 @@
-from django.utils import timezone
+from urllib.parse import urljoin
+
+import requests
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from django.http import QueryDict
+from farm_hub.models import FarmHub
 
 from .catalog import GOLD_PLAN_CODE
 from .models import AccessFeature, AccessRule, FarmAccessProfile, SubscriptionPlan
 
 
-def _manager_id_set(manager):
-    return {obj.id for obj in manager.all()}
+class AccessControlError(Exception):
+    pass
+
+
+class AccessControlServiceUnavailable(AccessControlError):
+    pass
+
+
+ACTION_MAP = {
+    "GET": "view",
+    "HEAD": "view",
+    "OPTIONS": "view",
+    "POST": "create",
+    "PUT": "edit",
+    "PATCH": "edit",
+    "DELETE": "delete",
+}
+
+
+def get_default_subscription_plan():
+    return SubscriptionPlan.objects.filter(is_active=True, metadata__is_default=True).order_by("name").first()
 
 
 def get_effective_subscription_plan(farm):
-    if getattr(farm, "subscription_plan_id", None):
+    if farm.subscription_plan_id:
         return farm.subscription_plan
 
-    return (
-        SubscriptionPlan.objects.filter(is_active=True, metadata__is_default=True).order_by("name").first()
-        or SubscriptionPlan.objects.filter(code=GOLD_PLAN_CODE, is_active=True).first()
-    )
+    default_plan = get_default_subscription_plan()
+    if default_plan is not None:
+        return default_plan
+
+    return SubscriptionPlan.objects.filter(code=GOLD_PLAN_CODE, is_active=True).order_by("name").first()
 
 
-def rule_matches_farm(rule, farm, product_ids=None, sensor_catalog_ids=None):
+def _match_rule(rule, farm, subscription_plan, product_ids, sensor_catalog_ids, sensor_catalog_codes):
     if not rule.is_active:
         return False
 
-    subscription_plan_ids = _manager_id_set(rule.subscription_plans)
-    if subscription_plan_ids:
-        subscription_plan = get_effective_subscription_plan(farm)
-        if subscription_plan is None or subscription_plan.id not in subscription_plan_ids:
-            return False
-
-    farm_type_ids = _manager_id_set(rule.farm_types)
-    if farm_type_ids and farm.farm_type_id not in farm_type_ids:
+    if rule.subscription_plans.exists() and (subscription_plan is None or not rule.subscription_plans.filter(pk=subscription_plan.pk).exists()):
         return False
 
-    product_rule_ids = _manager_id_set(rule.products)
-    if product_rule_ids:
-        product_ids = product_ids if product_ids is not None else set(farm.products.values_list("id", flat=True))
-        if not product_ids or product_rule_ids.isdisjoint(product_ids):
-            return False
+    if rule.farm_types.exists() and not rule.farm_types.filter(pk=farm.farm_type_id).exists():
+        return False
 
-    sensor_catalog_rule_ids = _manager_id_set(rule.sensor_catalogs)
-    if sensor_catalog_rule_ids:
-        sensor_catalog_ids = (
-            sensor_catalog_ids
-            if sensor_catalog_ids is not None
-            else set(farm.sensors.exclude(sensor_catalog_id__isnull=True).values_list("sensor_catalog_id", flat=True))
-        )
-        if not sensor_catalog_ids or sensor_catalog_rule_ids.isdisjoint(sensor_catalog_ids):
-            return False
+    if rule.products.exists() and not rule.products.filter(pk__in=product_ids).exists():
+        return False
 
-    sensor_catalog_rule_codes = set(rule.metadata.get("sensor_catalog_codes", [])) if isinstance(rule.metadata, dict) else set()
-    if sensor_catalog_rule_codes:
-        farm_sensor_catalog_codes = set(
-            farm.sensors.exclude(sensor_catalog__code__isnull=True).values_list("sensor_catalog__code", flat=True)
-        )
-        if not farm_sensor_catalog_codes or sensor_catalog_rule_codes.isdisjoint(farm_sensor_catalog_codes):
-            return False
+    if rule.sensor_catalogs.exists() and not rule.sensor_catalogs.filter(pk__in=sensor_catalog_ids).exists():
+        return False
 
-    sensor_catalog_rule_names = set(rule.metadata.get("sensor_catalog_names", [])) if isinstance(rule.metadata, dict) else set()
-    if sensor_catalog_rule_names:
-        farm_sensor_catalog_names = set(
-            farm.sensors.exclude(sensor_catalog__name__isnull=True).values_list("sensor_catalog__name", flat=True)
-        )
-        if not farm_sensor_catalog_names or sensor_catalog_rule_names.isdisjoint(farm_sensor_catalog_names):
-            return False
+    metadata_sensor_codes = rule.metadata.get("sensor_catalog_codes", [])
+    if metadata_sensor_codes and not set(metadata_sensor_codes).intersection(sensor_catalog_codes):
+        return False
 
     return True
 
 
 def build_farm_access_profile(farm):
+    farm = FarmHub.objects.select_related("farm_type", "subscription_plan").prefetch_related(
+        "products",
+        "sensors",
+        "sensors__sensor_catalog",
+    ).get(pk=farm.pk)
+
     subscription_plan = get_effective_subscription_plan(farm)
-    features = AccessFeature.objects.all().order_by("feature_type", "code")
-    resolved = {
-        feature.code: {
-            "enabled": feature.default_enabled,
-            "type": feature.feature_type,
-            "name": feature.name,
-            "description": feature.description,
-            "metadata": feature.metadata,
-            "source": "default",
-        }
-        for feature in features
-    }
-
-    product_ids = set(farm.products.values_list("id", flat=True))
-    sensor_catalog_ids = set(farm.sensors.exclude(sensor_catalog_id__isnull=True).values_list("sensor_catalog_id", flat=True))
-
-    rules = (
-        AccessRule.objects.filter(is_active=True, features__isnull=False)
-        .distinct()
-        .prefetch_related("features", "subscription_plans", "farm_types", "products", "sensor_catalogs")
-        .order_by("priority", "id")
+    product_ids = list(farm.products.values_list("id", flat=True))
+    sensor_catalog_ids = list(
+        farm.sensors.exclude(sensor_catalog__isnull=True).values_list("sensor_catalog_id", flat=True)
+    )
+    sensor_catalog_codes = set(
+        farm.sensors.exclude(sensor_catalog__isnull=True).values_list("sensor_catalog__code", flat=True)
     )
 
+    features = {
+        feature.code: {
+            "name": feature.name,
+            "type": feature.feature_type,
+            "enabled": feature.default_enabled,
+            "source": "default" if feature.default_enabled else None,
+        }
+        for feature in AccessFeature.objects.filter(is_active=True)
+    }
+
     matched_rules = []
+    rules = AccessRule.objects.filter(is_active=True).prefetch_related(
+        "features",
+        "subscription_plans",
+        "farm_types",
+        "products",
+        "sensor_catalogs",
+    ).order_by("priority", "id")
+
     for rule in rules:
-        if not rule_matches_farm(rule, farm, product_ids=product_ids, sensor_catalog_ids=sensor_catalog_ids):
+        if not _match_rule(rule, farm, subscription_plan, product_ids, sensor_catalog_ids, sensor_catalog_codes):
             continue
 
         matched_rules.append(
@@ -105,66 +114,153 @@ def build_farm_access_profile(farm):
                 "priority": rule.priority,
             }
         )
-        is_enabled = rule.effect == AccessRule.ALLOW
         for feature in rule.features.all():
-            resolved[feature.code] = {
-                "enabled": is_enabled,
-                "type": feature.feature_type,
-                "name": feature.name,
-                "description": feature.description,
-                "metadata": feature.metadata,
-                "source": rule.code,
-            }
+            feature_state = features.setdefault(
+                feature.code,
+                {
+                    "name": feature.name,
+                    "type": feature.feature_type,
+                    "enabled": feature.default_enabled,
+                    "source": "default" if feature.default_enabled else None,
+                },
+            )
+            feature_state["enabled"] = rule.effect == AccessRule.ALLOW
+            feature_state["source"] = rule.code
 
-    grouped = {}
-    for code, payload in resolved.items():
-        grouped.setdefault(f"{payload['type']}s", {})[code] = payload
-
-    profile, _created = FarmAccessProfile.objects.update_or_create(
-        farm=farm,
-        defaults={
-            "cached_features": resolved,
-            "cached_groups": grouped,
-            "matched_rules": matched_rules,
-            "last_resolved_at": timezone.now(),
-        },
-    )
-
-    return {
+    profile = {
         "farm_uuid": str(farm.farm_uuid),
-        "subscription_plan": {
+        "subscription_plan": None,
+        "features": features,
+        "matched_rules": matched_rules,
+        "resolved_from_profile": True,
+    }
+    if subscription_plan is not None:
+        profile["subscription_plan"] = {
             "uuid": str(subscription_plan.uuid),
             "code": subscription_plan.code,
             "name": subscription_plan.name,
         }
-        if subscription_plan is not None
-        else None,
-        "features": profile.cached_features,
-        "groups": profile.cached_groups,
-        "matched_rules": profile.matched_rules,
-        "resolved_from_profile": True,
-    }
+
+    FarmAccessProfile.objects.update_or_create(
+        farm=farm,
+        defaults={
+            "subscription_plan": subscription_plan,
+            "profile_data": profile,
+            "resolved_from_profile": True,
+        },
+    )
+    return profile
 
 
-def build_farm_access_profile_response(farm):
-    profile_data = build_farm_access_profile(farm)
+def build_opa_resource(farm):
+    subscription_plan = get_effective_subscription_plan(farm)
+    sensor_codes = list(
+        farm.sensors.exclude(sensor_catalog__isnull=True).values_list("sensor_catalog__code", flat=True)
+    )
+    power_sensor = []
+    for sensor in farm.sensors.all():
+        if isinstance(sensor.power_source, dict):
+            power_type = sensor.power_source.get("type")
+            if power_type:
+                power_sensor.append(power_type)
+
     return {
-        "farm_uuid": profile_data["farm_uuid"],
-        "subscription_plan": profile_data["subscription_plan"],
-        "matched_rules": profile_data["matched_rules"],
-        "resolved_from_profile": profile_data["resolved_from_profile"],
+        "farm_id": str(farm.farm_uuid),
+        "subscription_plan_codes": [subscription_plan.code] if subscription_plan else [],
+        "farm_types": [farm.farm_type.name] if farm.farm_type_id else [],
+        "crop_types": list(farm.products.values_list("name", flat=True)),
+        "cultivation_types": [],
+        "sensor_codes": sensor_codes,
+        "power_sensor": power_sensor,
+        "customization": [],
     }
 
 
-def is_feature_enabled_for_farm(farm, feature_code):
-    profile = getattr(farm, "access_profile", None)
-    if profile and isinstance(profile.cached_features, dict):
-        feature_payload = profile.cached_features.get(feature_code)
-        if feature_payload is not None:
-            return bool(feature_payload.get("enabled"))
+def build_opa_user(user):
+    return {
+        "id": getattr(user, "id", None),
+        "username": getattr(user, "username", ""),
+        "email": getattr(user, "email", ""),
+        "phone_number": getattr(user, "phone_number", ""),
+        "is_staff": bool(getattr(user, "is_staff", False)),
+        "is_superuser": bool(getattr(user, "is_superuser", False)),
+        "role": "farmer",
+    }
 
-    profile_data = build_farm_access_profile(farm)
-    feature_payload = profile_data["features"].get(feature_code)
-    if feature_payload is None:
-        return False
-    return bool(feature_payload.get("enabled"))
+
+def get_authorization_action(method):
+    return ACTION_MAP.get(method.upper(), "view")
+
+
+def _opa_url(path):
+    base_url = getattr(settings, "ACCESS_CONTROL_AUTHZ_BASE_URL", "").strip()
+    if not base_url:
+        raise ImproperlyConfigured("ACCESS_CONTROL_AUTHZ_BASE_URL is not configured.")
+    return urljoin(f"{base_url.rstrip('/')}/", path.lstrip("/"))
+
+
+def build_authorization_input(farm, user, features, action):
+    return {
+        "user": build_opa_user(user),
+        "resource": build_opa_resource(farm),
+        "features": list(features),
+        "action": action,
+    }
+
+
+def request_opa_batch_authorization(farm, user, features, action):
+    if not getattr(settings, "ACCESS_CONTROL_AUTHZ_ENABLED", True):
+        return {"decisions": {feature: True for feature in features}}
+
+    if not features:
+        return {"decisions": {}}
+
+    payload = {"input": build_authorization_input(farm, user, features, action)}
+
+    try:
+        response = requests.post(
+            _opa_url(settings.ACCESS_CONTROL_AUTHZ_BATCH_PATH),
+            json=payload,
+            timeout=settings.ACCESS_CONTROL_AUTHZ_TIMEOUT,
+        )
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise AccessControlServiceUnavailable("OPA authorization service is unavailable.") from exc
+
+    try:
+        return response.json().get("result", {})
+    except ValueError as exc:
+        raise AccessControlServiceUnavailable("OPA authorization service returned invalid JSON.") from exc
+
+
+def normalize_opa_batch_result(data, features):
+    decisions = data.get("decisions")
+    if isinstance(decisions, dict):
+        return {feature: bool(decisions.get(feature, False)) for feature in features}
+
+    allowed_features = data.get("allowed_features")
+    if isinstance(allowed_features, list):
+        allowed = set(allowed_features)
+        return {feature: feature in allowed for feature in features}
+
+    if isinstance(data, dict) and all(isinstance(value, bool) for value in data.values()):
+        return {feature: bool(data.get(feature, False)) for feature in features}
+
+    raise AccessControlServiceUnavailable("OPA authorization service returned an unsupported payload.")
+
+
+def batch_authorize_features(farm, user, features, action):
+    result = request_opa_batch_authorization(farm, user, features, action)
+    return normalize_opa_batch_result(result, features)
+
+
+def authorize_feature(farm, user, feature_code, action):
+    return batch_authorize_features(farm, user, [feature_code], action).get(feature_code, False)
+
+
+def get_request_data(request):
+    if isinstance(request.data, QueryDict):
+        return request.data
+    if isinstance(request.data, dict):
+        return request.data
+    return {}

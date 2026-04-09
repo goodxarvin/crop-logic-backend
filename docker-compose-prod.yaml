@@ -33,6 +33,17 @@ services:
     networks:
       - crop_network
 
+  accsess:
+    image: openpolicyagent/opa:0.67.1-static
+    container_name: backend-accsess
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies/authz.rego"]
+    volumes:
+      - ../accsess/policies:/policies:ro
+    restart: unless-stopped
+    networks:
+      - crop_network
+
+
   web:
     container_name: backend-web
     build: .
@@ -46,11 +57,14 @@ services:
       QDRANT_HOST: ${QDRANT_HOST:-qdrant}
       QDRANT_PORT: ${QDRANT_PORT:-6333}
       SKIP_MIGRATE: "0"
+      ACCESS_CONTROL_AUTHZ_BASE_URL: http://croplogic-accsess-opa:8181
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      accsess:
+        condition: service_started
     restart: unless-stopped
     networks:
       - crop_network
@@ -68,11 +82,14 @@ services:
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP: "true"
       SKIP_MIGRATE: "1"
+      ACCESS_CONTROL_AUTHZ_BASE_URL: http://croplogic-accsess-opa:8181
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      accsess:
+        condition: service_started
     restart: unless-stopped
     networks:
       - crop_network

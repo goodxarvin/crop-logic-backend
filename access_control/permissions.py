@@ -1,60 +1,43 @@
-from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.permissions import BasePermission
 
 from farm_hub.models import FarmHub
 
-from .services import is_feature_enabled_for_farm
+from .services import AccessControlServiceUnavailable, authorize_feature, get_authorization_action, get_request_data
 
 
 class FeatureAccessPermission(BasePermission):
-    message = "You do not have access to this API."
+    message = "Access denied."
 
     def has_permission(self, request, view):
         feature_code = getattr(view, "required_feature_code", None)
         if not feature_code:
             return True
 
-        farm_uuid = self._extract_farm_uuid(request, view)
+        farm_uuid = (
+            view.kwargs.get("farm_uuid")
+            or request.query_params.get("farm_uuid")
+            or get_request_data(request).get("farm_uuid")
+        )
         if not farm_uuid:
-            return True
+            self.message = f"Access to feature `{feature_code}` is denied."
+            return False
 
-        farm = self._resolve_owned_farm(request, farm_uuid)
-        if farm is None:
-            return True
-
-        if is_feature_enabled_for_farm(farm, feature_code):
-            return True
-
-        self.message = f"Access to feature `{feature_code}` is denied."
-        return False
-
-    @staticmethod
-    def _extract_farm_uuid(request, view):
-        for key in ("farm_uuid", "farmUuid"):
-            farm_uuid = view.kwargs.get(key)
-            if farm_uuid:
-                return str(farm_uuid)
-
-        for key in ("farm_uuid", "farmUuid"):
-            farm_uuid = request.query_params.get(key)
-            if farm_uuid:
-                return farm_uuid
-
-        if isinstance(request.data, dict):
-            for key in ("farm_uuid", "farmUuid"):
-                farm_uuid = request.data.get(key)
-                if farm_uuid:
-                    return farm_uuid
-        return None
-
-    @staticmethod
-    def _resolve_owned_farm(request, farm_uuid):
         try:
-            return (
-                FarmHub.objects.select_related("access_profile")
-                .prefetch_related("products", "sensors")
-                .filter(farm_uuid=farm_uuid, owner=request.user)
-                .first()
-            )
-        except (ValueError, TypeError, DjangoValidationError):
-            return None
+            farm = FarmHub.objects.select_related("farm_type", "subscription_plan").prefetch_related(
+                "products",
+                "sensors",
+                "sensors__sensor_catalog",
+            ).get(farm_uuid=farm_uuid, owner=request.user)
+        except FarmHub.DoesNotExist:
+            self.message = f"Access to feature `{feature_code}` is denied."
+            return False
+
+        try:
+            allowed = authorize_feature(farm, request.user, feature_code, get_authorization_action(request.method))
+        except AccessControlServiceUnavailable as exc:
+            self.message = str(exc)
+            return False
+
+        if not allowed:
+            self.message = f"Access to feature `{feature_code}` is denied."
+        return allowed

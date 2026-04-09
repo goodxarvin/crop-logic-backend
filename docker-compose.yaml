@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - crop_network
 
   phpmyadmin:
     image: docker-mirror.liara.ir/phpmyadmin:latest
@@ -27,6 +29,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - crop_network
 
   redis:
     image: redis:7-alpine
@@ -42,7 +46,8 @@ services:
       - "6380:6379"
     volumes:
       - backend_redis_data:/data
-
+    networks:
+      - crop_network
 
   web:
     build:
@@ -69,12 +74,15 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       SKIP_MIGRATE: "0"
+      ACCESS_CONTROL_AUTHZ_BASE_URL: http://croplogic-accsess-opa:8181
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - crop_network
 
   celery:
     build:
@@ -98,14 +106,22 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP: "true"
       SKIP_MIGRATE: "1"
+      ACCESS_CONTROL_AUTHZ_BASE_URL: http://croplogic-accsess-opa:8181
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - crop_network
 
 volumes:
   backend_mysql_data:
   backend_redis_data:
   backend_qdrant_data:
+
+
+networks:
+  crop_network:
+    external: true
