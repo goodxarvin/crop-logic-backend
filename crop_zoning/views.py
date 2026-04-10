@@ -32,7 +32,7 @@ AREA_QUERY_PARAMETERS = [
         location=OpenApiParameter.QUERY,
         required=True,
         description="UUID مزرعه برای گرفتن يا ساخت آخرين پردازش محدوده همان مزرعه.",
-    ),
+        default="11111111-1111-1111-1111-111111111111"),
     OpenApiParameter(
         name="page",
         type=OpenApiTypes.INT,

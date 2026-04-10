@@ -1,0 +1,17 @@
+{
+  "status": "success",
+  "service": "ai",
+  "path": "/weather-forecast/card",
+  "result": {
+    "condition": "صاف",
+    "temperature": 24,
+    "unit": "°C",
+    "humidity": 45,
+    "windSpeed": 12,
+    "windUnit": "km/h",
+    "chartData": {
+      "labels": ["۶ صبح", "۹ صبح", "۱۲ ظهر", "۳ بعدازظهر", "۶ عصر", "۹ شب", "۱۲ شب"],
+      "series": [[18, 22, 26, 28, 25, 20, 18]]
+    }
+  }
+}

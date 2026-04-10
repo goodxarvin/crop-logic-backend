@@ -600,5 +600,26 @@
     "status_code": 200,
     "description": "Task status failure",
     "file": "json/mock_data/tasks/status/get_200_failure.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/pest-detection/risk-summary/",
+    "status_code": 200,
+    "description": "Pest and disease risk summary success",
+    "file": "json/ai/pest-detection/risk-summary/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/weather-forecast/card/",
+    "status_code": 200,
+    "description": "Farm weather card data",
+    "file": "json/ai/weather-forecast/card/get_200_success.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/yield-harvest/summary/",
+    "status_code": 200,
+    "description": "Yield prediction card, chart and harvest prediction card",
+    "file": "json/ai/yield-harvest/summary/get_200_success.json"
   }
 ]

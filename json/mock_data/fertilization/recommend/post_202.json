@@ -1,8 +1,0 @@
-{
-  "code": 202,
-  "msg": "تسک توصیه کودهی در صف قرار گرفت.",
-  "data": {
-    "task_id": "fert-task-123",
-    "status_url": "/api/fertilization/recommend/fert-task-123/status/"
-  }
-}

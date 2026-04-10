@@ -1,9 +1,0 @@
-{
-  "code": 400,
-  "msg": "داده نامعتبر.",
-  "data": {
-    "lat": [
-      "A valid number is required."
-    ]
-  }
-}

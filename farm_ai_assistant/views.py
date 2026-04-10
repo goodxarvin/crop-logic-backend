@@ -46,7 +46,7 @@ class ContextView(FarmAccessMixin, APIView):
     @extend_schema(
         tags=["Farm AI Assistant"],
         parameters=[
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantContextResponse", data=serializers.JSONField())},
     )
@@ -329,7 +329,7 @@ class ChatListCreateView(ConversationAccessMixin, APIView):
     @extend_schema(
         tags=["Farm AI Assistant"],
         parameters=[
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantConversationListResponse", data=ConversationSummarySerializer(many=True))},
     )
@@ -378,7 +378,7 @@ class ChatMessagesView(ConversationAccessMixin, APIView):
         tags=["Farm AI Assistant"],
         parameters=[
             OpenApiParameter(name="conversation_id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantMessageListResponse", data=ConversationMessagesSerializer())},
     )
@@ -407,7 +407,7 @@ class ChatDetailView(ConversationAccessMixin, APIView):
         tags=["Farm AI Assistant"],
         parameters=[
             OpenApiParameter(name="conversation_id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantConversationDeleteResponse", data=ConversationDeleteSerializer())},
     )
@@ -578,7 +578,7 @@ class ChatTaskStatusView(ConversationAccessMixin, APIView):
         tags=["Farm AI Assistant"],
         parameters=[
             OpenApiParameter(name="task_id", type=OpenApiTypes.STR, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantChatTaskStatusResponse", data=ChatTaskStatusDataSerializer())},
     )

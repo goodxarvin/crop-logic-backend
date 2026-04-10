@@ -1,8 +1,0 @@
-{
-  "code": 202,
-  "msg": "تسک توصیه آبیاری در صف قرار گرفت.",
-  "data": {
-    "task_id": "irr-task-123",
-    "status_url": "/api/irrigation/recommend/irr-task-123/status/"
-  }
-}

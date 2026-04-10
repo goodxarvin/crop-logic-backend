@@ -53,7 +53,7 @@ class FarmAccessMixin:
     get=extend_schema(
         tags=["Farm Dashboard"],
         parameters=[
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: code_response("FarmDashboardConfigGetResponse", data=FarmDashboardConfigSerializer())},
     ),
@@ -109,7 +109,7 @@ class FarmDashboardConfigView(FarmAccessMixin, APIView):
     get=extend_schema(
         tags=["Farm Dashboard"],
         parameters=[
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: code_response("FarmDashboardCardsResponse", data=serializers.JSONField())},
     ),

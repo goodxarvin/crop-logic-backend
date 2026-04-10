@@ -18,8 +18,12 @@ urlpatterns = [
     path("api/plant-simulator/", include("plant_simulator.urls")),
     path("api/pest-detection/", include("pest_detection.urls")),
     path("api/irrigation-recommendation/", include("irrigation_recommendation.urls")),
+    path("api/weather-forecast/", include("weather_forecast.urls")),
+    path("api/yield-harvest/", include("yield_harvest.urls")),
+    path("api/economic-overview/", include("economic_overview.urls")),
     path("api/fertilization-recommendation/", include("fertilization_recommendation.urls")),
     path("api/farm-ai-assistant/", include("farm_ai_assistant.urls")),
     path("api/notifications/", include("notifications.urls")),
+    path("api/farm-alerts/", include("farm_alerts.urls")),
     path("api/sensor-external-api/", include("sensor_external_api.urls")),
 ]

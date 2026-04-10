@@ -3,7 +3,7 @@ from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 
 from config.swagger import code_response
 from .models import FarmHub, FarmType, Product
@@ -105,6 +105,9 @@ class FarmTypeProductsView(FarmHubBaseView):
 class FarmDetailView(FarmHubBaseView):
     @extend_schema(
         tags=["Farm Hub"],
+        parameters=[
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, default="11111111-1111-1111-1111-111111111111"),
+        ],
         responses={
             200: code_response("FarmDetailResponse", data=FarmHubSerializer()),
             404: code_response("FarmNotFoundResponse"),
@@ -119,6 +122,9 @@ class FarmDetailView(FarmHubBaseView):
 
     @extend_schema(
         tags=["Farm Hub"],
+        parameters=[
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, default="11111111-1111-1111-1111-111111111111"),
+        ],
         request=FarmHubCreateSerializer,
         responses={
             200: code_response("FarmUpdateResponse", data=FarmHubSerializer()),
@@ -138,6 +144,9 @@ class FarmDetailView(FarmHubBaseView):
 
     @extend_schema(
         tags=["Farm Hub"],
+        parameters=[
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, default="11111111-1111-1111-1111-111111111111"),
+        ],
         responses={
             200: code_response("FarmDeleteResponse"),
             404: code_response("FarmDeleteNotFoundResponse"),

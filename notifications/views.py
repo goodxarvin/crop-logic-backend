@@ -14,13 +14,13 @@ from .services import  long_poll_notifications, mark_notifications_as_read
 
 
 class NotificationLongPollQuerySerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField()
+    farm_uuid = serializers.UUIDField(default="11111111-1111-1111-1111-111111111111")
     since_id = serializers.IntegerField(required=False, min_value=1)
     timeout = serializers.IntegerField(required=False, min_value=0, max_value=60)
 
 
 class NotificationListQuerySerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField()
+    farm_uuid = serializers.UUIDField(default="11111111-1111-1111-1111-111111111111")
     page = serializers.IntegerField(required=False, min_value=1)
     page_size = serializers.IntegerField(required=False, min_value=1, max_value=100)
 
@@ -32,7 +32,7 @@ class NotificationPagination(PageNumberPagination):
 
 
 class NotificationMarkReadSerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField()
+    farm_uuid = serializers.UUIDField(default="11111111-1111-1111-1111-111111111111")
     slice_id = serializers.IntegerField(min_value=1)
 
 
@@ -158,4 +158,3 @@ class NotificationMarkReadView(APIView):
             {"code": 200, "msg": "success", "marked_count": marked_count},
             status=status.HTTP_200_OK,
         )
-

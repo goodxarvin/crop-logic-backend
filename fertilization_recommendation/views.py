@@ -36,7 +36,7 @@ class ConfigView(FarmAccessMixin, APIView):
     @extend_schema(
         tags=["Fertilization Recommendation"],
         parameters=[
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FertilizationConfigResponse", data=serializers.JSONField())},
     )
@@ -85,7 +85,7 @@ class RecommendTaskStatusView(FarmAccessMixin, APIView):
         tags=["Fertilization Recommendation"],
         parameters=[
             OpenApiParameter(name="task_id", type=OpenApiTypes.STR, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FertilizationRecommendTaskStatusResponse", data=FertilizationTaskStatusDataSerializer())},
     )

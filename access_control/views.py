@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 
 from config.swagger import code_response
 from farm_hub.models import FarmHub
@@ -16,6 +16,9 @@ class FarmFeatureAuthorizationView(APIView):
 
     @extend_schema(
         tags=["Access Control"],
+        parameters=[
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, default="11111111-1111-1111-1111-111111111111"),
+        ],
         request=FeatureAuthorizationRequestSerializer,
         responses={200: code_response("FarmFeatureAuthorizationResponse")},
     )
