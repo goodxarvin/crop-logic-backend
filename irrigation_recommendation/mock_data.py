@@ -28,3 +28,17 @@ RECOMMEND_RESPONSE_DATA = {
         "warning": "Avoid irrigation during midday hours in the coming week due to forecasted high temperatures.",
     },
 }
+
+WATER_NEED_PREDICTION = {
+    "totalNext7Days": 3290,
+    "unit": "m3",
+    "categories": ["روز 1", "روز 2", "روز 3", "روز 4", "روز 5", "روز 6", "روز 7"],
+    "series": [{"name": "نیاز آبی", "data": [420, 450, 480, 460, 490, 510, 480]}],
+}
+
+IRRIGATION_DASHBOARD_RECOMMENDATION = {
+    "title": "آبیاری: 05:00 - 07:00",
+    "subtitle": "4 نوبت در هفته، 45 دقیقه برای هر نوبت. رطوبت هدف 72%.",
+    "avatarIcon": "tabler-droplet",
+    "avatarColor": "primary",
+}

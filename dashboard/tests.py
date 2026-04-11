@@ -1,5 +1,4 @@
 from copy import deepcopy
-from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -136,23 +135,24 @@ class FarmDashboardConfigViewTests(DashboardBaseTestCase):
 
 
 class FarmDashboardCardsViewTests(DashboardBaseTestCase):
-    @patch("dashboard.views.external_api_request")
-    def test_get_forwards_farm_uuid_to_external_api(self, mock_external_api_request):
-        mock_external_api_request.return_value.data = {"status": "success", "data": {}}
-        mock_external_api_request.return_value.status_code = 200
-
+    def test_get_returns_locally_aggregated_cards(self):
         request = self.factory.get(f"/api/farm-dashboard/?farm_uuid={self.farm.farm_uuid}")
         force_authenticate(request, user=self.user)
 
         response = FarmDashboardCardsView.as_view()(request)
 
         self.assertEqual(response.status_code, 200)
-        mock_external_api_request.assert_called_once_with(
-            "ai",
-            "/dashboard-data/status",
-            method="GET",
-            query={"farm_uuid": str(self.farm.farm_uuid)},
-        )
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(response.data["msg"], "OK")
+        self.assertIn("farmWeatherCard", response.data["data"])
+        self.assertIn("farmAlertsTracker", response.data["data"])
+        self.assertIn("yieldPredictionChart", response.data["data"])
+        self.assertIn("ndviHealthCard", response.data["data"])
+        self.assertIn("sensorRadarChart", response.data["data"])
+        self.assertIn("soilMoistureHeatmap", response.data["data"])
+        self.assertIn("economicOverview", response.data["data"])
+        self.assertEqual(response.data["data"]["farmOverviewKpis"]["kpis"][0]["id"], "farm_health_score")
+        self.assertEqual(response.data["data"]["farmOverviewKpis"]["kpis"][2]["id"], "avg_soil_moisture")
 
     def test_get_requires_farm_uuid(self):
         request = self.factory.get("/api/farm-dashboard/")

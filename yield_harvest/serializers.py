@@ -1,5 +1,47 @@
 from rest_framework import serializers
 
+from .mock_data import CONFIG_SLIDERS_ONLY
+
+
+START_ENVIRONMENT_KEYS = [
+    item["key"]
+    for item in CONFIG_SLIDERS_ONLY["sliders"]
+    if item["key"] != "growth_speed"
+]
+
+
+def _defaults_from_sliders():
+    return {
+        item["key"]: item["default_value"]
+        for item in CONFIG_SLIDERS_ONLY["sliders"]
+    }
+
+
+START_REQUEST_EXAMPLE = {
+    "environment": {
+        key: value for key, value in _defaults_from_sliders().items() if key != "growth_speed"
+    },
+    "growth_speed": _defaults_from_sliders().get("growth_speed", 1.5),
+}
+
+
+START_REQUEST_EXAMPLE_STATIC = {
+    "environment": {
+        "light": 75,
+        "water": 65,
+        "soil_ph": 6.5,
+    },
+    "growth_speed": 1.5,
+}
+
+
+def success_response():
+    return {"status": "success"}
+
+
+def success_with_data(data):
+    return {"status": "success", "data": data}
+
 
 class YieldPredictionCardSerializer(serializers.Serializer):
     id = serializers.CharField(required=False, allow_blank=True)

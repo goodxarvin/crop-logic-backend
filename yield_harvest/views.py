@@ -1,12 +1,8 @@
 """
-Yield & Harvest Prediction API views.
-Response format: {"status": "success", "data": <payload>}. HTTP 200 only.
-Fetches all three prediction payloads (yield card, yield chart, harvest card)
-from the AI external adapter in a single call and persists a log entry
-if a valid farm_uuid is provided.
+Yield & Harvest Prediction and Plant Simulator API views.
 """
 
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.types import OpenApiTypes
@@ -15,8 +11,67 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from config.swagger import status_response
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
+from .mock_data import CONFIG_SLIDERS_ONLY, START_RESPONSE_DATA, STATE_RESPONSE_DATA
 from .models import YieldHarvestPredictionLog
-from .serializers import YieldHarvestSummarySerializer
+from .serializers import YieldHarvestSummarySerializer, success_response, success_with_data
+
+
+class ConfigView(APIView):
+    @extend_schema(
+        tags=["Plant Simulator"],
+        responses={200: status_response("PlantSimulatorConfigResponse", data=serializers.JSONField())},
+    )
+    def get(self, request):
+        return Response(success_with_data(CONFIG_SLIDERS_ONLY), status=status.HTTP_200_OK)
+
+
+class StateView(APIView):
+    @extend_schema(
+        tags=["Plant Simulator"],
+        responses={200: status_response("PlantSimulatorStateResponse", data=serializers.JSONField())},
+    )
+    def get(self, request):
+        return Response(success_with_data(STATE_RESPONSE_DATA), status=status.HTTP_200_OK)
+
+
+class StartView(APIView):
+    @extend_schema(
+        tags=["Plant Simulator"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PlantSimulatorStartResponse", data=serializers.JSONField())},
+    )
+    def post(self, request):
+        return Response(success_with_data(START_RESPONSE_DATA), status=status.HTTP_200_OK)
+
+
+class StopView(APIView):
+    @extend_schema(
+        tags=["Plant Simulator"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PlantSimulatorStopResponse")},
+    )
+    def post(self, request):
+        return Response(success_response(), status=status.HTTP_200_OK)
+
+
+class ResetView(APIView):
+    @extend_schema(
+        tags=["Plant Simulator"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PlantSimulatorResetResponse")},
+    )
+    def post(self, request):
+        return Response(success_response(), status=status.HTTP_200_OK)
+
+
+class EnvironmentView(APIView):
+    @extend_schema(
+        tags=["Plant Simulator"],
+        request=OpenApiTypes.OBJECT,
+        responses={200: status_response("PlantSimulatorEnvironmentResponse")},
+    )
+    def patch(self, request):
+        return Response(success_response(), status=status.HTTP_200_OK)
 
 
 class YieldHarvestSummaryView(APIView):

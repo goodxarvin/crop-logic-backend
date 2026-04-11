@@ -67,26 +67,6 @@ def reset_config():
 FARM_OVERVIEW_KPIS = {
     "kpis": [
         {
-            "id": "farm_health_score",
-            "title": "امتیاز سلامت مزرعه",
-            "subtitle": "تحلیل هوشمند",
-            "stats": "87%",
-            "avatarColor": "success",
-            "avatarIcon": "tabler-heartbeat",
-            "chipText": "خوب",
-            "chipColor": "success",
-        },
-        {
-            "id": "water_stress_index",
-            "title": "شاخص تنش آبی",
-            "subtitle": "فعلی",
-            "stats": "12%",
-            "avatarColor": "info",
-            "avatarIcon": "tabler-droplet",
-            "chipText": "پایین",
-            "chipColor": "success",
-        },
-        {
             "id": "disease_risk",
             "title": "ریسک بیماری",
             "subtitle": "۷ روز اخیر",
@@ -94,16 +74,6 @@ FARM_OVERVIEW_KPIS = {
             "avatarColor": "success",
             "avatarIcon": "tabler-bug",
             "chipText": "5%",
-            "chipColor": "success",
-        },
-        {
-            "id": "avg_soil_moisture",
-            "title": "میانگین رطوبت خاک",
-            "subtitle": "کل مزرعه",
-            "stats": "65%",
-            "avatarColor": "primary",
-            "avatarIcon": "tabler-plant-2",
-            "chipText": "بهینه",
             "chipColor": "success",
         },
         {
@@ -231,47 +201,6 @@ SENSOR_VALUES_LIST = {
     ]
 }
 
-# 4.5 sensorRadarChart
-SENSOR_RADAR_CHART = {
-    "labels": ["دما", "رطوبت", "pH", "هدایت الکتریکی", "نور", "باد"],
-    "series": [
-        {"name": "امروز", "data": [75, 65, 80, 70, 85, 60]},
-        {"name": "ایده‌آل", "data": [80, 70, 75, 75, 90, 50]},
-    ],
-}
-
-# 4.6 sensorComparisonChart
-SENSOR_COMPARISON_CHART = {
-    "currentValue": 48,
-    "vsLastWeek": "+5%",
-    "vsLastWeekValue": 5,
-    "categories": ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه", "شنبه", "یکشنبه"],
-    "series": [
-        {"name": "امروز", "data": [42, 45, 48, 52, 50, 48, 46]},
-        {"name": "هفته قبل", "data": [38, 40, 42, 45, 43, 40, 38]},
-    ],
-}
-
-# 4.7 anomalyDetectionCard
-ANOMALY_DETECTION_CARD = {
-    "anomalies": [
-        {
-            "sensor": "رطوبت خاک زون ۳",
-            "value": "38%",
-            "expected": "45-65%",
-            "deviation": "-12%",
-            "severity": "warning",
-        },
-        {
-            "sensor": "pH بخش ۲",
-            "value": "5.2",
-            "expected": "6.0-7.0",
-            "deviation": "-0.8",
-            "severity": "error",
-        },
-    ]
-}
-
 # 4.8 farmAlertsTimeline
 FARM_ALERTS_TIMELINE = {
     "alerts": [
@@ -342,47 +271,6 @@ YIELD_PREDICTION_CHART = {
             "avatarColor": "success",
             "avatarIcon": "tabler-calendar",
         },
-    ],
-}
-
-# 4.12 soilMoistureHeatmap
-SOIL_MOISTURE_HEATMAP = {
-    "zones": ["زون ۱", "زون ۲", "زون ۳", "زون ۴", "زون ۵", "زون ۶", "زون ۷"],
-    "hours": ["۶ ص", "۸ ص", "۱۰ ص", "۱۲ ظ", "۱۴ ع", "۱۶ ع", "۱۸ ع"],
-    "series": [
-        {
-            "name": "زون ۱",
-            "data": [
-                {"x": "۶ ص", "y": 52},
-                {"x": "۸ ص", "y": 48},
-                {"x": "۱۰ ص", "y": 55},
-                {"x": "۱۲ ظ", "y": 60},
-                {"x": "۱۴ ع", "y": 58},
-                {"x": "۱۶ ع", "y": 54},
-                {"x": "۱۸ ع", "y": 50},
-            ],
-        },
-        {
-            "name": "زون ۲",
-            "data": [
-                {"x": "۶ ص", "y": 45},
-                {"x": "۸ ص", "y": 42},
-                {"x": "۱۰ ص", "y": 48},
-                {"x": "۱۲ ظ", "y": 52},
-                {"x": "۱۴ ع", "y": 50},
-                {"x": "۱۶ ع", "y": 47},
-                {"x": "۱۸ ع", "y": 44},
-            ],
-        },
-    ],
-}
-
-# 4.13 ndviHealthCard
-NDVI_HEALTH_CARD = {
-    "ndviIndex": 0.78,
-    "healthData": [
-        {"title": "تنش نیتروژن", "value": "پایین", "color": "success", "icon": "tabler-leaf"},
-        {"title": "سلامت محصول", "value": "خوب", "color": "success", "icon": "tabler-plant"},
     ],
 }
 
@@ -461,15 +349,15 @@ ALL_CARDS = {
     "farmWeatherCard": FARM_WEATHER_CARD, # هروز
     "farmAlertsTracker": FARM_ALERTS_TRACKER, #هروز
     "sensorValuesList": SENSOR_VALUES_LIST,#هروز
-    "sensorRadarChart": SENSOR_RADAR_CHART,
-    "sensorComparisonChart": SENSOR_COMPARISON_CHART,
-    "anomalyDetectionCard": ANOMALY_DETECTION_CARD,
+    "sensorRadarChart": {},
+    "sensorComparisonChart": {},
+    "anomalyDetectionCard": {},
     "farmAlertsTimeline": FARM_ALERTS_TIMELINE,
     "waterNeedPrediction": WATER_NEED_PREDICTION,
     "harvestPredictionCard": HARVEST_PREDICTION_CARD,
     "yieldPredictionChart": YIELD_PREDICTION_CHART,
-    "soilMoistureHeatmap": SOIL_MOISTURE_HEATMAP,
-    "ndviHealthCard": NDVI_HEALTH_CARD,
+    "soilMoistureHeatmap": {},
+    "ndviHealthCard": {},
     "recommendationsList": RECOMMENDATIONS_LIST, # این باید حتما از recommendetion ها گرفته بشه 
     "economicOverview": ECONOMIC_OVERVIEW,
 }

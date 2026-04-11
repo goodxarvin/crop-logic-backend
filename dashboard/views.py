@@ -10,8 +10,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 
 from config.swagger import code_response
-from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
+from .services import get_farm_dashboard_cards
 from .mock_data import DEFAULT_CONFIG
 from .models import FarmDashboardConfig
 from .serializers import FarmDashboardConfigPatchSerializer, FarmDashboardConfigSerializer
@@ -117,7 +117,7 @@ class FarmDashboardConfigView(FarmAccessMixin, APIView):
 class FarmDashboardCardsView(FarmAccessMixin, APIView):
     """
     Farm dashboard cards endpoint: GET.
-    Requires farm_uuid and forwards it to the external AI service.
+    Requires farm_uuid and assembles local dashboard services.
     """
 
     permission_classes = [IsAuthenticated]
@@ -125,10 +125,7 @@ class FarmDashboardCardsView(FarmAccessMixin, APIView):
 
     def get(self, request):
         farm = self._get_farm(request, request.query_params.get("farm_uuid"))
-        adapter_response = external_api_request(
-            "ai",
-            "/dashboard-data/status",
-            method="GET",
-            query={"farm_uuid": str(farm.farm_uuid)},
+        return Response(
+            {"code": 200, "msg": "OK", "data": get_farm_dashboard_cards(farm)},
+            status=status.HTTP_200_OK,
         )
-        return Response(adapter_response.data, status=adapter_response.status_code)

@@ -35,3 +35,10 @@ RECOMMEND_RESPONSE_DATA = {
         "reasoning": "Your loamy soil with medium organic matter (2.5%) provides good nutrient retention. Water EC of 1.2 dS/m indicates low salinity—suitable for most crops. At the flowering stage, increased phosphorus supports bloom development. We recommend a balanced NPK to maintain nitrogen for vegetative growth while boosting phosphorous for flowering.",
     },
 }
+
+FERTILIZATION_DASHBOARD_RECOMMENDATION = {
+    "title": "کود: 20-20-20 (NPK)",
+    "subtitle": "150 kg/ha، با روش Foliar spray + soil broadcast و هر 14 روز.",
+    "avatarIcon": "tabler-leaf",
+    "avatarColor": "success",
+}
