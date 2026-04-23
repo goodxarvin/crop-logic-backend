@@ -34,10 +34,20 @@ class FarmAccessMixin:
     def _get_farm(request, farm_uuid):
         if not farm_uuid:
             raise serializers.ValidationError({"farm_uuid": ["This field is required."]})
+        return FarmAccessMixin._get_optional_farm(request, farm_uuid)
+
+    @staticmethod
+    def _get_optional_farm(request, farm_uuid):
+        if not farm_uuid:
+            return None
         try:
             return FarmHub.objects.get(farm_uuid=farm_uuid, owner=request.user)
         except FarmHub.DoesNotExist as exc:
             raise Http404("Farm not found") from exc
+
+    @staticmethod
+    def _farm_uuid_or_none(farm):
+        return str(farm.farm_uuid) if farm else None
 
 
 class ContextView(FarmAccessMixin, APIView):
@@ -46,14 +56,14 @@ class ContextView(FarmAccessMixin, APIView):
     @extend_schema(
         tags=["Farm AI Assistant"],
         parameters=[
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=False, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantContextResponse", data=serializers.JSONField())},
     )
     def get(self, request):
-        farm = self._get_farm(request, request.query_params.get("farm_uuid"))
+        farm = self._get_optional_farm(request, request.query_params.get("farm_uuid"))
         data = deepcopy(CONTEXT_RESPONSE_DATA)
-        data["farm_uuid"] = str(farm.farm_uuid)
+        data["farm_uuid"] = self._farm_uuid_or_none(farm)
         return Response(
             {"status": "success", "data": data},
             status=status.HTTP_200_OK,
@@ -66,6 +76,8 @@ class ConversationAccessMixin(FarmAccessMixin):
         filters = {"uuid": conversation_id, "owner": request.user}
         if farm_uuid:
             filters["farm__farm_uuid"] = farm_uuid
+        else:
+            filters["farm__isnull"] = True
         try:
             return Conversation.objects.select_related("farm").get(**filters)
         except Conversation.DoesNotExist as exc:
@@ -110,17 +122,21 @@ class ConversationAccessMixin(FarmAccessMixin):
     def _build_mock_assistant_payload(self, conversation):
         payload = deepcopy(CHAT_RESPONSE_DATA)
         payload["conversation_id"] = str(conversation.uuid)
-        payload["farm_uuid"] = str(conversation.farm.farm_uuid)
+        payload["farm_uuid"] = self._farm_uuid_or_none(conversation.farm)
         return payload
 
     def _get_or_create_conversation(self, request, validated):
         conversation_id = validated.get("conversation_id")
         farm_context = validated.get("farm_context")
         title = validated.get("title", "").strip()
-        farm = self._get_farm(request, validated.get("farm_uuid"))
+        farm = self._get_optional_farm(request, validated.get("farm_uuid"))
 
         if conversation_id:
-            conversation = self._get_conversation(request, conversation_id, farm.farm_uuid)
+            conversation = self._get_conversation(
+                request,
+                conversation_id,
+                farm.farm_uuid if farm else None,
+            )
             updated_fields = []
             if farm_context is not None:
                 conversation.farm_context = farm_context
@@ -143,13 +159,14 @@ class ConversationAccessMixin(FarmAccessMixin):
     @staticmethod
     def _build_adapter_payload(request, validated, conversation):
         payload = {
-            "farm_uuid": str(conversation.farm.farm_uuid),
             "content": validated.get("content", ""),
             "query": validated.get("content", ""),
             "images": validated.get("images", []),
             "conversation_id": str(conversation.uuid),
             "user_id": request.user.id,
         }
+        if conversation.farm:
+            payload["farm_uuid"] = str(conversation.farm.farm_uuid)
         if "farm_context" in validated:
             payload["farm_context"] = validated.get("farm_context") or {}
         if "title" in validated:
@@ -177,7 +194,7 @@ class ConversationAccessMixin(FarmAccessMixin):
         return {
             "message_id": "",
             "conversation_id": str(conversation.uuid),
-            "farm_uuid": str(conversation.farm.farm_uuid),
+            "farm_uuid": self._farm_uuid_or_none(conversation.farm),
             "content": content,
             "sections": sections,
         }
@@ -197,7 +214,7 @@ class ConversationAccessMixin(FarmAccessMixin):
             "status_url": str(payload_source.get("status_url") or ""),
             "conversation_id": str(conversation.uuid),
             "message_id": str(message_id),
-            "farm_uuid": str(conversation.farm.farm_uuid),
+            "farm_uuid": ConversationAccessMixin._farm_uuid_or_none(conversation.farm),
         }
 
     def _extract_task_status_payload(self, adapter_data, task_id, conversation=None, farm_uuid=None):
@@ -214,8 +231,8 @@ class ConversationAccessMixin(FarmAccessMixin):
         }
         if conversation:
             task_status_payload["conversation_id"] = str(conversation.uuid)
-            task_status_payload["farm_uuid"] = str(conversation.farm.farm_uuid)
-        elif farm_uuid:
+            task_status_payload["farm_uuid"] = self._farm_uuid_or_none(conversation.farm)
+        elif farm_uuid is not None:
             task_status_payload["farm_uuid"] = str(farm_uuid)
 
         progress = payload_source.get("progress")
@@ -263,7 +280,7 @@ class ConversationAccessMixin(FarmAccessMixin):
         return {
             "message_id": str(message.uuid),
             "conversation_id": str(message.conversation.uuid),
-            "farm_uuid": str(message.farm.farm_uuid),
+            "farm_uuid": ConversationAccessMixin._farm_uuid_or_none(message.farm),
             "role": message.role,
             "content": message.content,
             "sections": ConversationAccessMixin._normalize_sections(sections),
@@ -273,14 +290,18 @@ class ConversationAccessMixin(FarmAccessMixin):
 
     @staticmethod
     def _find_user_message_for_task(request, task_id, farm_uuid):
+        filters = {
+            "conversation__owner": request.user,
+            "role": Message.ROLE_USER,
+            "raw_response__task_id": task_id,
+        }
+        if farm_uuid:
+            filters["farm__farm_uuid"] = farm_uuid
+        else:
+            filters["farm__isnull"] = True
         return (
             Message.objects.select_related("conversation", "farm")
-            .filter(
-                conversation__owner=request.user,
-                farm__farm_uuid=farm_uuid,
-                role=Message.ROLE_USER,
-                raw_response__task_id=task_id,
-            )
+            .filter(**filters)
             .order_by("-created_at")
             .first()
         )
@@ -329,12 +350,12 @@ class ChatListCreateView(ConversationAccessMixin, APIView):
     @extend_schema(
         tags=["Farm AI Assistant"],
         parameters=[
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=False, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantConversationListResponse", data=ConversationSummarySerializer(many=True))},
     )
     def get(self, request):
-        farm = self._get_farm(request, request.query_params.get("farm_uuid"))
+        farm = self._get_optional_farm(request, request.query_params.get("farm_uuid"))
         conversations = (
             Conversation.objects.filter(owner=request.user, farm=farm)
             .annotate(message_count=Count("messages"))
@@ -353,7 +374,7 @@ class ChatListCreateView(ConversationAccessMixin, APIView):
         serializer.is_valid(raise_exception=True)
 
         validated = serializer.validated_data
-        farm = self._get_farm(request, validated.get("farm_uuid"))
+        farm = self._get_optional_farm(request, validated.get("farm_uuid"))
         conversation = Conversation.objects.create(
             owner=request.user,
             farm=farm,
@@ -378,13 +399,13 @@ class ChatMessagesView(ConversationAccessMixin, APIView):
         tags=["Farm AI Assistant"],
         parameters=[
             OpenApiParameter(name="conversation_id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=False, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantMessageListResponse", data=ConversationMessagesSerializer())},
     )
     def get(self, request, conversation_id):
-        farm = self._get_farm(request, request.query_params.get("farm_uuid"))
-        conversation = self._get_conversation(request, conversation_id, farm.farm_uuid)
+        farm = self._get_optional_farm(request, request.query_params.get("farm_uuid"))
+        conversation = self._get_conversation(request, conversation_id, farm.farm_uuid if farm else None)
         messages = conversation.messages.select_related("farm").all()
         serialized_messages = [self._serialize_chat_message(message) for message in messages]
         return Response(
@@ -392,7 +413,7 @@ class ChatMessagesView(ConversationAccessMixin, APIView):
                 "status": "success",
                 "data": {
                     "conversation_id": str(conversation.uuid),
-                    "farm_uuid": str(farm.farm_uuid),
+                    "farm_uuid": self._farm_uuid_or_none(farm),
                     "messages": serialized_messages,
                 },
             },
@@ -407,15 +428,15 @@ class ChatDetailView(ConversationAccessMixin, APIView):
         tags=["Farm AI Assistant"],
         parameters=[
             OpenApiParameter(name="conversation_id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=False, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantConversationDeleteResponse", data=ConversationDeleteSerializer())},
     )
     def delete(self, request, conversation_id):
-        farm = self._get_farm(request, request.query_params.get("farm_uuid"))
-        conversation = self._get_conversation(request, conversation_id, farm.farm_uuid)
+        farm = self._get_optional_farm(request, request.query_params.get("farm_uuid"))
+        conversation = self._get_conversation(request, conversation_id, farm.farm_uuid if farm else None)
         deleted_conversation_id = str(conversation.uuid)
-        deleted_farm_uuid = str(conversation.farm.farm_uuid)
+        deleted_farm_uuid = self._farm_uuid_or_none(conversation.farm)
         conversation.delete()
         return Response(
             {
@@ -450,7 +471,7 @@ class ChatView(ConversationAccessMixin, APIView):
             role=Message.ROLE_USER,
             content=validated.get("content", ""),
             images=validated.get("images", []),
-            raw_response={"farm_uuid": str(conversation.farm.farm_uuid)},
+            raw_response={"farm_uuid": self._farm_uuid_or_none(conversation.farm)},
         )
 
         adapter_payload = self._build_adapter_payload(request, validated, conversation)
@@ -522,7 +543,7 @@ class ChatTaskCreateView(ConversationAccessMixin, APIView):
             role=Message.ROLE_USER,
             content=validated.get("content", ""),
             images=validated.get("images", []),
-            raw_response={"farm_uuid": str(conversation.farm.farm_uuid)},
+            raw_response={"farm_uuid": self._farm_uuid_or_none(conversation.farm)},
         )
 
         adapter_payload = self._build_adapter_payload(request, validated, conversation)
@@ -578,18 +599,21 @@ class ChatTaskStatusView(ConversationAccessMixin, APIView):
         tags=["Farm AI Assistant"],
         parameters=[
             OpenApiParameter(name="task_id", type=OpenApiTypes.STR, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
+            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=False, default="11111111-1111-1111-1111-111111111111"),
         ],
         responses={200: status_response("FarmAiAssistantChatTaskStatusResponse", data=ChatTaskStatusDataSerializer())},
     )
     def get(self, request, task_id):
-        farm = self._get_farm(request, request.query_params.get("farm_uuid"))
+        farm = self._get_optional_farm(request, request.query_params.get("farm_uuid"))
         try:
+            query = {}
+            if farm:
+                query["farm_uuid"] = str(farm.farm_uuid)
             adapter_response = external_api_request(
                 "ai",
                 f"/tasks/{task_id}/status",
                 method="GET",
-                query={"farm_uuid": str(farm.farm_uuid)},
+                query=query,
             )
         except ExternalAPIRequestError:
             return Response(
@@ -611,13 +635,14 @@ class ChatTaskStatusView(ConversationAccessMixin, APIView):
                 status=adapter_response.status_code,
             )
 
-        user_message = self._find_user_message_for_task(request, task_id, farm.farm_uuid)
+        farm_uuid = farm.farm_uuid if farm else None
+        user_message = self._find_user_message_for_task(request, task_id, farm_uuid)
         conversation = user_message.conversation if user_message else None
         task_status_payload = self._extract_task_status_payload(
             adapter_response.data,
             task_id,
             conversation=conversation,
-            farm_uuid=farm.farm_uuid,
+            farm_uuid=farm_uuid,
         )
 
         result = self._extract_structured_task_result(adapter_response.data)
