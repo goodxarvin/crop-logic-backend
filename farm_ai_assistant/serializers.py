@@ -12,6 +12,8 @@ class ChatSectionSerializer(serializers.Serializer):
     frequency = serializers.CharField(required=False, allow_blank=True)
     amount = serializers.CharField(required=False, allow_blank=True)
     timing = serializers.CharField(required=False, allow_blank=True)
+    primaryAction = serializers.CharField(required=False, allow_blank=True)
+    validityPeriod = serializers.CharField(required=False, allow_blank=True)
     expandableExplanation = serializers.CharField(required=False, allow_blank=True)
 
 
@@ -57,40 +59,42 @@ class ConversationDeleteSerializer(serializers.Serializer):
     farm_uuid = serializers.UUIDField(read_only=True, allow_null=True)
 
 
-class ChatTaskSubmitDataSerializer(serializers.Serializer):
-    task_id = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.CharField(required=False, allow_blank=True)
-    status_url = serializers.CharField(required=False, allow_blank=True)
-    conversation_id = serializers.UUIDField(read_only=True)
-    message_id = serializers.UUIDField(read_only=True)
-    farm_uuid = serializers.UUIDField(read_only=True, allow_null=True)
-
-
-class ChatTaskStatusDataSerializer(serializers.Serializer):
-    task_id = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.CharField(required=False, allow_blank=True)
-    conversation_id = serializers.UUIDField(read_only=True)
-    farm_uuid = serializers.UUIDField(read_only=True, allow_null=True)
-    progress = serializers.JSONField(required=False)
-    result = serializers.JSONField(required=False)
-    error = serializers.CharField(required=False, allow_blank=True)
-
-
 class ChatPostSerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField(required=False, allow_null=True)
-    content = serializers.CharField(required=False, allow_blank=True, default="")
+    farm_uuid = serializers.UUIDField(required=True)
+    query = serializers.CharField(required=False, allow_blank=True, default="")
+    history = serializers.JSONField(required=False)
+    image_urls = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list,
+    )
     images = serializers.ListField(
         child=serializers.CharField(),
         required=False,
         default=list,
     )
     conversation_id = serializers.UUIDField(required=False)
-    title = serializers.CharField(required=False, allow_blank=True, max_length=255)
-    farm_context = serializers.JSONField(required=False)
 
     def validate(self, attrs):
-        content = attrs.get("content", "").strip()
+        query = (attrs.get("query") or "").strip()
+        image_urls = attrs.get("image_urls") or []
         images = attrs.get("images") or []
-        if not content and not images:
-            raise serializers.ValidationError("Either content or images is required.")
+        history = attrs.get("history", [])
+
+        if isinstance(history, str):
+            try:
+                history = serializers.JSONField().to_internal_value(history)
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError({"history": exc.detail}) from exc
+
+        if history in (None, ""):
+            history = []
+        if not isinstance(history, list):
+            raise serializers.ValidationError({"history": ["History must be an array or a valid JSON array string."]})
+
+        if not query and not image_urls and not images:
+            raise serializers.ValidationError({"query": ["This field may not be blank unless an image is sent."]})
+
+        attrs["query"] = query
+        attrs["history"] = history
         return attrs

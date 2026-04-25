@@ -1,10 +1,12 @@
 """Farm AI Assistant API views."""
 
+import json
 from copy import deepcopy
 
 from django.db.models import Count
 from django.http import Http404
 from rest_framework import serializers, status
+from rest_framework.exceptions import ParseError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,13 +17,11 @@ from config.swagger import status_response
 from external_api_adapter import request as external_api_request
 from external_api_adapter.exceptions import ExternalAPIRequestError
 from farm_hub.models import FarmHub
-from .mock_data import CHAT_RESPONSE_DATA, CONTEXT_RESPONSE_DATA
+from .mock_data import CONTEXT_RESPONSE_DATA
 from .models import Conversation, Message
 from .serializers import (
     ChatPostSerializer,
     ChatResponseDataSerializer,
-    ChatTaskStatusDataSerializer,
-    ChatTaskSubmitDataSerializer,
     ConversationCreateSerializer,
     ConversationDeleteSerializer,
     ConversationMessagesSerializer,
@@ -72,6 +72,14 @@ class ContextView(FarmAccessMixin, APIView):
 
 class ConversationAccessMixin(FarmAccessMixin):
     @staticmethod
+    def _generate_conversation_title(query):
+        normalized_query = (query or "").strip()
+        if not normalized_query:
+            return "Image"
+        first_word = normalized_query.split()[0].strip()
+        return (first_word or normalized_query or "New chat")[:255]
+
+    @staticmethod
     def _get_conversation(request, conversation_id, farm_uuid=None):
         filters = {"uuid": conversation_id, "owner": request.user}
         if farm_uuid:
@@ -94,9 +102,11 @@ class ConversationAccessMixin(FarmAccessMixin):
             "content",
             "items",
             "icon",
+            "primaryAction",
             "frequency",
             "amount",
             "timing",
+            "validityPeriod",
             "expandableExplanation",
         }
         normalized_sections = []
@@ -119,16 +129,8 @@ class ConversationAccessMixin(FarmAccessMixin):
             normalized_sections.append(normalized_section)
         return normalized_sections
 
-    def _build_mock_assistant_payload(self, conversation):
-        payload = deepcopy(CHAT_RESPONSE_DATA)
-        payload["conversation_id"] = str(conversation.uuid)
-        payload["farm_uuid"] = self._farm_uuid_or_none(conversation.farm)
-        return payload
-
     def _get_or_create_conversation(self, request, validated):
         conversation_id = validated.get("conversation_id")
-        farm_context = validated.get("farm_context")
-        title = validated.get("title", "").strip()
         farm = self._get_optional_farm(request, validated.get("farm_uuid"))
 
         if conversation_id:
@@ -137,41 +139,129 @@ class ConversationAccessMixin(FarmAccessMixin):
                 conversation_id,
                 farm.farm_uuid if farm else None,
             )
-            updated_fields = []
-            if farm_context is not None:
-                conversation.farm_context = farm_context
-                updated_fields.append("farm_context")
-            if title:
-                conversation.title = title
-                updated_fields.append("title")
-            if updated_fields:
-                updated_fields.append("updated_at")
-                conversation.save(update_fields=updated_fields)
             return conversation
 
         return Conversation.objects.create(
             owner=request.user,
             farm=farm,
-            title=title or (validated.get("content", "")[:255]) or "New chat",
-            farm_context=farm_context or {},
+            title=self._generate_conversation_title(validated.get("query", "")),
+            farm_context={},
         )
+
+    @staticmethod
+    def _serialize_history_messages(history):
+        normalized_history = []
+        for item in history or []:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "").strip()
+            content = str(item.get("content") or item.get("message") or "").strip()
+            if not role and not content:
+                continue
+            normalized_item = {}
+            if role:
+                normalized_item["role"] = role
+            if content:
+                normalized_item["content"] = content
+            if item.get("sections") is not None:
+                normalized_item["sections"] = item.get("sections")
+            normalized_history.append(normalized_item)
+        return normalized_history
 
     @staticmethod
     def _build_adapter_payload(request, validated, conversation):
         payload = {
-            "content": validated.get("content", ""),
-            "query": validated.get("content", ""),
+            "farm_uuid": str(conversation.farm.farm_uuid) if conversation.farm else "",
+            "query": validated.get("query", ""),
+            "history": ConversationAccessMixin._serialize_history_messages(validated.get("history", [])),
+            "image_urls": validated.get("image_urls", []),
             "images": validated.get("images", []),
             "conversation_id": str(conversation.uuid),
             "user_id": request.user.id,
         }
-        if conversation.farm:
-            payload["farm_uuid"] = str(conversation.farm.farm_uuid)
-        if "farm_context" in validated:
-            payload["farm_context"] = validated.get("farm_context") or {}
-        if "title" in validated:
-            payload["title"] = validated.get("title", "")
         return payload
+
+    @staticmethod
+    def _attach_uploaded_files(payload, uploaded_images):
+        if not uploaded_images:
+            return payload
+
+        files = []
+        for uploaded_image in uploaded_images:
+            files.append(
+                (
+                    "images",
+                    (
+                        uploaded_image.name,
+                        uploaded_image,
+                        getattr(uploaded_image, "content_type", "application/octet-stream"),
+                    ),
+                )
+            )
+
+        multipart_payload = dict(payload)
+        multipart_payload["history"] = json.dumps(payload.get("history", []), ensure_ascii=False)
+        multipart_payload["image_urls"] = json.dumps(payload.get("image_urls", []), ensure_ascii=False)
+        multipart_payload["__files__"] = files
+        return multipart_payload
+
+    @staticmethod
+    def _parse_json_array(value):
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if isinstance(parsed, list) else None
+
+    def _collect_uploaded_images(self, request):
+        uploaded_images = []
+        single_image = request.FILES.get("image")
+        if single_image is not None:
+            uploaded_images.append(single_image)
+        uploaded_images.extend(request.FILES.getlist("images"))
+        return uploaded_images
+
+    def _merge_history(self, validated, conversation):
+        provided_history = validated.get("history", [])
+        if provided_history:
+            return self._serialize_history_messages(provided_history)
+
+        existing_messages = conversation.messages.order_by("created_at")
+        return [
+            {
+                "role": message.role,
+                "content": message.content,
+                **({"sections": message.raw_response.get("sections", [])} if message.role == Message.ROLE_ASSISTANT else {}),
+            }
+            for message in existing_messages
+            if message.content or (message.role == Message.ROLE_ASSISTANT and message.raw_response.get("sections"))
+        ]
+
+    def _prepare_chat_input(self, request):
+        mutable_data = request.data.copy()
+
+        for field_name in ("message", "content", "title", "farm_context"):
+            if field_name in mutable_data:
+                mutable_data.pop(field_name)
+
+        if "history" in mutable_data:
+            parsed_history = self._parse_json_array(mutable_data.get("history"))
+            if parsed_history is not None:
+                mutable_data["history"] = parsed_history
+
+        if "image_urls" in mutable_data and isinstance(mutable_data.get("image_urls"), str):
+            parsed_urls = self._parse_json_array(mutable_data.get("image_urls"))
+            if parsed_urls is not None:
+                mutable_data.setlist("image_urls", parsed_urls) if hasattr(mutable_data, "setlist") else mutable_data.__setitem__("image_urls", parsed_urls)
+
+        if "images" in mutable_data and isinstance(mutable_data.get("images"), str):
+            parsed_images = self._parse_json_array(mutable_data.get("images"))
+            if parsed_images is not None:
+                mutable_data.setlist("images", parsed_images) if hasattr(mutable_data, "setlist") else mutable_data.__setitem__("images", parsed_images)
+
+        return mutable_data
 
     def _extract_assistant_payload(self, adapter_data, conversation):
         payload_source = adapter_data
@@ -200,80 +290,6 @@ class ConversationAccessMixin(FarmAccessMixin):
         }
 
     @staticmethod
-    def _extract_task_submit_payload(adapter_data, conversation, message_id):
-        payload_source = adapter_data
-        if isinstance(adapter_data, dict) and isinstance(adapter_data.get("data"), dict):
-            payload_source = adapter_data["data"]
-
-        if not isinstance(payload_source, dict):
-            payload_source = {}
-
-        return {
-            "task_id": str(payload_source.get("task_id") or ""),
-            "status": str(payload_source.get("status") or ""),
-            "status_url": str(payload_source.get("status_url") or ""),
-            "conversation_id": str(conversation.uuid),
-            "message_id": str(message_id),
-            "farm_uuid": ConversationAccessMixin._farm_uuid_or_none(conversation.farm),
-        }
-
-    def _extract_task_status_payload(self, adapter_data, task_id, conversation=None, farm_uuid=None):
-        payload_source = adapter_data
-        if isinstance(adapter_data, dict) and isinstance(adapter_data.get("data"), dict):
-            payload_source = adapter_data["data"]
-
-        if not isinstance(payload_source, dict):
-            payload_source = {}
-
-        task_status_payload = {
-            "task_id": str(payload_source.get("task_id") or task_id),
-            "status": str(payload_source.get("status") or ""),
-        }
-        if conversation:
-            task_status_payload["conversation_id"] = str(conversation.uuid)
-            task_status_payload["farm_uuid"] = self._farm_uuid_or_none(conversation.farm)
-        elif farm_uuid is not None:
-            task_status_payload["farm_uuid"] = str(farm_uuid)
-
-        progress = payload_source.get("progress")
-        if progress is not None:
-            task_status_payload["progress"] = progress
-        elif payload_source.get("message") and task_status_payload["status"] != "SUCCESS":
-            task_status_payload["progress"] = {"message": payload_source.get("message")}
-
-        if payload_source.get("error"):
-            task_status_payload["error"] = str(payload_source["error"])
-
-        result = payload_source.get("result")
-        if result is not None:
-            task_status_payload["result"] = result
-
-        return task_status_payload
-
-    def _extract_structured_task_result(self, adapter_data):
-        payload_source = adapter_data
-        if isinstance(adapter_data, dict) and isinstance(adapter_data.get("data"), dict):
-            payload_source = adapter_data["data"]
-
-        if not isinstance(payload_source, dict):
-            return None
-
-        result = payload_source.get("result")
-        if isinstance(result, dict):
-            return result
-
-        if payload_source.get("status") == "SUCCESS":
-            content = payload_source.get("content")
-            sections = payload_source.get("sections")
-            if content or sections:
-                return {
-                    "content": content or "",
-                    "sections": sections or [],
-                }
-
-        return None
-
-    @staticmethod
     def _serialize_chat_message(message):
         raw_response = message.raw_response if isinstance(message.raw_response, dict) else {}
         sections = raw_response.get("sections") if message.role == Message.ROLE_ASSISTANT else []
@@ -287,62 +303,6 @@ class ConversationAccessMixin(FarmAccessMixin):
             "images": message.images if isinstance(message.images, list) else [],
             "created_at": message.created_at,
         }
-
-    @staticmethod
-    def _find_user_message_for_task(request, task_id, farm_uuid):
-        filters = {
-            "conversation__owner": request.user,
-            "role": Message.ROLE_USER,
-            "raw_response__task_id": task_id,
-        }
-        if farm_uuid:
-            filters["farm__farm_uuid"] = farm_uuid
-        else:
-            filters["farm__isnull"] = True
-        return (
-            Message.objects.select_related("conversation", "farm")
-            .filter(**filters)
-            .order_by("-created_at")
-            .first()
-        )
-
-    def _persist_task_result(self, user_message, task_id, result):
-        assistant_payload = self._extract_assistant_payload(result, user_message.conversation)
-        assistant_message = (
-            user_message.conversation.messages.filter(
-                role=Message.ROLE_ASSISTANT,
-                raw_response__task_id=task_id,
-            )
-            .order_by("-created_at")
-            .first()
-        )
-
-        if assistant_message is None:
-            assistant_message = Message.objects.create(
-                conversation=user_message.conversation,
-                farm=user_message.farm,
-                role=Message.ROLE_ASSISTANT,
-                content=assistant_payload.get("content", ""),
-                raw_response={},
-            )
-
-        assistant_payload["message_id"] = str(assistant_message.uuid)
-        assistant_payload["task_id"] = task_id
-        assistant_message.content = assistant_payload.get("content", "")
-        assistant_message.raw_response = assistant_payload
-        assistant_message.save(update_fields=["content", "raw_response"])
-
-        conversation = user_message.conversation
-        if not conversation.title:
-            conversation.title = (
-                user_message.content or assistant_payload.get("content", "") or "New chat"
-            )[:255]
-            conversation.save(update_fields=["title", "updated_at"])
-        else:
-            conversation.save(update_fields=["updated_at"])
-
-        return assistant_payload
-
 
 class ChatListCreateView(ConversationAccessMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -459,27 +419,47 @@ class ChatView(ConversationAccessMixin, APIView):
         responses={200: status_response("FarmAiAssistantChatResponse", data=ChatResponseDataSerializer())},
     )
     def post(self, request):
-        serializer = ChatPostSerializer(data=request.data)
+        try:
+            chat_input = self._prepare_chat_input(request)
+        except ParseError:
+            return Response(
+                {
+                    "status": "error",
+                    "data": {
+                        "message": "Invalid JSON body. Use valid JSON and remove extra trailing characters.",
+                    },
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ChatPostSerializer(data=chat_input)
         serializer.is_valid(raise_exception=True)
 
         validated = serializer.validated_data
         conversation = self._get_or_create_conversation(request, validated)
+        history = self._merge_history(validated, conversation)
+        uploaded_images = self._collect_uploaded_images(request)
 
         user_message = Message.objects.create(
             conversation=conversation,
             farm=conversation.farm,
             role=Message.ROLE_USER,
-            content=validated.get("content", ""),
-            images=validated.get("images", []),
-            raw_response={"farm_uuid": self._farm_uuid_or_none(conversation.farm)},
+            content=validated.get("query", ""),
+            images=validated.get("image_urls", []) + validated.get("images", []),
+            raw_response={
+                "farm_uuid": self._farm_uuid_or_none(conversation.farm),
+                "history": history,
+            },
         )
 
         adapter_payload = self._build_adapter_payload(request, validated, conversation)
+        adapter_payload["history"] = history
+        adapter_payload = self._attach_uploaded_files(adapter_payload, uploaded_images)
 
         try:
             adapter_response = external_api_request(
                 "ai",
-                "/rag/chat",
+                "/api/rag/chat/",
                 method="POST",
                 payload=adapter_payload,
             )
@@ -493,9 +473,16 @@ class ChatView(ConversationAccessMixin, APIView):
                 )
             assistant_payload = self._extract_assistant_payload(adapter_response.data, conversation)
             response_status_code = adapter_response.status_code
-        except ExternalAPIRequestError:
-            assistant_payload = self._build_mock_assistant_payload(conversation)
-            response_status_code = status.HTTP_200_OK
+        except ExternalAPIRequestError as exc:
+            return Response(
+                {
+                    "status": "error",
+                    "data": {
+                        "message": str(exc) or "External AI service is unavailable.",
+                    },
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         assistant_message = Message.objects.create(
             conversation=conversation,
@@ -509,7 +496,7 @@ class ChatView(ConversationAccessMixin, APIView):
         assistant_message.save(update_fields=["raw_response"])
 
         if not conversation.title:
-            conversation.title = (validated.get("content", "") or assistant_payload.get("content", "") or "New chat")[:255]
+            conversation.title = self._generate_conversation_title(validated.get("query", ""))
             conversation.save(update_fields=["title", "updated_at"])
         else:
             conversation.save(update_fields=["updated_at"])
@@ -520,143 +507,4 @@ class ChatView(ConversationAccessMixin, APIView):
                 "data": assistant_payload,
             },
             status=response_status_code,
-        )
-
-
-class ChatTaskCreateView(ConversationAccessMixin, APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        tags=["Farm AI Assistant"],
-        request=ChatPostSerializer,
-        responses={202: status_response("FarmAiAssistantChatTaskCreateResponse", data=ChatTaskSubmitDataSerializer())},
-    )
-    def post(self, request):
-        serializer = ChatPostSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        validated = serializer.validated_data
-        conversation = self._get_or_create_conversation(request, validated)
-        user_message = Message.objects.create(
-            conversation=conversation,
-            farm=conversation.farm,
-            role=Message.ROLE_USER,
-            content=validated.get("content", ""),
-            images=validated.get("images", []),
-            raw_response={"farm_uuid": self._farm_uuid_or_none(conversation.farm)},
-        )
-
-        adapter_payload = self._build_adapter_payload(request, validated, conversation)
-        try:
-            adapter_response = external_api_request(
-                "ai",
-                "/rag/chat/generate",
-                method="POST",
-                payload=adapter_payload,
-            )
-        except ExternalAPIRequestError:
-            return Response(
-                {
-                    "status": "error",
-                    "data": {
-                        "message": "External AI service is unavailable.",
-                    },
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
-        if adapter_response.status_code >= 400:
-            return Response(
-                {
-                    "status": "error",
-                    "data": adapter_response.data,
-                },
-                status=adapter_response.status_code,
-            )
-
-        task_payload = self._extract_task_submit_payload(
-            adapter_response.data,
-            conversation,
-            user_message.uuid,
-        )
-        user_message.raw_response = task_payload
-        user_message.save(update_fields=["raw_response"])
-        conversation.save(update_fields=["updated_at"])
-
-        return Response(
-            {
-                "status": "success",
-                "data": task_payload,
-            },
-            status=adapter_response.status_code,
-        )
-
-
-class ChatTaskStatusView(ConversationAccessMixin, APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        tags=["Farm AI Assistant"],
-        parameters=[
-            OpenApiParameter(name="task_id", type=OpenApiTypes.STR, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=False, default="11111111-1111-1111-1111-111111111111"),
-        ],
-        responses={200: status_response("FarmAiAssistantChatTaskStatusResponse", data=ChatTaskStatusDataSerializer())},
-    )
-    def get(self, request, task_id):
-        farm = self._get_optional_farm(request, request.query_params.get("farm_uuid"))
-        try:
-            query = {}
-            if farm:
-                query["farm_uuid"] = str(farm.farm_uuid)
-            adapter_response = external_api_request(
-                "ai",
-                f"/tasks/{task_id}/status",
-                method="GET",
-                query=query,
-            )
-        except ExternalAPIRequestError:
-            return Response(
-                {
-                    "status": "error",
-                    "data": {
-                        "message": "External AI service is unavailable.",
-                    },
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
-        if adapter_response.status_code >= 400:
-            return Response(
-                {
-                    "status": "error",
-                    "data": adapter_response.data,
-                },
-                status=adapter_response.status_code,
-            )
-
-        farm_uuid = farm.farm_uuid if farm else None
-        user_message = self._find_user_message_for_task(request, task_id, farm_uuid)
-        conversation = user_message.conversation if user_message else None
-        task_status_payload = self._extract_task_status_payload(
-            adapter_response.data,
-            task_id,
-            conversation=conversation,
-            farm_uuid=farm_uuid,
-        )
-
-        result = self._extract_structured_task_result(adapter_response.data)
-        if result is not None:
-            task_status_payload["result"] = result
-
-        if user_message and task_status_payload.get("status") == "SUCCESS" and isinstance(result, dict):
-            assistant_payload = self._persist_task_result(user_message, task_id, result)
-            task_status_payload["result"] = assistant_payload
-
-        return Response(
-            {
-                "status": "success",
-                "data": task_status_payload,
-            },
-            status=adapter_response.status_code,
         )

@@ -1,16 +1,17 @@
 services:
   db:
     image: docker.iranserver.com/mysql:8
-    container_name: backend-db
+    container_name: croplogic-db
     environment:
-      MYSQL_DATABASE: ${DB_NAME:-backend}
-      MYSQL_USER: ${DB_USER:-backend}
+      MYSQL_DATABASE: ${DB_NAME:-croplogic}
+      MYSQL_USER: ${DB_USER:-croplogic}
       MYSQL_PASSWORD: ${DB_PASSWORD:-changeme}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-changeme}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
     volumes:
       - backend_mysql_data:/var/lib/mysql
+
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-changeme}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -21,7 +22,7 @@ services:
     image: docker-mirror.liara.ir/phpmyadmin:latest
     container_name: backend-phpmyadmin
     environment:
-      PMA_HOST: db
+      PMA_HOST: croplogic-db
       PMA_PORT: 3306
       UPLOAD_LIMIT: 64M
     ports:
@@ -68,9 +69,11 @@ services:
       - .env
     environment:
       DOCKER_VERSION: ${DOCKER_VERSION:-develop}
-      DB_HOST: db
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,web,backend-web}
+      AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://ai-web:8000}
+      DB_HOST: croplogic-db
+      CELERY_BROKER_URL: redis://backend-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://backend-redis:6379/0
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       SKIP_MIGRATE: "0"
@@ -101,9 +104,11 @@ services:
       - .env
     environment:
       DOCKER_VERSION: ${DOCKER_VERSION:-develop}
-      DB_HOST: db
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,web,backend-web}
+      AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://ai-web:8000}
+      DB_HOST: croplogic-db
+      CELERY_BROKER_URL: redis://backend-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://backend-redis:6379/0
       CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP: "true"
       SKIP_MIGRATE: "1"
       ACCESS_CONTROL_AUTHZ_BASE_URL: http://croplogic-accsess-opa:8181

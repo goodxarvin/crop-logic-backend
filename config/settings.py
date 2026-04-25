@@ -8,9 +8,18 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def _get_csv_env(name, default=""):
+    return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
+
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dev-only")
 DEBUG = os.environ.get("DEBUG", "0") == "1"
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ALLOWED_HOSTS = list(
+    dict.fromkeys(
+        _get_csv_env("ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0")
+        + ["web", "backend-web", os.environ.get("HOSTNAME", "")]
+    )
+)
 
 AUTH_USER_MODEL = "account.User"
 
@@ -178,12 +187,14 @@ ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT = int(os.getenv("ACCESS_CONTROL_AUTHZ_CACHE_T
 
 EXTERNAL_SERVICES = {
     "ai": {
-        "base_url": os.getenv("AI_SERVICE_BASE_URL", ""),
+        "base_url": os.getenv("AI_SERVICE_BASE_URL", "http://ai-web:8000"),
         "api_key": os.getenv("AI_SERVICE_API_KEY", ""),
+        "host_header": os.getenv("AI_SERVICE_HOST_HEADER", "localhost"),
     },
     "farm_hub": {
         "base_url": os.getenv("FARM_HUB_SERVICE_BASE_URL", ""),
         "api_key": os.getenv("FARM_HUB_SERVICE_API_KEY", ""),
+        "host_header": os.getenv("FARM_HUB_SERVICE_HOST_HEADER", ""),
     },
 }
 

@@ -1,7 +1,7 @@
 services:
   db:
     image: docker.iranserver.com/mysql:8
-    container_name: backend-db
+    container_name: croplogic-db
     environment:
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USER}
@@ -9,6 +9,8 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - backend_mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
@@ -51,9 +53,12 @@ services:
       - .env
     environment:
       DOCKER_VERSION: ${DOCKER_VERSION:-production}
-      DB_HOST: db
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,web,backend-web}
+      AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://ai-web:8000}
+      AI_SERVICE_HOST_HEADER: ${AI_SERVICE_HOST_HEADER:-localhost}
+      DB_HOST: croplogic-db
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://backend-redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://backend-redis:6379/0}
       QDRANT_HOST: ${QDRANT_HOST:-qdrant}
       QDRANT_PORT: ${QDRANT_PORT:-6333}
       SKIP_MIGRATE: "0"
@@ -77,9 +82,12 @@ services:
       - .env
     environment:
       DOCKER_VERSION: ${DOCKER_VERSION:-production}
-      DB_HOST: db
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,web,backend-web}
+      AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://ai-web:8000}
+      AI_SERVICE_HOST_HEADER: ${AI_SERVICE_HOST_HEADER:-localhost}
+      DB_HOST: croplogic-db
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://backend-redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://backend-redis:6379/0}
       CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP: "true"
       SKIP_MIGRATE: "1"
       ACCESS_CONTROL_AUTHZ_BASE_URL: http://croplogic-accsess-opa:8181
