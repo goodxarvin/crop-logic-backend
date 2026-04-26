@@ -2,14 +2,18 @@ from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import extend_schema
 
-from config.swagger import code_response
+from config.swagger import code_response, farm_uuid_query_param
 from farm_hub.models import FarmHub
 
+from soil.serializers import SoilComparisonChartSerializer, SoilRadarChartSerializer
 from .serializers import Sensor7In1SummarySerializer
-from .services import get_sensor_7_in_1_summary_data
+from .services import (
+    get_sensor_7_in_1_comparison_chart_data,
+    get_sensor_7_in_1_radar_chart_data,
+    get_sensor_7_in_1_summary_data,
+)
 
 
 class Sensor7In1SummaryView(APIView):
@@ -29,13 +33,7 @@ class Sensor7In1SummaryView(APIView):
     @extend_schema(
         tags=["Sensor 7 in 1"],
         parameters=[
-            OpenApiParameter(
-                name="farm_uuid",
-                type=OpenApiTypes.UUID,
-                location=OpenApiParameter.QUERY,
-                required=True,
-                default="11111111-1111-1111-1111-111111111111",
-            )
+            farm_uuid_query_param(required=True, description="UUID of the farm for sensor 7 in 1 summary.")
         ],
         responses={200: code_response("Sensor7In1SummaryResponse", data=Sensor7In1SummarySerializer())},
     )
@@ -46,3 +44,34 @@ class Sensor7In1SummaryView(APIView):
             status=status.HTTP_200_OK,
         )
 
+
+class Sensor7In1RadarChartView(Sensor7In1SummaryView):
+    @extend_schema(
+        tags=["Sensor 7 in 1"],
+        parameters=[
+            farm_uuid_query_param(required=True, description="UUID of the farm for sensor 7 in 1 radar chart.")
+        ],
+        responses={200: code_response("Sensor7In1RadarChartResponse", data=SoilRadarChartSerializer())},
+    )
+    def get(self, request):
+        farm = self._get_farm(request)
+        return Response(
+            {"code": 200, "msg": "OK", "data": get_sensor_7_in_1_radar_chart_data(farm)},
+            status=status.HTTP_200_OK,
+        )
+
+
+class Sensor7In1ComparisonChartView(Sensor7In1SummaryView):
+    @extend_schema(
+        tags=["Sensor 7 in 1"],
+        parameters=[
+            farm_uuid_query_param(required=True, description="UUID of the farm for sensor 7 in 1 comparison chart.")
+        ],
+        responses={200: code_response("Sensor7In1ComparisonChartResponse", data=SoilComparisonChartSerializer())},
+    )
+    def get(self, request):
+        farm = self._get_farm(request)
+        return Response(
+            {"code": 200, "msg": "OK", "data": get_sensor_7_in_1_comparison_chart_data(farm)},
+            status=status.HTTP_200_OK,
+        )

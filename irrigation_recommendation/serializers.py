@@ -8,56 +8,31 @@ class IrrigationFarmDataSerializer(serializers.Serializer):
 
 
 class IrrigationRecommendRequestSerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField(required=True)
-    crop_id = serializers.CharField(required=False, allow_blank=True)
-    farm_data = IrrigationFarmDataSerializer(required=False)
-    soilType = serializers.CharField(required=False, allow_blank=True)
-    waterQuality = serializers.CharField(required=False, allow_blank=True)
-    climateZone = serializers.CharField(required=False, allow_blank=True)
+    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای دریافت توصیه آبیاری.")
+    plant_name = serializers.CharField(required=False, allow_blank=True, help_text="نام محصول یا گیاه.")
+    growth_stage = serializers.CharField(required=False, allow_blank=True, help_text="مرحله رشد گیاه.")
+    irrigation_method_name = serializers.CharField(required=False, allow_blank=True, help_text="نام روش آبیاری انتخابی.")
 
 
-class IrrigationPlanSerializer(serializers.Serializer):
-    frequencyPerWeek = serializers.CharField(required=False, allow_blank=True)
-    durationMinutes = serializers.CharField(required=False, allow_blank=True)
-    bestTimeOfDay = serializers.CharField(required=False, allow_blank=True)
-    moistureLevel = serializers.CharField(required=False, allow_blank=True)
-    warning = serializers.CharField(required=False, allow_blank=True)
+class WaterStressRequestSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای محاسبه تنش آبی.")
+    sensor_uuid = serializers.UUIDField(required=False, help_text="UUID سنسور برای فیلتر اختیاری.")
 
 
-class IrrigationWaterBalanceDaySerializer(serializers.Serializer):
-    forecast_date = serializers.CharField(required=False, allow_blank=True)
-    et0_mm = serializers.FloatField(required=False)
-    etc_mm = serializers.FloatField(required=False)
-    effective_rainfall_mm = serializers.FloatField(required=False)
-    gross_irrigation_mm = serializers.FloatField(required=False)
-    irrigation_timing = serializers.CharField(required=False, allow_blank=True)
-
-
-class IrrigationCropProfileSerializer(serializers.Serializer):
-    kc_initial = serializers.FloatField(required=False)
-    kc_mid = serializers.FloatField(required=False)
-    kc_end = serializers.FloatField(required=False)
-
-
-class IrrigationWaterBalanceSerializer(serializers.Serializer):
-    daily = IrrigationWaterBalanceDaySerializer(many=True, required=False)
-    crop_profile = IrrigationCropProfileSerializer(required=False)
-    active_kc = serializers.FloatField(required=False)
+class IrrigationMethodSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False)
+    name = serializers.CharField(required=False, allow_blank=True)
+    category = serializers.CharField(required=False, allow_blank=True)
+    description = serializers.CharField(required=False, allow_blank=True)
+    water_efficiency_percent = serializers.FloatField(required=False)
+    water_pressure_required = serializers.CharField(required=False, allow_blank=True)
+    flow_rate = serializers.CharField(required=False, allow_blank=True)
+    coverage_area = serializers.CharField(required=False, allow_blank=True)
+    soil_type = serializers.CharField(required=False, allow_blank=True)
+    climate_suitability = serializers.CharField(required=False, allow_blank=True)
+    created_at = serializers.DateTimeField(required=False)
+    updated_at = serializers.DateTimeField(required=False)
 
 
 class IrrigationRecommendResponseDataSerializer(serializers.Serializer):
-    plan = IrrigationPlanSerializer(required=False)
-    raw_response = serializers.CharField(required=False, allow_blank=True)
-    water_balance = IrrigationWaterBalanceSerializer(required=False)
-    status = serializers.CharField(required=False, allow_blank=True)
-
-
-class IrrigationTaskSubmitDataSerializer(serializers.Serializer):
-    task_id = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.CharField(required=False, allow_blank=True)
-
-
-class IrrigationTaskStatusDataSerializer(serializers.Serializer):
-    task_id = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.CharField(required=False, allow_blank=True)
-    result = IrrigationRecommendResponseDataSerializer(required=False)
+    sections = serializers.ListField(child=serializers.DictField(), read_only=True)

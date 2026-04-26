@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
 
 def _get_csv_env(name, default=""):
@@ -224,3 +226,39 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIP
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "120"))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "90"))
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = os.getenv("CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP", "true").lower() == "true"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "farm_ai_assistant_file": {
+            "level": "WARNING",
+            "class": "logging.FileHandler",
+            "filename": LOG_DIR / "farm_ai_assistant.log",
+            "formatter": "standard",
+        },
+        "external_api_adapter_file": {
+            "level": "WARNING",
+            "class": "logging.FileHandler",
+            "filename": LOG_DIR / "external_api_adapter.log",
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        "farm_ai_assistant": {
+            "handlers": ["farm_ai_assistant_file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "external_api_adapter": {
+            "handlers": ["external_api_adapter_file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}

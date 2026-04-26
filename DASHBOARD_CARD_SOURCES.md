@@ -40,8 +40,8 @@
 
 | Card ID | عنوان | منبع اصلی | service | endpoint |
 |---|---|---|---|---|
-| `sensorRadarChart` | نمودار راداری سنسورها | `soil` | `get_sensor_radar_chart_data` | `GET /api/soil/sensor-radar-chart/` |
-| `sensorComparisonChart` | مقایسه با هفته قبل | `soil` | `get_sensor_comparison_chart_data` | `GET /api/soil/sensor-comparison-chart/` |
+| `sensorRadarChart` | نمودار راداری سنسورها | `sensor_7_in_1` | `get_sensor_radar_chart_data` | `GET /api/sensor-7-in-1/sensor-radar-chart/` |
+| `sensorComparisonChart` | مقایسه با هفته قبل | `sensor_7_in_1` | `get_sensor_comparison_chart_data` | `GET /api/sensor-7-in-1/sensor-comparison-chart/` |
 
 ### `alertsWater`
 
@@ -82,7 +82,7 @@
 
 | Card ID | عنوان | منبع اصلی | service | endpoint |
 |---|---|---|---|---|
-| `economicOverview` | نمای اقتصادی | `economic_overview` | `get_economic_overview_data` | `GET /api/economic-overview/summary/` |
+| `economicOverview` | نمای اقتصادی | `economic_overview` | `EconomyOverviewView` | `POST /api/economy/overview/` |
 
 ## endpoint های summary جدید برای app ها
 
@@ -97,15 +97,15 @@
   - `GET /api/water/summary/`
 - `soil`
   - `GET /api/soil/avg-moisture/`
-  - `GET /api/soil/sensor-radar-chart/`
-  - `GET /api/soil/sensor-comparison-chart/`
+  - `GET /api/sensor-7-in-1/sensor-radar-chart/`
+  - `GET /api/sensor-7-in-1/sensor-comparison-chart/`
   - `GET /api/soil/anomalies/`
   - `GET /api/soil/moisture-heatmap/`
   - `GET /api/soil/summary/`
 - `yield_harvest`
   - `GET /api/yield-harvest/summary/`
 - `economic_overview`
-  - `GET /api/economic-overview/summary/`
+  - `POST /api/economy/overview/`
 
 ## وضعیت فعلی کارت‌ها
 

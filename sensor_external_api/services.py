@@ -1,7 +1,8 @@
-import requests
 from django.conf import settings
 from django.db import OperationalError, ProgrammingError, transaction
 
+from external_api_adapter import request as external_api_request
+from external_api_adapter.exceptions import ExternalAPIRequestError
 from farm_hub.models import FarmSensor
 from notifications.services import create_notification_for_farm_uuid
 
@@ -108,7 +109,6 @@ def forward_sensor_payload_to_farm_data(*, physical_device_uuid, payload=None):
         raise ValueError("Physical device not found.")
 
     farm_boundary = _get_farm_boundary(sensor=sensor)
-    url = _build_farm_data_url()
     api_key = getattr(settings, "FARM_DATA_API_KEY", "")
     if not api_key:
         raise FarmDataForwardError("FARM_DATA_API_KEY is not configured.")
@@ -122,25 +122,23 @@ def forward_sensor_payload_to_farm_data(*, physical_device_uuid, payload=None):
     }
 
     try:
-        response = requests.post(
-            url,
-            json=request_payload,
+        response = external_api_request(
+            "ai",
+            _get_farm_data_path(),
+            method="POST",
+            payload=request_payload,
             headers={
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "X-API-Key": api_key,
                 "Authorization": f"Api-Key {api_key}",
             },
-            timeout=getattr(settings, "FARM_DATA_API_TIMEOUT", 30),
         )
-    except requests.RequestException as exc:
+    except ExternalAPIRequestError as exc:
         raise FarmDataForwardError(f"Farm data API request failed: {exc}") from exc
 
     if response.status_code >= 400:
-        try:
-            response_body = response.json()
-        except ValueError:
-            response_body = response.text
+        response_body = response.data
         raise FarmDataForwardError(
             f"Farm data API returned status {response.status_code}: {response_body}"
         )
@@ -163,11 +161,5 @@ def _get_farm_boundary(*, sensor):
     return geometry
 
 
-def _build_farm_data_url():
-    base_url = getattr(settings, "AI_SERVICE_BASE_URL", "").rstrip("/")
-    path =  "/api/farm-data/"
-
-    if not base_url:
-        raise FarmDataForwardError("FARM_DATA_API_HOST is not configured.")
-
-    return f"{base_url}/{path.lstrip('/')}"
+def _get_farm_data_path():
+    return getattr(settings, "FARM_DATA_API_PATH", "/api/farm-data/")

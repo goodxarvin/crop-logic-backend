@@ -5,6 +5,7 @@ from access_control.catalog import GOLD_PLAN_CODE
 from access_control.services import get_effective_subscription_plan
 
 from .models import FarmHub, FarmSensor, FarmType, Product
+from .services import normalize_farm_boundary_input
 from sensor_catalog.models import SensorCatalog
 
 
@@ -116,6 +117,7 @@ class FarmSensorWriteSerializer(serializers.ModelSerializer):
 
 class FarmHubCreateSerializer(serializers.ModelSerializer):
     area_geojson = serializers.JSONField(write_only=True, required=False)
+    farm_boundary = serializers.JSONField(write_only=True, required=False)
     farm_type_uuid = serializers.UUIDField(write_only=True)
     subscription_plan_uuid = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     product_uuids = serializers.ListField(
@@ -124,6 +126,9 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         allow_empty=False,
     )
     sensors = FarmSensorWriteSerializer(many=True, required=False)
+    sensor_key = serializers.CharField(write_only=True, required=False, allow_blank=True, default="sensor-7-1")
+    sensor_payload = serializers.JSONField(write_only=True, required=False)
+    irrigation_method_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = FarmHub
@@ -135,6 +140,10 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
             "product_uuids",
             "sensors",
             "area_geojson",
+            "farm_boundary",
+            "sensor_key",
+            "sensor_payload",
+            "irrigation_method_id",
         ]
 
     def to_internal_value(self, data):
@@ -144,23 +153,27 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate_area_geojson(self, value):
+        try:
+            return normalize_farm_boundary_input(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_farm_boundary(self, value):
+        try:
+            return normalize_farm_boundary_input(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_sensor_payload(self, value):
         if not isinstance(value, dict):
-            raise serializers.ValidationError("`area_geojson` must be a GeoJSON object.")
-
-        geometry = value.get("geometry") if value.get("type") == "Feature" else value
-        if not isinstance(geometry, dict):
-            raise serializers.ValidationError("`area_geojson.geometry` is required.")
-
-        if geometry.get("type") != "Polygon":
-            raise serializers.ValidationError("`area_geojson.geometry.type` must be `Polygon`.")
-
-        coordinates = geometry.get("coordinates")
-        if not isinstance(coordinates, list) or not coordinates or not isinstance(coordinates[0], list):
-            raise serializers.ValidationError("`area_geojson.geometry.coordinates` must be a polygon ring.")
-
+            raise serializers.ValidationError("`sensor_payload` must be an object.")
         return value
 
     def validate(self, attrs):
+        farm_boundary = attrs.pop("farm_boundary", serializers.empty)
+        if farm_boundary is not serializers.empty:
+            attrs["area_geojson"] = farm_boundary
+
         farm_type_uuid = attrs.get("farm_type_uuid")
         subscription_plan_uuid = attrs.get("subscription_plan_uuid", serializers.empty)
         product_uuids = attrs.get("product_uuids")
@@ -208,6 +221,9 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop("area_geojson", None)
+        validated_data.pop("sensor_key", None)
+        validated_data.pop("sensor_payload", None)
+        validated_data.pop("irrigation_method_id", None)
         sensors_data = validated_data.pop("sensors", [])
         products = validated_data.pop("products", [])
         validated_data["farm_type"] = validated_data.pop("farm_type")
@@ -225,6 +241,9 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         validated_data.pop("area_geojson", None)
+        validated_data.pop("sensor_key", None)
+        validated_data.pop("sensor_payload", None)
+        validated_data.pop("irrigation_method_id", None)
         sensors_data = validated_data.pop("sensors", None)
         products = validated_data.pop("products", None)
         farm_type = validated_data.pop("farm_type", None)

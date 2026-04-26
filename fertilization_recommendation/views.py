@@ -2,11 +2,12 @@
 Fertilization Recommendation API views.
 """
 
+import logging
+
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import extend_schema
 
 from config.swagger import status_response
 from external_api_adapter import request as external_api_request
@@ -16,9 +17,10 @@ from .models import FertilizationRecommendationRequest
 from .serializers import (
     FertilizationRecommendRequestSerializer,
     FertilizationRecommendResponseDataSerializer,
-    FertilizationTaskStatusDataSerializer,
-    FertilizationTaskSubmitDataSerializer,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class FarmAccessMixin:
@@ -35,9 +37,6 @@ class FarmAccessMixin:
 class ConfigView(FarmAccessMixin, APIView):
     @extend_schema(
         tags=["Fertilization Recommendation"],
-        parameters=[
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
-        ],
         responses={200: status_response("FertilizationConfigResponse", data=serializers.JSONField())},
     )
     def get(self, request):
@@ -48,6 +47,62 @@ class ConfigView(FarmAccessMixin, APIView):
 
 
 class RecommendView(FarmAccessMixin, APIView):
+    @staticmethod
+    def _normalize_sections(raw_sections):
+        if not isinstance(raw_sections, list):
+            return []
+
+        allowed_keys = {
+            "type",
+            "title",
+            "icon",
+            "content",
+            "items",
+            "fertilizerType",
+            "amount",
+            "applicationMethod",
+            "timing",
+            "validityPeriod",
+            "expandableExplanation",
+        }
+
+        normalized_sections = []
+        for section in raw_sections:
+            if not isinstance(section, dict) or not section.get("type"):
+                continue
+
+            normalized_section = {}
+            for key in allowed_keys:
+                value = section.get(key)
+                if value is None:
+                    continue
+                if key == "items":
+                    if not isinstance(value, list):
+                        continue
+                    normalized_section[key] = [str(item) for item in value]
+                    continue
+                normalized_section[key] = str(value) if key != "type" else value
+
+            normalized_sections.append(normalized_section)
+        return normalized_sections
+
+    def _extract_public_sections(self, adapter_data):
+        if not isinstance(adapter_data, dict):
+            return []
+
+        data = adapter_data.get("data")
+        if isinstance(data, dict) and isinstance(data.get("sections"), list):
+            return self._normalize_sections(data.get("sections"))
+
+        result = data.get("result") if isinstance(data, dict) else None
+        if isinstance(result, dict) and isinstance(result.get("sections"), list):
+            return self._normalize_sections(result.get("sections"))
+
+        if isinstance(adapter_data.get("sections"), list):
+            return self._normalize_sections(adapter_data.get("sections"))
+
+        return []
+
     @extend_schema(
         tags=["Fertilization Recommendation"],
         request=FertilizationRecommendRequestSerializer,
@@ -59,47 +114,53 @@ class RecommendView(FarmAccessMixin, APIView):
         payload = serializer.validated_data.copy()
         farm = self._get_farm(request, payload.get("farm_uuid"))
         payload["farm_uuid"] = str(farm.farm_uuid)
+        payload["plant_name"] = payload.get("plant_name", "")
+        payload["growth_stage"] = payload.get("growth_stage", "")
 
         adapter_response = external_api_request(
             "ai",
-            "/fertilization/recommend",
+            "/api/fertilization/recommend/",
             method="POST",
             payload=payload,
         )
 
         response_data = adapter_response.data if isinstance(adapter_response.data, dict) else {}
+        public_sections = self._extract_public_sections(response_data)
+
+        logger.warning(
+            "Fertilization recommendation response parsed: farm_uuid=%s status_code=%s response_keys=%s sections_count=%s",
+            str(farm.farm_uuid),
+            adapter_response.status_code,
+            sorted(response_data.keys()) if isinstance(response_data, dict) else None,
+            len(public_sections),
+        )
+
         FertilizationRecommendationRequest.objects.create(
             farm=farm,
-            crop_id=payload.get("crop_id", ""),
+            crop_id=payload.get("plant_name", ""),
             growth_stage=payload.get("growth_stage", ""),
-            task_id=str(response_data.get("data", {}).get("task_id") or response_data.get("task_id") or ""),
-            status=str(response_data.get("data", {}).get("status") or response_data.get("status") or ""),
+            task_id="",
+            status="success" if adapter_response.status_code < 400 else "error",
             request_payload=payload,
             response_payload=adapter_response.data if isinstance(adapter_response.data, dict) else {"raw": adapter_response.data},
         )
-        return Response(adapter_response.data, status=adapter_response.status_code)
+        if adapter_response.status_code >= 400:
+            return Response(
+                {
+                    "code": adapter_response.status_code,
+                    "msg": "error",
+                    "data": response_data if isinstance(response_data, dict) else {"message": str(adapter_response.data)},
+                },
+                status=adapter_response.status_code,
+            )
 
-
-class RecommendTaskStatusView(FarmAccessMixin, APIView):
-    @extend_schema(
-        tags=["Fertilization Recommendation"],
-        parameters=[
-            OpenApiParameter(name="task_id", type=OpenApiTypes.STR, location=OpenApiParameter.PATH),
-            OpenApiParameter(name="farm_uuid", type=OpenApiTypes.UUID, location=OpenApiParameter.QUERY, required=True, default="11111111-1111-1111-1111-111111111111"),
-        ],
-        responses={200: status_response("FertilizationRecommendTaskStatusResponse", data=FertilizationTaskStatusDataSerializer())},
-    )
-    def get(self, request, task_id):
-        farm = self._get_farm(request, request.query_params.get("farm_uuid"))
-        adapter_response = external_api_request(
-            "ai",
-            f"/fertilization/status/{task_id}",
-            method="GET",
-            query={"farm_uuid": str(farm.farm_uuid)},
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": {
+                    "sections": public_sections,
+                },
+            },
+            status=status.HTTP_200_OK,
         )
-        response_data = adapter_response.data if isinstance(adapter_response.data, dict) else {}
-        FertilizationRecommendationRequest.objects.filter(farm=farm, task_id=task_id).update(
-            status=str(response_data.get("data", {}).get("status") or response_data.get("status") or ""),
-            response_payload=adapter_response.data if isinstance(adapter_response.data, dict) else {"raw": adapter_response.data},
-        )
-        return Response(adapter_response.data, status=adapter_response.status_code)

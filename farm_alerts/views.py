@@ -2,79 +2,74 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from farm_hub.models import FarmHub
+from external_api_adapter import request as external_api_request
 
-from .mock_data import (
-    ANOMALY_DETECTION_CARD,
-    ARM_ALERTS_TRACKER,
-    FARM_ALERTS_TIMELINE,
-    RECOMMENDATIONS_LIST,
-)
-from .serializers import (
-    AlertTimelineSerializer,
-    AlertTrackerSerializer,
-    AnomalyDetectionSerializer,
-    CreateAlertSerializer,
-    RecommendationsListSerializer,
-)
-from .services import AlertService
+from .serializers import AlertTimelineSerializer, AlertTrackerSerializer
 
 
-class AlertTrackerView(APIView):
-    def get(self, request):
-        serializer = AlertTrackerSerializer(ARM_ALERTS_TRACKER)
-        return Response({"status": "success", "result": serializer.data})
+class FarmAlertsBaseView(APIView):
+    @staticmethod
+    def _extract_result(adapter_data):
+        if not isinstance(adapter_data, dict):
+            return {}
 
+        data = adapter_data.get("data")
+        if isinstance(data, dict) and isinstance(data.get("result"), dict):
+            return data["result"]
+        if isinstance(data, dict):
+            return data
 
-class AlertTimelineView(APIView):
-    def get(self, request):
-        serializer = AlertTimelineSerializer(FARM_ALERTS_TIMELINE)
-        return Response({"status": "success", "result": serializer.data})
+        result = adapter_data.get("result")
+        if isinstance(result, dict):
+            return result
 
+        return adapter_data
 
-class AnomalyDetectionView(APIView):
-    def get(self, request):
-        serializer = AnomalyDetectionSerializer(ANOMALY_DETECTION_CARD)
-        return Response({"status": "success", "result": serializer.data})
-
-
-class RecommendationsListView(APIView):
-    def get(self, request):
-        serializer = RecommendationsListSerializer(RECOMMENDATIONS_LIST)
-        return Response({"status": "success", "result": serializer.data})
-
-
-class CreateAlertView(APIView):
-    def post(self, request):
-        serializer = CreateAlertSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(
-                {"status": "error", "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        data = serializer.validated_data
-        farm = None
-        farm_uuid = data.get("farm_uuid")
-        if farm_uuid:
-            try:
-                farm = FarmHub.objects.get(uuid=farm_uuid)
-            except FarmHub.DoesNotExist:
-                return Response(
-                    {"status": "error", "message": "farm not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-        alert = AlertService.create_alert(
-            title=data["title"],
-            description=data.get("description", ""),
-            color=data.get("color", "info"),
-            avatar_icon=data.get("avatar_icon", ""),
-            avatar_color=data.get("avatar_color", ""),
-            farm=farm,
+    @staticmethod
+    def _error_response(adapter_response):
+        response_data = (
+            adapter_response.data
+            if isinstance(adapter_response.data, dict)
+            else {"message": str(adapter_response.data)}
+        )
+        return Response(
+            {"code": adapter_response.status_code, "msg": "error", "data": response_data},
+            status=adapter_response.status_code,
         )
 
+
+class AlertTrackerView(FarmAlertsBaseView):
+    def post(self, request):
+        adapter_response = external_api_request(
+            "ai",
+            "/api/farm-alerts/tracker/",
+            method="POST",
+            payload=request.data,
+        )
+        if adapter_response.status_code >= 400:
+            return self._error_response(adapter_response)
+
+        payload = self._extract_result(adapter_response.data)
+        serializer = AlertTrackerSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        return Response({"code": 200, "msg": "success", "data": serializer.validated_data}, status=status.HTTP_200_OK)
+
+
+class AlertTimelineView(FarmAlertsBaseView):
+    def post(self, request):
+        adapter_response = external_api_request(
+            "ai",
+            "/api/farm-alerts/timeline/",
+            method="POST",
+            payload=request.data,
+        )
+        if adapter_response.status_code >= 400:
+            return self._error_response(adapter_response)
+
+        payload = self._extract_result(adapter_response.data)
+        serializer = AlertTimelineSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
         return Response(
-            {"status": "success", "result": {"uuid": str(alert.uuid), "title": alert.title}},
-            status=status.HTTP_201_CREATED,
+            {"code": 200, "msg": "success", "data": serializer.validated_data},
+            status=status.HTTP_200_OK,
         )

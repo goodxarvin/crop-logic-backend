@@ -1,6 +1,7 @@
 """Farm AI Assistant API views."""
 
 import json
+import logging
 from copy import deepcopy
 
 from django.db.models import Count
@@ -27,6 +28,9 @@ from .serializers import (
     ConversationMessagesSerializer,
     ConversationSummarySerializer,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class FarmAccessMixin:
@@ -268,18 +272,63 @@ class ConversationAccessMixin(FarmAccessMixin):
         if isinstance(adapter_data, dict) and isinstance(adapter_data.get("data"), dict):
             payload_source = adapter_data["data"]
 
+        logger.warning(
+            "Farm AI assistant parsing response: conversation_id=%s adapter_type=%s adapter_keys=%s payload_source_type=%s payload_source_keys=%s",
+            str(conversation.uuid),
+            type(adapter_data).__name__,
+            sorted(adapter_data.keys()) if isinstance(adapter_data, dict) else None,
+            type(payload_source).__name__,
+            sorted(payload_source.keys()) if isinstance(payload_source, dict) else None,
+        )
+
         content = ""
         sections = []
 
         if isinstance(payload_source, dict):
             content = payload_source.get("content") or ""
             sections = self._normalize_sections(payload_source.get("sections"))
+            logger.warning(
+                "Farm AI assistant payload_source parsed: conversation_id=%s raw_content_present=%s raw_sections_type=%s normalized_sections_count=%s",
+                str(conversation.uuid),
+                bool(content),
+                type(payload_source.get("sections")).__name__ if payload_source.get("sections") is not None else None,
+                len(sections),
+            )
 
+        logger.warning("%s %s", isinstance(payload_source, dict), not sections and isinstance(adapter_data, dict))
         if not sections and isinstance(adapter_data, dict):
             sections = self._normalize_sections(adapter_data.get("sections"))
+            logger.warning(
+                "Farm AI assistant root-level sections fallback: conversation_id=%s raw_sections_type=%s normalized_sections_count=%s",
+                str(conversation.uuid),
+                type(adapter_data.get("sections")).__name__ if adapter_data.get("sections") is not None else None,
+                len(sections),
+            )
 
         if not content and isinstance(adapter_data, dict):
             content = adapter_data.get("body") or adapter_data.get("content") or ""
+            logger.warning(
+                "Farm AI assistant content fallback: conversation_id=%s body_present=%s content_present=%s final_content_present=%s",
+                str(conversation.uuid),
+                bool(adapter_data.get("body")),
+                bool(adapter_data.get("content")),
+                bool(content),
+            )
+
+        if isinstance(adapter_data, dict) and adapter_data.get("result") is not None:
+            logger.warning(
+                "Farm AI assistant unparsed result detected: conversation_id=%s result_type=%s result_keys=%s",
+                str(conversation.uuid),
+                type(adapter_data.get("result")).__name__,
+                sorted(adapter_data["result"].keys()) if isinstance(adapter_data.get("result"), dict) else None,
+            )
+
+        logger.warning(
+            "Farm AI assistant final parsed payload: conversation_id=%s content_length=%s sections_count=%s",
+            str(conversation.uuid),
+            len(content or ""),
+            len(sections),
+        )
 
         return {
             "message_id": "",
@@ -462,6 +511,13 @@ class ChatView(ConversationAccessMixin, APIView):
                 "/api/rag/chat/",
                 method="POST",
                 payload=adapter_payload,
+            )
+            logger.warning(
+                "Farm AI assistant adapter response received: conversation_id=%s status_code=%s response_type=%s response_keys=%s",
+                str(conversation.uuid),
+                adapter_response.status_code,
+                type(adapter_response.data).__name__,
+                adapter_response
             )
             if adapter_response.status_code >= 400:
                 return Response(

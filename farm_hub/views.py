@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
@@ -14,7 +15,7 @@ from .serializers import (
     FarmTypeSerializer,
     ProductSerializer,
 )
-from .services import create_farm_with_zoning
+from .services import FarmDataSyncError, create_farm_with_zoning, dispatch_farm_zoning, sync_farm_data
 
 
 class FarmHubBaseView(APIView):
@@ -64,6 +65,8 @@ class FarmListCreateView(FarmHubBaseView):
             farm, zoning_payload = create_farm_with_zoning(serializer, owner=request.user)
         except ValueError as exc:
             raise serializers.ValidationError({"area_geojson": [str(exc)]}) from exc
+        except FarmDataSyncError as exc:
+            return Response({"code": 502, "msg": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except ImproperlyConfigured as exc:
             return Response({"code": 500, "msg": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         data = FarmHubSerializer(farm).data
@@ -137,7 +140,27 @@ class FarmDetailView(FarmHubBaseView):
             return Response({"code": 404, "msg": "Farm not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = FarmHubCreateSerializer(farm, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        area_feature = serializer.validated_data.get("area_geojson", None)
+        sensor_key = serializer.validated_data.get("sensor_key", "sensor-7-1")
+        sensor_payload = serializer.validated_data.get("sensor_payload", None)
+        irrigation_method_id = serializer.validated_data.get("irrigation_method_id", None)
+        try:
+            with transaction.atomic():
+                serializer.save()
+                if area_feature is not None:
+                    crop_area, _zoning_payload = dispatch_farm_zoning(area_feature, serializer.instance)
+                    serializer.instance.current_crop_area = crop_area
+                    serializer.instance.save(update_fields=["current_crop_area", "updated_at"])
+                sync_farm_data(
+                    farm=serializer.instance,
+                    area_feature=area_feature,
+                    sensor_key=sensor_key,
+                    sensor_payload=sensor_payload,
+                    plant_ids=[product.id for product in serializer.instance.products.all()],
+                    irrigation_method_id=irrigation_method_id,
+                )
+        except FarmDataSyncError as exc:
+            return Response({"code": 502, "msg": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         farm.refresh_from_db()
         data = FarmHubSerializer(farm).data
         return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)

@@ -9,7 +9,7 @@ from sensor_external_api.models import SensorExternalRequestLog
 from dashboard.services import get_farm_dashboard_cards
 
 from .services import get_sensor_7_in_1_summary_data
-from .views import Sensor7In1SummaryView
+from .views import Sensor7In1ComparisonChartView, Sensor7In1RadarChartView, Sensor7In1SummaryView
 
 
 class Sensor7In1BaseTestCase(TestCase):
@@ -118,3 +118,23 @@ class Sensor7In1ViewTests(Sensor7In1BaseTestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["farm_uuid"][0], "This field is required.")
+
+    def test_radar_chart_view_returns_sensor_chart(self):
+        request = self.factory.get(f"/api/sensor-7-in-1/sensor-radar-chart/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+
+        response = Sensor7In1RadarChartView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(response.data["data"]["series"][0]["name"], "اکنون")
+
+    def test_comparison_chart_view_returns_sensor_chart(self):
+        request = self.factory.get(f"/api/sensor-7-in-1/sensor-comparison-chart/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+
+        response = Sensor7In1ComparisonChartView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(response.data["data"]["currentValue"], 48.5)

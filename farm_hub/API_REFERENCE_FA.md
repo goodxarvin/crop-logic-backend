@@ -180,20 +180,39 @@ Content-Type: application/json
       }
     }
   ],
-  "area_geojson": {
-    "type": "Feature",
-    "properties": {},
-    "geometry": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [51.418934, 35.706815],
-          [51.423054, 35.691062],
-          [51.384258, 35.689389],
-          [51.418934, 35.706815]
-        ]
+  "farm_boundary": {
+    "corners": [
+      {"lat": 35.70, "lon": 51.39},
+      {"lat": 35.70, "lon": 51.41},
+      {"lat": 35.72, "lon": 51.41},
+      {"lat": 35.72, "lon": 51.39}
+    ]
+  },
+  "sensor_key": "sensor-7-1",
+  "sensor_payload": {
+    "soil_moisture": 45.2,
+    "soil_temperature": 22.5
+  },
+  "irrigation_method_id": 3
+}
+```
+
+برای `farm_boundary` هر دو فرم زیر پشتیبانی می‌شوند:
+
+```json
+{
+  "type": "Feature",
+  "properties": {},
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [51.418934, 35.706815],
+        [51.423054, 35.691062],
+        [51.384258, 35.689389],
+        [51.418934, 35.706815]
       ]
-    }
+    ]
   }
 }
 ```
@@ -207,7 +226,11 @@ Content-Type: application/json
 | `farm_type_uuid` | uuid | بله | UUID نوع مزرعه |
 | `product_uuids` | array[uuid] | بله | لیست UUID محصولات؛ خالی بودن مجاز نیست |
 | `sensors` | array | خیر | لیست سنسورهای مزرعه |
-| `area_geojson` | object | خیر | محدوده زمین به صورت GeoJSON از نوع `Polygon` |
+| `area_geojson` | object | خیر | محدوده زمین به صورت GeoJSON از نوع `Polygon`؛ اگر `farm_boundary` هم ارسال شود، این فیلد override می‌شود |
+| `farm_boundary` | object | خیر | alias برای محدوده مزرعه؛ هم `Polygon` و هم فرم `corners` را می‌پذیرد |
+| `sensor_key` | string | خیر | کلید سنسور برای normalize کردن `sensor_payload`؛ پیش فرض `sensor-7-1` |
+| `sensor_payload` | object | خیر | داده سنسور که همراه ساخت مزرعه به Farm Data sync می‌شود |
+| `irrigation_method_id` | integer/null | خیر | شناسه روش آبیاری که همراه ساخت مزرعه به Farm Data sync می‌شود |
 
 ### فیلدهای هر سنسور در `sensors`
 
@@ -224,6 +247,8 @@ Content-Type: application/json
 ### اعتبارسنجی‌ها
 
 - `farm_uuid` اگر از سمت کلاینت ارسال شود نادیده گرفته می‌شود.
+- اگر `farm_boundary` به فرم `corners` ارسال شود، به Polygon تبدیل می‌شود.
+- `sensor_payload` باید object باشد، وگرنه خطای validation برمی‌گردد.
 - `farm_type_uuid` باید معتبر باشد، وگرنه:
 
 ```json
@@ -267,6 +292,11 @@ Content-Type: application/json
   ]
 }
 ```
+
+### رفتار داخلی
+
+- بعد از ساخت مزرعه و zoning، backend درخواست `POST /api/farm-data/` را نیز با `farm_uuid`، `farm_boundary`، `plant_ids` و در صورت وجود `sensor_payload`/`irrigation_method_id` ارسال می‌کند.
+- اگر sync با Farm Data شکست بخورد، پاسخ endpoint با کد `502` برمی‌گردد.
 
 - `area_geojson` باید object معتبر باشد.
 - اگر `area_geojson.type == "Feature"` باشد، مقدار `geometry` بررسی می‌شود.
@@ -551,7 +581,19 @@ Content-Type: application/json
         "type": "solar"
       }
     }
-  ]
+  ],
+  "farm_boundary": {
+    "corners": [
+      {"lat": 35.70, "lon": 51.39},
+      {"lat": 35.70, "lon": 51.41},
+      {"lat": 35.72, "lon": 51.41},
+      {"lat": 35.72, "lon": 51.39}
+    ]
+  },
+  "sensor_payload": {
+    "soil_moisture": 45.2
+  },
+  "irrigation_method_id": 3
 }
 ```
 
@@ -561,7 +603,8 @@ Content-Type: application/json
 - اگر `farm_type_uuid` ارسال شود، نوع مزرعه به‌روزرسانی می‌شود.
 - اگر `product_uuids` ارسال شود، همه محصولات مزرعه با لیست جدید جایگزین می‌شوند.
 - اگر `sensors` ارسال شود، همه سنسورهای قبلی حذف و سپس سنسورهای جدید از نو ساخته می‌شوند.
-- `area_geojson` در متد `update` دریافت می‌شود ولی در حال حاضر برای update نادیده گرفته می‌شود و zoning مجدد انجام نمی‌شود.
+- اگر `area_geojson` یا `farm_boundary` ارسال شود، zoning مجدد انجام می‌شود و `current_crop_area` به‌روزرسانی می‌شود.
+- در هر update نیز درخواست sync به `POST /api/farm-data/` با `farm_uuid`، `farm_boundary`، `plant_ids` و در صورت وجود `sensor_payload`/`irrigation_method_id` ارسال می‌شود.
 
 ### اعتبارسنجی
 
@@ -570,6 +613,7 @@ Content-Type: application/json
 - در update، اگر `farm_type_uuid` ارسال نشود، از `farm_type` فعلی استفاده می‌شود.
 - در update، اگر `product_uuids` ارسال نشود، محصولات فعلی حفظ می‌شوند.
 - در update، اگر `sensors` ارسال نشود، سنسورهای فعلی حفظ می‌شوند.
+- در update نیز `sensor_payload` باید object باشد.
 
 ### Response 200
 
@@ -601,6 +645,15 @@ Content-Type: application/json
 {
   "code": 404,
   "msg": "Farm not found."
+}
+```
+
+### Response 502
+
+```json
+{
+  "code": 502,
+  "msg": "Farm data API returned status 400: ..."
 }
 ```
 

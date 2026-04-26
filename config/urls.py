@@ -1,7 +1,6 @@
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-from yield_harvest.urls import plant_simulator_urlpatterns
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -17,17 +16,23 @@ urlpatterns = [
     path("api/farm-dashboard/", include("dashboard.urls")),
     path("api/crop-health/", include("crop_health.urls")),
     path("api/soil/", include("soil.urls")),
+
     path("api/crop-zoning/", include("crop_zoning.urls")),
-    path("api/plant-simulator/", include(plant_simulator_urlpatterns)),
-    path("api/pest-detection/", include("pest_detection.urls")),
-    path("api/sensor-7-in-1/", include("sensor_7_in_1.urls")),
-    path("api/irrigation-recommendation/", include("irrigation_recommendation.urls")),
-    path("api/water/", include("water.urls")),
     path("api/yield-harvest/", include("yield_harvest.urls")),
-    path("api/economic-overview/", include("economic_overview.urls")),
-    path("api/fertilization-recommendation/", include("fertilization_recommendation.urls")),
+
+    path("api/pest-detection/", include("pest_detection.urls")),
+    path("api/pest-disease/", include("pest_detection.pest_disease_urls")),
+    path("api/sensor-7-in-1/", include("sensor_7_in_1.urls")),
+    path("api/irrigation/", include("irrigation_recommendation.urls")),
+
+    path("api/weather/", include("water.weather_urls")),
+    path("api/water/", include("water.urls")),
+    path("api/economy/", include("economic_overview.urls")),
+
+    path("api/fertilization/", include("fertilization_recommendation.urls")),
     path("api/farm-ai-assistant/", include("farm_ai_assistant.urls")),
     path("api/notifications/", include("notifications.urls")),
     path("api/farm-alerts/", include("farm_alerts.urls")),
+
     path("api/sensor-external-api/", include("sensor_external_api.urls")),
 ]

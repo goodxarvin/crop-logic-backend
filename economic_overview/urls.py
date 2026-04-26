@@ -1,7 +1,7 @@
 from django.urls import path
 
-from .views import EconomicOverviewView
+from .views import EconomyOverviewView
 
 urlpatterns = [
-    path("summary/", EconomicOverviewView.as_view(), name="economic-overview-summary"),
+    path("overview/", EconomyOverviewView.as_view(), name="economy-overview"),
 ]

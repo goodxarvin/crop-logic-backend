@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import logging
 
 import requests
 from django.conf import settings
@@ -7,6 +8,9 @@ from .exceptions import ExternalAPIRequestError
 from .exceptions import MockDirectoryNotFound, MockFileNotFound
 from .mock_loader import MockLoader
 from .services import ServiceRegistry
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -26,6 +30,16 @@ class ExternalAPIAdapter:
         request_method = method.upper()
         self._validate_method(request_method)
         service = self.service_registry.get(service_name)
+        logger.warning(
+            "External API adapter request start: service=%s method=%s path=%s payload_type=%s payload_keys=%s query_keys=%s header_keys=%s",
+            service_name,
+            request_method,
+            path,
+            type(payload).__name__,
+            sorted(payload.keys()) if isinstance(payload, dict) else None,
+            sorted(query.keys()) if isinstance(query, dict) else None,
+            sorted(headers.keys()) if isinstance(headers, dict) else None,
+        )
 
         use_mock = getattr(settings, "USE_EXTERNAL_API_MOCK", False) and service_name != "ai"
         if use_mock:
@@ -91,6 +105,16 @@ class ExternalAPIAdapter:
             else:
                 request_kwargs["json"] = request_payload
 
+            logger.warning(
+                "External API adapter outbound request: method=%s url=%s has_files=%s json_keys=%s data_keys=%s timeout=%s",
+                method,
+                url,
+                bool(files),
+                sorted(request_payload.keys()) if isinstance(request_payload, dict) and not files else None,
+                sorted(request_payload.keys()) if isinstance(request_payload, dict) and files else None,
+                request_kwargs["timeout"],
+            )
+
             response = requests.request(
                 **request_kwargs,
             )
@@ -101,6 +125,17 @@ class ExternalAPIAdapter:
             response_data = response.json()
         except ValueError:
             response_data = response.text
+
+        logger.warning(
+            "External API adapter inbound response: method=%s url=%s status_code=%s response_type=%s response_keys=%s text_length=%s",
+            method,
+            url,
+            response.status_code,
+            type(response_data).__name__,
+            sorted(response_data.keys()) if isinstance(response_data, dict) else None,
+            len(response_data) if isinstance(response_data, str) else None,
+        )
+        logger.warning("Response : %s",response_data)
 
         return AdapterResponse(
             status_code=response.status_code,

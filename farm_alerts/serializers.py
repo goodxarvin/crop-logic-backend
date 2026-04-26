@@ -49,9 +49,9 @@ class RecommendationsListSerializer(serializers.Serializer):
 
 
 class CreateAlertSerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField(required=False, allow_null=True)
-    title = serializers.CharField(max_length=255)
-    description = serializers.CharField(required=False, default="", allow_blank=True)
-    color = serializers.ChoiceField(choices=["info", "warning", "error", "success"], default="info")
-    avatar_icon = serializers.CharField(required=False, default="", allow_blank=True)
-    avatar_color = serializers.CharField(required=False, default="", allow_blank=True)
+    farm_uuid = serializers.UUIDField(required=False, allow_null=True, help_text="UUID مزرعه برای اتصال alert به مزرعه.")
+    title = serializers.CharField(max_length=255, help_text="عنوان هشدار.")
+    description = serializers.CharField(required=False, default="", allow_blank=True, help_text="توضیح هشدار.")
+    color = serializers.ChoiceField(choices=["info", "warning", "error", "success"], default="info", help_text="سطح یا رنگ هشدار.")
+    avatar_icon = serializers.CharField(required=False, default="", allow_blank=True, help_text="آیکون هشدار.")
+    avatar_color = serializers.CharField(required=False, default="", allow_blank=True, help_text="رنگ آواتار هشدار.")

@@ -10,12 +10,12 @@ class WeatherChartDataSerializer(serializers.Serializer):
 
 
 class FarmWeatherCardSerializer(serializers.Serializer):
-    condition = serializers.CharField(required=False, allow_blank=True)
-    temperature = serializers.FloatField(required=False)
-    unit = serializers.CharField(required=False, allow_blank=True)
-    humidity = serializers.IntegerField(required=False)
-    windSpeed = serializers.FloatField(required=False)
-    windUnit = serializers.CharField(required=False, allow_blank=True)
+    condition = serializers.CharField(required=False, allow_blank=True, help_text="وضعیت فعلی آب‌وهوا.")
+    temperature = serializers.FloatField(required=False, help_text="دمای فعلی.")
+    unit = serializers.CharField(required=False, allow_blank=True, help_text="واحد دما.")
+    humidity = serializers.IntegerField(required=False, help_text="رطوبت نسبی.")
+    windSpeed = serializers.FloatField(required=False, help_text="سرعت باد.")
+    windUnit = serializers.CharField(required=False, allow_blank=True, help_text="واحد سرعت باد.")
     chartData = WeatherChartDataSerializer(required=False)
 
 
@@ -25,21 +25,22 @@ class WaterNeedSeriesSerializer(serializers.Serializer):
 
 
 class WaterNeedPredictionSerializer(serializers.Serializer):
-    totalNext7Days = serializers.FloatField(required=False)
-    unit = serializers.CharField(required=False, allow_blank=True)
-    categories = serializers.ListField(child=serializers.CharField(), required=False)
+    farm_uuid = serializers.CharField(required=False, allow_blank=True, help_text="UUID مزرعه.")
+    totalNext7Days = serializers.FloatField(required=False, help_text="جمع نیاز آبی ۷ روز آینده.")
+    unit = serializers.CharField(required=False, allow_blank=True, help_text="واحد نیاز آبی.")
+    categories = serializers.ListField(child=serializers.CharField(), required=False, help_text="برچسب روزها یا تاریخ‌ها.")
     series = WaterNeedSeriesSerializer(many=True, required=False)
+    dailyBreakdown = serializers.ListField(child=serializers.DictField(), required=False, help_text="جزئیات روزانه پیش‌بینی.")
+    insight = serializers.DictField(required=False, help_text="جمع‌بندی و insight تحلیلی.")
+    knowledge_base = serializers.CharField(required=False, allow_blank=True, help_text="مرجع دانشی در صورت ارائه توسط upstream.")
+    raw_response = serializers.CharField(required=False, allow_blank=True, help_text="پاسخ خام upstream در صورت وجود.")
 
 
 class WaterStressIndexSerializer(serializers.Serializer):
-    id = serializers.CharField(required=False, allow_blank=True)
-    title = serializers.CharField(required=False, allow_blank=True)
-    subtitle = serializers.CharField(required=False, allow_blank=True)
-    stats = serializers.CharField(required=False, allow_blank=True)
-    avatarColor = serializers.CharField(required=False, allow_blank=True)
-    avatarIcon = serializers.CharField(required=False, allow_blank=True)
-    chipText = serializers.CharField(required=False, allow_blank=True)
-    chipColor = serializers.CharField(required=False, allow_blank=True)
+    farm_uuid = serializers.UUIDField(required=False, allow_null=True, help_text="UUID مزرعه.")
+    waterStressIndex = serializers.IntegerField(required=False, help_text="شاخص تنش آبی.")
+    level = serializers.CharField(required=False, allow_blank=True, help_text="سطح تنش آبی.")
+    sourceMetric = serializers.DictField(required=False, help_text="متریک یا منبع محاسبه تنش آبی.")
 
 
 class WaterSummarySerializer(serializers.Serializer):

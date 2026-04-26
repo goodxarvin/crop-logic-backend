@@ -158,8 +158,8 @@ app جدید برای:
 ## Soil APIs
 
 - `GET /api/soil/avg-moisture/`
-- `GET /api/soil/sensor-radar-chart/`
-- `GET /api/soil/sensor-comparison-chart/`
+- `GET /api/sensor-7-in-1/sensor-radar-chart/`
+- `GET /api/sensor-7-in-1/sensor-comparison-chart/`
 - `GET /api/soil/anomalies/`
 - `GET /api/soil/moisture-heatmap/`
 - `GET /api/soil/summary/`
@@ -198,7 +198,7 @@ Plant Simulator routes که الان implementationشان زیر `yield_harvest`
 
 ## Economic Overview APIs
 
-- `GET /api/economic-overview/summary/`
+- `POST /api/economy/overview/`
 
 کاربرد:
 
@@ -289,8 +289,8 @@ Plant Simulator routes که الان implementationشان زیر `yield_harvest`
 | `farmWeatherCard` | `weatherAlerts` | `WATER` | `GET /api/water/card/` | Water Page |
 | `farmAlertsTracker` | `weatherAlerts` | `farm_alerts` | `GET /api/farm-alerts/tracker/` | Alerts Page |
 | `sensorValuesList` | `sensorMonitoring` | فعلا `dashboard` | فعلا فقط dashboard | Sensor Page در آینده |
-| `sensorRadarChart` | `sensorCharts` | `soil` | `GET /api/soil/sensor-radar-chart/` | Soil Page |
-| `sensorComparisonChart` | `sensorCharts` | `soil` | `GET /api/soil/sensor-comparison-chart/` | Soil Page |
+| `sensorRadarChart` | `sensorCharts` | `sensor_7_in_1` | `GET /api/sensor-7-in-1/sensor-radar-chart/` | Soil Page |
+| `sensorComparisonChart` | `sensorCharts` | `sensor_7_in_1` | `GET /api/sensor-7-in-1/sensor-comparison-chart/` | Soil Page |
 | `anomalyDetectionCard` | `alertsWater` | `soil` | `GET /api/soil/anomalies/` | Soil Page |
 | `farmAlertsTimeline` | `alertsWater` | `farm_alerts` | `GET /api/farm-alerts/timeline/` | Alerts Page |
 | `waterNeedPrediction` | `alertsWater` | `WATER` | `GET /api/water/need-prediction/` | Water Page |
@@ -299,7 +299,7 @@ Plant Simulator routes که الان implementationشان زیر `yield_harvest`
 | `soilMoistureHeatmap` | `soilHeatmap` | `soil` | `GET /api/soil/moisture-heatmap/` | Soil Page |
 | `ndviHealthCard` | `ndviRecommendations` | `crop_health` | `GET /api/crop-health/summary/` | Crop Health Page |
 | `recommendationsList` | `ndviRecommendations` | ترکیبی | dashboard aggregate | Recommendations / Alerts / Domain Pages |
-| `economicOverview` | `economic` | `economic_overview` | `GET /api/economic-overview/summary/` | Economic Overview Page |
+| `economicOverview` | `economic` | `economic_overview` | `POST /api/economy/overview/` | Economic Overview Page |
 
 ---
 
@@ -354,8 +354,8 @@ endpoint ها:
 endpoint ها:
 
 - `GET /api/soil/avg-moisture/`
-- `GET /api/soil/sensor-radar-chart/`
-- `GET /api/soil/sensor-comparison-chart/`
+- `GET /api/sensor-7-in-1/sensor-radar-chart/`
+- `GET /api/sensor-7-in-1/sensor-comparison-chart/`
 - `GET /api/soil/anomalies/`
 - `GET /api/soil/moisture-heatmap/`
 - یا یکجا `GET /api/soil/summary/`
@@ -418,7 +418,7 @@ endpoint:
 
 endpoint:
 
-- `GET /api/economic-overview/summary/`
+- `POST /api/economy/overview/`
 
 ---
 

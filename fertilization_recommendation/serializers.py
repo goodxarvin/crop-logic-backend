@@ -8,38 +8,24 @@ class FertilizationFarmDataSerializer(serializers.Serializer):
 
 
 class FertilizationRecommendRequestSerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField(required=True)
-    crop_id = serializers.CharField(required=False, allow_blank=True)
-    growth_stage = serializers.CharField(required=False, allow_blank=True)
-    farm_data = FertilizationFarmDataSerializer(required=False)
-    soilType = serializers.CharField(required=False, allow_blank=True)
-    organicMatter = serializers.CharField(required=False, allow_blank=True)
-    waterEC = serializers.CharField(required=False, allow_blank=True)
+    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای دریافت توصیه کودی.")
+    plant_name = serializers.CharField(required=False, allow_blank=True, help_text="نام محصول یا گیاه.")
+    growth_stage = serializers.CharField(required=False, allow_blank=True, help_text="مرحله رشد گیاه.")
 
 
-class FertilizationPlanSerializer(serializers.Serializer):
-    npkRatio = serializers.CharField(required=False, allow_blank=True)
-    amountPerHectare = serializers.CharField(required=False, allow_blank=True)
+class FertilizationSectionSerializer(serializers.Serializer):
+    type = serializers.ChoiceField(choices=["text", "list", "recommendation", "warning"])
+    title = serializers.CharField(required=False, allow_blank=True)
+    icon = serializers.CharField(required=False, allow_blank=True)
+    content = serializers.CharField(required=False, allow_blank=True)
+    items = serializers.ListField(child=serializers.CharField(), required=False)
+    fertilizerType = serializers.CharField(required=False, allow_blank=True)
+    amount = serializers.CharField(required=False, allow_blank=True)
     applicationMethod = serializers.CharField(required=False, allow_blank=True)
-    applicationInterval = serializers.CharField(required=False, allow_blank=True)
-    reasoning = serializers.CharField(required=False, allow_blank=True)
+    timing = serializers.CharField(required=False, allow_blank=True)
+    validityPeriod = serializers.CharField(required=False, allow_blank=True)
+    expandableExplanation = serializers.CharField(required=False, allow_blank=True)
 
 
 class FertilizationRecommendResponseDataSerializer(serializers.Serializer):
-    plan = FertilizationPlanSerializer(required=False)
-
-
-class FertilizationTaskSubmitDataSerializer(serializers.Serializer):
-    task_id = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.CharField(required=False, allow_blank=True)
-
-
-class FertilizationTaskProgressSerializer(serializers.Serializer):
-    message = serializers.CharField(required=False, allow_blank=True)
-
-
-class FertilizationTaskStatusDataSerializer(serializers.Serializer):
-    task_id = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.CharField(required=False, allow_blank=True)
-    progress = FertilizationTaskProgressSerializer(required=False)
-    result = FertilizationRecommendResponseDataSerializer(required=False)
+    sections = FertilizationSectionSerializer(many=True, read_only=True)
