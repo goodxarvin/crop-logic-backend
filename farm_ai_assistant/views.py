@@ -76,6 +76,39 @@ class ContextView(FarmAccessMixin, APIView):
 
 class ConversationAccessMixin(FarmAccessMixin):
     @staticmethod
+    def _is_non_empty_payload(payload):
+        if isinstance(payload, dict):
+            return bool(payload)
+        if isinstance(payload, list):
+            return bool(payload)
+        if isinstance(payload, str):
+            return bool(payload.strip())
+        return payload is not None
+
+    @staticmethod
+    def _parse_adapter_text_payload(adapter_data):
+        if not isinstance(adapter_data, str):
+            return adapter_data
+
+        text = adapter_data.strip()
+        if not text:
+            return adapter_data
+
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].strip() == "```":
+                text = "\n".join(lines[1:-1]).strip()
+
+        try:
+            return json.loads(text)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Farm AI assistant text response could not be parsed as JSON: preview=%s",
+                text[:200],
+            )
+            return adapter_data
+
+    @staticmethod
     def _generate_conversation_title(query):
         normalized_query = (query or "").strip()
         if not normalized_query:
@@ -237,10 +270,19 @@ class ConversationAccessMixin(FarmAccessMixin):
             {
                 "role": message.role,
                 "content": message.content,
-                **({"sections": message.raw_response.get("sections", [])} if message.role == Message.ROLE_ASSISTANT else {}),
+                **(
+                    {"sections": message.raw_response.get("sections", [])}
+                    if message.role == Message.ROLE_ASSISTANT and isinstance(message.raw_response, dict)
+                    else {}
+                ),
             }
             for message in existing_messages
-            if message.content or (message.role == Message.ROLE_ASSISTANT and message.raw_response.get("sections"))
+            if message.content
+            or (
+                message.role == Message.ROLE_ASSISTANT
+                and isinstance(message.raw_response, dict)
+                and message.raw_response.get("sections")
+            )
         ]
 
     def _prepare_chat_input(self, request):
@@ -267,76 +309,62 @@ class ConversationAccessMixin(FarmAccessMixin):
 
         return mutable_data
 
+    @staticmethod
+    def _extract_message_content(payload):
+        if not isinstance(payload, dict):
+            return ""
+
+        for key in ("content", "body", "message", "answer", "text"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        sections = payload.get("sections")
+        if isinstance(sections, list):
+            for section in sections:
+                if not isinstance(section, dict):
+                    continue
+                value = section.get("content")
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return ""
+
+    @staticmethod
+    def _extract_chat_title(payload):
+        if not isinstance(payload, dict):
+            return ""
+
+        sections = payload.get("sections")
+        if not isinstance(sections, list):
+            return ""
+
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            if section.get("type") != "chatTitle":
+                continue
+            title = section.get("title")
+            if isinstance(title, str) and title.strip():
+                return title.strip()[:255]
+        return ""
+
     def _extract_assistant_payload(self, adapter_data, conversation):
-        payload_source = adapter_data
-        if isinstance(adapter_data, dict) and isinstance(adapter_data.get("data"), dict):
-            payload_source = adapter_data["data"]
+        adapter_data = self._parse_adapter_text_payload(adapter_data)
 
         logger.warning(
-            "Farm AI assistant parsing response: conversation_id=%s adapter_type=%s adapter_keys=%s payload_source_type=%s payload_source_keys=%s",
+            "Farm AI assistant parsing response: conversation_id=%s adapter_type=%s adapter_keys=%s",
             str(conversation.uuid),
             type(adapter_data).__name__,
             sorted(adapter_data.keys()) if isinstance(adapter_data, dict) else None,
-            type(payload_source).__name__,
-            sorted(payload_source.keys()) if isinstance(payload_source, dict) else None,
         )
-
-        content = ""
-        sections = []
-
-        if isinstance(payload_source, dict):
-            content = payload_source.get("content") or ""
-            sections = self._normalize_sections(payload_source.get("sections"))
-            logger.warning(
-                "Farm AI assistant payload_source parsed: conversation_id=%s raw_content_present=%s raw_sections_type=%s normalized_sections_count=%s",
-                str(conversation.uuid),
-                bool(content),
-                type(payload_source.get("sections")).__name__ if payload_source.get("sections") is not None else None,
-                len(sections),
-            )
-
-        logger.warning("%s %s", isinstance(payload_source, dict), not sections and isinstance(adapter_data, dict))
-        if not sections and isinstance(adapter_data, dict):
-            sections = self._normalize_sections(adapter_data.get("sections"))
-            logger.warning(
-                "Farm AI assistant root-level sections fallback: conversation_id=%s raw_sections_type=%s normalized_sections_count=%s",
-                str(conversation.uuid),
-                type(adapter_data.get("sections")).__name__ if adapter_data.get("sections") is not None else None,
-                len(sections),
-            )
-
-        if not content and isinstance(adapter_data, dict):
-            content = adapter_data.get("body") or adapter_data.get("content") or ""
-            logger.warning(
-                "Farm AI assistant content fallback: conversation_id=%s body_present=%s content_present=%s final_content_present=%s",
-                str(conversation.uuid),
-                bool(adapter_data.get("body")),
-                bool(adapter_data.get("content")),
-                bool(content),
-            )
-
-        if isinstance(adapter_data, dict) and adapter_data.get("result") is not None:
-            logger.warning(
-                "Farm AI assistant unparsed result detected: conversation_id=%s result_type=%s result_keys=%s",
-                str(conversation.uuid),
-                type(adapter_data.get("result")).__name__,
-                sorted(adapter_data["result"].keys()) if isinstance(adapter_data.get("result"), dict) else None,
-            )
 
         logger.warning(
-            "Farm AI assistant final parsed payload: conversation_id=%s content_length=%s sections_count=%s",
+            "Farm AI assistant final parsed payload: conversation_id=%s payload_type=%s is_non_empty=%s",
             str(conversation.uuid),
-            len(content or ""),
-            len(sections),
+            type(adapter_data).__name__,
+            self._is_non_empty_payload(adapter_data),
         )
-
-        return {
-            "message_id": "",
-            "conversation_id": str(conversation.uuid),
-            "farm_uuid": self._farm_uuid_or_none(conversation.farm),
-            "content": content,
-            "sections": sections,
-        }
+        return adapter_data
 
     @staticmethod
     def _serialize_chat_message(message):
@@ -486,6 +514,7 @@ class ChatView(ConversationAccessMixin, APIView):
 
         validated = serializer.validated_data
         conversation = self._get_or_create_conversation(request, validated)
+        is_first_chat_turn = not conversation.messages.exists()
         history = self._merge_history(validated, conversation)
         uploaded_images = self._collect_uploaded_images(request)
 
@@ -528,6 +557,22 @@ class ChatView(ConversationAccessMixin, APIView):
                     status=adapter_response.status_code,
                 )
             assistant_payload = self._extract_assistant_payload(adapter_response.data, conversation)
+            if not self._is_non_empty_payload(assistant_payload):
+                logger.error(
+                    "Farm AI assistant returned an empty payload: conversation_id=%s response_type=%s response_keys=%s",
+                    str(conversation.uuid),
+                    type(adapter_response.data).__name__,
+                    sorted(adapter_response.data.keys()) if isinstance(adapter_response.data, dict) else None,
+                )
+                return Response(
+                    {
+                        "status": "error",
+                        "data": {
+                            "message": "AI service returned an empty or invalid response.",
+                        },
+                    },
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
             response_status_code = adapter_response.status_code
         except ExternalAPIRequestError as exc:
             return Response(
@@ -544,14 +589,15 @@ class ChatView(ConversationAccessMixin, APIView):
             conversation=conversation,
             farm=conversation.farm,
             role=Message.ROLE_ASSISTANT,
-            content=assistant_payload.get("content", ""),
-            raw_response={},
+            content=self._extract_message_content(assistant_payload),
+            raw_response=assistant_payload if isinstance(assistant_payload, (dict, list)) else {},
         )
-        assistant_payload["message_id"] = str(assistant_message.uuid)
-        assistant_message.raw_response = assistant_payload
-        assistant_message.save(update_fields=["raw_response"])
 
-        if not conversation.title:
+        chat_title = self._extract_chat_title(assistant_payload)
+        if is_first_chat_turn and chat_title:
+            conversation.title = chat_title
+            conversation.save(update_fields=["title", "updated_at"])
+        elif not conversation.title:
             conversation.title = self._generate_conversation_title(validated.get("query", ""))
             conversation.save(update_fields=["title", "updated_at"])
         else:
@@ -560,7 +606,10 @@ class ChatView(ConversationAccessMixin, APIView):
         return Response(
             {
                 "status": "success",
+                "conversation_id": str(conversation.uuid),
+                "farm_uuid": self._farm_uuid_or_none(conversation.farm),
                 "data": assistant_payload,
+                "conversation_title": conversation.title,
             },
             status=response_status_code,
         )

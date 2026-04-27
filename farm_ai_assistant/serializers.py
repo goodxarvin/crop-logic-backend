@@ -19,6 +19,7 @@ class ChatSectionSerializer(serializers.Serializer):
 
 class ConversationSummarySerializer(serializers.Serializer):
     id = serializers.UUIDField(source="uuid", read_only=True)
+    title = serializers.CharField(read_only=True)
     farm_uuid = serializers.UUIDField(source="farm.farm_uuid", read_only=True, allow_null=True)
     message_count = serializers.IntegerField(read_only=True)
 
@@ -46,12 +47,8 @@ class ConversationMessagesSerializer(serializers.Serializer):
     messages = ChatHistoryMessageSerializer(many=True, read_only=True)
 
 
-class ChatResponseDataSerializer(serializers.Serializer):
-    message_id = serializers.UUIDField(read_only=True)
-    conversation_id = serializers.UUIDField(read_only=True)
-    farm_uuid = serializers.UUIDField(read_only=True, allow_null=True)
-    content = serializers.CharField(read_only=True, allow_blank=True)
-    sections = ChatSectionSerializer(many=True, read_only=True)
+class ChatResponseDataSerializer(serializers.JSONField):
+    pass
 
 
 class ConversationDeleteSerializer(serializers.Serializer):

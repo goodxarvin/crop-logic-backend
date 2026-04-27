@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
+from unittest.mock import patch
 
+from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
 
 from .models import Conversation, Message
@@ -12,6 +14,7 @@ from .views import (
     ChatTaskCreateView,
     ChatTaskStatusView,
     ContextView,
+    ChatView,
 )
 
 
@@ -218,3 +221,192 @@ class FarmAiAssistantOptionalFarmUuidTests(TestCase):
         self.assertEqual(delete_response.data["data"]["conversation_id"], str(landing_conversation.uuid))
         self.assertIsNone(delete_response.data["data"]["farm_uuid"])
         self.assertFalse(Conversation.objects.filter(uuid=landing_conversation.uuid).exists())
+
+
+@override_settings(USE_EXTERNAL_API_MOCK=True)
+class FarmAiAssistantChatViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="chat-user",
+            password="secret123",
+            email="chat-user@example.com",
+            phone_number="09120000001",
+        )
+        self.farm_type, _ = FarmType.objects.get_or_create(name="زراعی")
+        self.farm = FarmHub.objects.create(
+            owner=self.user,
+            farm_type=self.farm_type,
+            name="Farm Chat",
+        )
+
+    @patch("farm_ai_assistant.views.external_api_request")
+    def test_chat_reads_content_and_sections_from_nested_result_payload(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={
+                "content": "برای خاک شما گندم و کلزا مناسب هستند.",
+                "sections": [
+                    {
+                        "type": "chatTitle",
+                        "title": "تناسب خاک برای محصولات مختلف",
+                    },
+                    {
+                        "type": "list",
+                        "title": "محصولات مناسب",
+                        "items": ["گندم", "کلزا"],
+                    }
+                ],
+                "extra_field": {"confidence": 0.92},
+            },
+        )
+
+        request = self.factory.post(
+            "/api/farm-ai-assistant/chat/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "query": "خاک من واسه چه محصولاتی مناسبه",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = ChatView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "success")
+        self.assertEqual(response.data["data"]["content"], "برای خاک شما گندم و کلزا مناسب هستند.")
+        self.assertEqual(response.data["data"]["extra_field"], {"confidence": 0.92})
+        self.assertEqual(response.data["conversation_title"], "تناسب خاک برای محصولات مختلف")
+        self.assertEqual(response.data["data"]["sections"][1]["title"], "محصولات مناسب")
+
+        assistant_message = Message.objects.filter(role=Message.ROLE_ASSISTANT).latest("created_at")
+        self.assertEqual(assistant_message.content, "برای خاک شما گندم و کلزا مناسب هستند.")
+        self.assertEqual(assistant_message.raw_response["sections"][1]["items"], ["گندم", "کلزا"])
+        assistant_message.refresh_from_db()
+        self.assertEqual(assistant_message.conversation.title, "تناسب خاک برای محصولات مختلف")
+
+    @patch("farm_ai_assistant.views.external_api_request")
+    def test_chat_returns_error_when_ai_payload_is_empty(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={},
+        )
+
+        request = self.factory.post(
+            "/api/farm-ai-assistant/chat/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "query": "خاک من واسه چه محصولاتی مناسبه",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = ChatView.as_view()(request)
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.data["status"], "error")
+        self.assertIn("empty or invalid", response.data["data"]["message"])
+        self.assertEqual(Message.objects.filter(role=Message.ROLE_ASSISTANT).count(), 0)
+
+    @patch("farm_ai_assistant.views.external_api_request")
+    def test_chat_reads_sections_from_fenced_json_text_response(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data="""```json
+{
+  "answer": "بله، خاک شما برای کاشت گل رز مناسب است.",
+  "sections": [
+    {
+      "type": "recommendation",
+      "title": "جمع‌بندی اصلی",
+      "content": "بله، خاک شما برای کاشت گل رز مناسب است."
+    },
+    {
+      "type": "list",
+      "title": "نکات اجرایی",
+      "items": ["زهکشی خاک را بررسی کنید."]
+    }
+  ]
+}
+```""",
+        )
+
+        request = self.factory.post(
+            "/api/farm-ai-assistant/chat/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "query": "خاک من برای گل رز مناسبه؟",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = ChatView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "success")
+        self.assertEqual(response.data["data"]["answer"], "بله، خاک شما برای کاشت گل رز مناسب است.")
+        self.assertEqual(response.data["conversation_title"], "خاک")
+        self.assertEqual(len(response.data["data"]["sections"]), 2)
+        self.assertEqual(response.data["data"]["sections"][0]["title"], "جمع‌بندی اصلی")
+        self.assertEqual(response.data["data"]["sections"][1]["items"], ["زهکشی خاک را بررسی کنید."])
+
+    @patch("farm_ai_assistant.views.external_api_request")
+    def test_chat_does_not_change_existing_conversation_title_on_later_turns(self, mock_external_api_request):
+        conversation = Conversation.objects.create(
+            owner=self.user,
+            farm=self.farm,
+            title="عنوان اولیه",
+            farm_context={},
+        )
+        Message.objects.create(
+            conversation=conversation,
+            farm=self.farm,
+            role=Message.ROLE_USER,
+            content="پیام اول",
+            raw_response={},
+        )
+        Message.objects.create(
+            conversation=conversation,
+            farm=self.farm,
+            role=Message.ROLE_ASSISTANT,
+            content="پاسخ اول",
+            raw_response={"sections": [{"type": "chatTitle", "title": "عنوان اولیه"}]},
+        )
+
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={
+                "sections": [
+                    {
+                        "type": "chatTitle",
+                        "title": "عنوان جدید که نباید ذخیره شود",
+                    },
+                    {
+                        "type": "recommendation",
+                        "title": "پاسخ جدید",
+                        "content": "این فقط پاسخ جدید است.",
+                    },
+                ]
+            },
+        )
+
+        request = self.factory.post(
+            "/api/farm-ai-assistant/chat/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "conversation_id": str(conversation.uuid),
+                "query": "سوال دوم",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = ChatView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["conversation_title"], "عنوان اولیه")
+        conversation.refresh_from_db()
+        self.assertEqual(conversation.title, "عنوان اولیه")
