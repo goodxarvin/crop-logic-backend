@@ -1,0 +1,4 @@
+[submodule "Schemas"]
+	path = Schemas
+	url = ssh://git@git.crop-logic.ir:2222/sajad-dev/Schemas.git
+	branch = develop
