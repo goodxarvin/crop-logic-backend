@@ -103,6 +103,8 @@ class FarmHub(models.Model):
     )
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
+    irrigation_method_id = models.IntegerField(null=True, blank=True)
+    irrigation_method_name = models.CharField(max_length=255, blank=True, default="")
     current_crop_area = models.ForeignKey(
         "crop_zoning.CropArea",
         on_delete=models.SET_NULL,

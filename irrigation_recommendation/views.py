@@ -4,12 +4,15 @@ Irrigation Recommendation API views.
 
 import logging
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
 from rest_framework import serializers, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
-from config.swagger import status_response
+from config.swagger import code_response, status_response
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
 from water.serializers import WaterStressIndexSerializer
@@ -18,13 +21,43 @@ from .mock_data import CONFIG_RESPONSE_DATA
 from .models import IrrigationRecommendationRequest
 from .serializers import (
     IrrigationMethodSerializer,
+    IrrigationRecommendationListItemSerializer,
+    IrrigationRecommendationListQuerySerializer,
     IrrigationRecommendRequestSerializer,
     IrrigationRecommendResponseDataSerializer,
     WaterStressRequestSerializer,
 )
+from .services import build_recommendation_response
 
 
 logger = logging.getLogger(__name__)
+
+
+class IrrigationRecommendationPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+    def get_paginated_response(self, data):
+        page_size = self.get_page_size(self.request) or self.page.paginator.per_page
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": data,
+                "pagination": {
+                    "page": self.page.number,
+                    "page_size": page_size,
+                    "total_pages": self.page.paginator.num_pages,
+                    "total_items": self.page.paginator.count,
+                    "has_next": self.page.has_next(),
+                    "has_previous": self.page.has_previous(),
+                    "next": self.get_next_link(),
+                    "previous": self.get_previous_link(),
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class FarmAccessMixin:
@@ -122,61 +155,6 @@ class IrrigationMethodListView(APIView):
 
 
 class RecommendView(FarmAccessMixin, APIView):
-    @staticmethod
-    def _normalize_sections(raw_sections):
-        if not isinstance(raw_sections, list):
-            return []
-
-        allowed_keys = {
-            "type",
-            "title",
-            "icon",
-            "content",
-            "items",
-            "frequency",
-            "amount",
-            "timing",
-            "validityPeriod",
-            "expandableExplanation",
-        }
-
-        normalized_sections = []
-        for section in raw_sections:
-            if not isinstance(section, dict) or not section.get("type"):
-                continue
-
-            normalized_section = {}
-            for key in allowed_keys:
-                value = section.get(key)
-                if value is None:
-                    continue
-                if key == "items":
-                    if not isinstance(value, list):
-                        continue
-                    normalized_section[key] = [str(item) for item in value]
-                    continue
-                normalized_section[key] = str(value) if key != "type" else value
-
-            normalized_sections.append(normalized_section)
-        return normalized_sections
-
-    def _extract_public_sections(self, adapter_data):
-        if not isinstance(adapter_data, dict):
-            return []
-
-        data = adapter_data.get("data")
-        if isinstance(data, dict) and isinstance(data.get("sections"), list):
-            return self._normalize_sections(data.get("sections"))
-
-        result = data.get("result") if isinstance(data, dict) else None
-        if isinstance(result, dict) and isinstance(result.get("sections"), list):
-            return self._normalize_sections(result.get("sections"))
-
-        if isinstance(adapter_data.get("sections"), list):
-            return self._normalize_sections(adapter_data.get("sections"))
-
-        return []
-
     @extend_schema(
         tags=["Irrigation Recommendation"],
         request=IrrigationRecommendRequestSerializer,
@@ -188,6 +166,15 @@ class RecommendView(FarmAccessMixin, APIView):
         payload = serializer.validated_data.copy()
         farm = self._get_farm(request, payload.get("farm_uuid"))
         payload["farm_uuid"] = str(farm.farm_uuid)
+        payload.pop("sensor_uuid", None)
+        payload.pop("irrigation_type", None)
+        payload.pop("irrigation_method_name", None)
+
+        if farm.irrigation_method_name:
+            payload["irrigation_method_name"] = farm.irrigation_method_name
+            payload["irrigation_type"] = farm.irrigation_method_name
+        if farm.irrigation_method_id is not None:
+            payload["irrigation_method_id"] = farm.irrigation_method_id
 
         adapter_response = external_api_request(
             "ai",
@@ -197,21 +184,26 @@ class RecommendView(FarmAccessMixin, APIView):
         )
 
         response_data = adapter_response.data if isinstance(adapter_response.data, dict) else {}
-        public_sections = self._extract_public_sections(response_data)
+        recommendation_data = build_recommendation_response(response_data)
 
         logger.warning(
             "Irrigation recommendation response parsed: farm_uuid=%s status_code=%s response_keys=%s sections_count=%s",
             str(farm.farm_uuid),
             adapter_response.status_code,
             sorted(response_data.keys()) if isinstance(response_data, dict) else None,
-            len(public_sections),
+            len(recommendation_data["sections"]),
         )
 
-        IrrigationRecommendationRequest.objects.create(
+        recommendation = IrrigationRecommendationRequest.objects.create(
             farm=farm,
             crop_id=payload.get("plant_name", ""),
+            growth_stage=payload.get("growth_stage", ""),
             task_id="",
-            status="success" if adapter_response.status_code < 400 else "error",
+            status=(
+                IrrigationRecommendationRequest.STATUS_PENDING_CONFIRMATION
+                if adapter_response.status_code < 400
+                else IrrigationRecommendationRequest.STATUS_ERROR
+            ),
             request_payload=payload,
             response_payload=adapter_response.data if isinstance(adapter_response.data, dict) else {"raw": adapter_response.data},
         )
@@ -225,16 +217,86 @@ class RecommendView(FarmAccessMixin, APIView):
                 status=adapter_response.status_code,
             )
 
+        recommendation_data["recommendation_uuid"] = str(recommendation.uuid)
+        recommendation_data["crop_id"] = recommendation.crop_id
+        recommendation_data["plant_name"] = recommendation.crop_id
+        recommendation_data["growth_stage"] = recommendation.growth_stage
+        recommendation_data["irrigation_method_name"] = payload.get("irrigation_method_name", "")
+        recommendation_data["status"] = recommendation.status
+        recommendation_data["status_label"] = recommendation.get_status_display()
+
         return Response(
             {
                 "code": 200,
                 "msg": "success",
-                "data": {
-                    "sections": public_sections,
-                },
+                "data": recommendation_data,
             },
             status=status.HTTP_200_OK,
         )
+
+
+class RecommendationListView(FarmAccessMixin, APIView):
+    pagination_class = IrrigationRecommendationPagination
+
+    @extend_schema(
+        tags=["Irrigation Recommendation"],
+        parameters=[IrrigationRecommendationListQuerySerializer],
+        responses={200: code_response("IrrigationRecommendationListResponse")},
+    )
+    def get(self, request):
+        serializer = IrrigationRecommendationListQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        farm = self._get_farm(request, serializer.validated_data["farm_uuid"])
+        recommendations = farm.irrigation_recommendations.all().order_by("-created_at", "-id")
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(recommendations, request, view=self)
+
+        items = []
+        for recommendation in page:
+            request_payload = recommendation.request_payload if isinstance(recommendation.request_payload, dict) else {}
+            recommendation.irrigation_method_name = str(request_payload.get("irrigation_method_name") or "")
+            items.append(recommendation)
+
+        data = IrrigationRecommendationListItemSerializer(items, many=True).data
+        return paginator.get_paginated_response(data)
+
+
+class RecommendationDetailView(FarmAccessMixin, APIView):
+    @extend_schema(
+        tags=["Irrigation Recommendation"],
+        parameters=[
+            OpenApiParameter(
+                name="recommendation_uuid",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                required=True,
+            )
+        ],
+        responses={
+            200: code_response("IrrigationRecommendationDetailResponse", data=IrrigationRecommendResponseDataSerializer()),
+            404: code_response("IrrigationRecommendationDetailNotFoundResponse"),
+        },
+    )
+    def get(self, request, recommendation_uuid):
+        recommendation = IrrigationRecommendationRequest.objects.filter(
+            uuid=recommendation_uuid,
+            farm__owner=request.user,
+        ).select_related("farm").first()
+        if recommendation is None:
+            return Response({"code": 404, "msg": "Recommendation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        data = build_recommendation_response(recommendation.response_payload)
+        request_payload = recommendation.request_payload if isinstance(recommendation.request_payload, dict) else {}
+        data["recommendation_uuid"] = str(recommendation.uuid)
+        data["crop_id"] = recommendation.crop_id
+        data["plant_name"] = recommendation.crop_id
+        data["growth_stage"] = recommendation.growth_stage
+        data["irrigation_method_name"] = str(request_payload.get("irrigation_method_name") or "")
+        data["status"] = recommendation.status
+        data["status_label"] = recommendation.get_status_display()
+        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
 
 
 class WaterStressView(APIView):

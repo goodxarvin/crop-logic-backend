@@ -6,6 +6,17 @@ from farm_hub.models import FarmHub
 
 
 class IrrigationRecommendationRequest(models.Model):
+    STATUS_IN_PROGRESS = "in_progress"
+    STATUS_PENDING_CONFIRMATION = "pending_confirmation"
+    STATUS_COMPLETED = "completed"
+    STATUS_ERROR = "error"
+    STATUS_CHOICES = (
+        (STATUS_IN_PROGRESS, "در حال اجرا"),
+        (STATUS_PENDING_CONFIRMATION, "منتظر تایید"),
+        (STATUS_COMPLETED, "پایان یافته"),
+        (STATUS_ERROR, "خطا"),
+    )
+
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     farm = models.ForeignKey(
         FarmHub,
@@ -13,8 +24,14 @@ class IrrigationRecommendationRequest(models.Model):
         related_name="irrigation_recommendations",
     )
     crop_id = models.CharField(max_length=255, blank=True, default="")
+    growth_stage = models.CharField(max_length=255, blank=True, default="")
     task_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
-    status = models.CharField(max_length=64, blank=True, default="")
+    status = models.CharField(
+        max_length=64,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING_CONFIRMATION,
+        db_index=True,
+    )
     request_payload = models.JSONField(default=dict, blank=True)
     response_payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

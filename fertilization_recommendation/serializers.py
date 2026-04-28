@@ -9,8 +9,15 @@ class FertilizationFarmDataSerializer(serializers.Serializer):
 
 class FertilizationRecommendRequestSerializer(serializers.Serializer):
     farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای دریافت توصیه کودی.")
-    plant_name = serializers.CharField(required=False, allow_blank=True, help_text="نام محصول یا گیاه.")
+    crop_id = serializers.CharField(required=False, allow_blank=True, help_text="شناسه یا نام محصول. این فیلد همان plant_name است.")
+    plant_name = serializers.CharField(required=False, allow_blank=True, help_text="نام محصول یا گیاه. این فیلد همان crop_id است.")
     growth_stage = serializers.CharField(required=False, allow_blank=True, help_text="مرحله رشد گیاه.")
+
+
+class FertilizationRecommendationListQuerySerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای دریافت لیست توصیه های کودی.")
+    page = serializers.IntegerField(required=False, min_value=1)
+    page_size = serializers.IntegerField(required=False, min_value=1, max_value=100)
 
 
 class FertilizationSectionSerializer(serializers.Serializer):
@@ -98,7 +105,24 @@ class AlternativeRecommendationSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
 
 
+class FertilizationRecommendationListItemSerializer(serializers.Serializer):
+    recommendation_uuid = serializers.UUIDField(source="uuid", read_only=True)
+    crop_id = serializers.CharField(read_only=True)
+    plant_name = serializers.CharField(source="crop_id", read_only=True)
+    growth_stage = serializers.CharField(read_only=True)
+    fertilizer_type = serializers.CharField(read_only=True, allow_blank=True)
+    status = serializers.CharField(read_only=True)
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+    requested_at = serializers.DateTimeField(source="created_at", read_only=True)
+
+
 class FertilizationRecommendResponseDataSerializer(serializers.Serializer):
+    recommendation_uuid = serializers.UUIDField(read_only=True, required=False)
+    crop_id = serializers.CharField(read_only=True, required=False, allow_blank=True)
+    plant_name = serializers.CharField(read_only=True, required=False, allow_blank=True)
+    growth_stage = serializers.CharField(read_only=True, required=False, allow_blank=True)
+    status = serializers.CharField(read_only=True, required=False)
+    status_label = serializers.CharField(read_only=True, required=False)
     primary_recommendation = PrimaryRecommendationSerializer(read_only=True)
     nutrient_analysis = NutrientAnalysisSerializer(read_only=True)
     application_guide = ApplicationGuideSerializer(read_only=True)

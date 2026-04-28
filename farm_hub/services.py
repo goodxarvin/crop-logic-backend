@@ -73,8 +73,11 @@ def sync_farm_data(
     if plant_ids:
         request_payload["plant_ids"] = [int(plant_id) for plant_id in plant_ids]
 
-    if irrigation_method_id is not None:
-        request_payload["irrigation_method_id"] = int(irrigation_method_id)
+    resolved_irrigation_method_id = irrigation_method_id
+    if resolved_irrigation_method_id is None:
+        resolved_irrigation_method_id = farm.irrigation_method_id
+    if resolved_irrigation_method_id is not None:
+        request_payload["irrigation_method_id"] = int(resolved_irrigation_method_id)
 
     if not any(key in request_payload for key in ("sensor_payload", "plant_ids", "irrigation_method_id")):
         raise FarmDataSyncError(
@@ -112,7 +115,7 @@ def create_farm_with_zoning(serializer, owner):
     area_feature = serializer.validated_data.pop("area_geojson", None) or get_default_area_feature()
     sensor_key = serializer.validated_data.pop("sensor_key", "sensor-7-1")
     sensor_payload = serializer.validated_data.pop("sensor_payload", None)
-    irrigation_method_id = serializer.validated_data.pop("irrigation_method_id", None)
+    irrigation_method_id = serializer.validated_data.get("irrigation_method_id", None)
 
     with transaction.atomic():
         farm = serializer.save(owner=owner)

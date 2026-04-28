@@ -66,6 +66,8 @@ class FarmListCreateViewTests(TestCase):
                 "farm_type_uuid": str(self.farm_type.uuid),
                 "subscription_plan_uuid": str(self.plan.uuid),
                 "product_uuids": [str(self.wheat.uuid)],
+                "irrigation_method_id": 3,
+                "irrigation_method_name": "Drip",
                 "sensors": [
                     {
                         "sensor_catalog_uuid": str(self.weather_station.uuid),
@@ -88,6 +90,8 @@ class FarmListCreateViewTests(TestCase):
         self.assertEqual(response.data["code"], 201)
         self.assertEqual(response.data["data"]["name"], "farm-1")
         self.assertEqual(response.data["data"]["subscription_plan"]["code"], self.plan.code)
+        self.assertEqual(response.data["data"]["irrigation_method_id"], 3)
+        self.assertEqual(response.data["data"]["irrigation_method_name"], "Drip")
         self.assertIn("zoning", response.data["data"])
         self.assertIsNotNone(response.data["data"]["area_uuid"])
         self.assertEqual(len(response.data["data"]["sensors"]), 1)
@@ -107,6 +111,7 @@ class FarmListCreateViewTests(TestCase):
                 "farm_uuid": response.data["data"]["farm_uuid"],
                 "farm_boundary": AREA_GEOJSON["geometry"],
                 "plant_ids": [self.wheat.id],
+                "irrigation_method_id": 3,
             },
             headers={
                 "Accept": "application/json",
@@ -223,6 +228,7 @@ class FarmListCreateViewTests(TestCase):
                 },
                 "sensor_payload": {"soil_moisture": 45.2},
                 "irrigation_method_id": 3,
+                "irrigation_method_name": "Drip",
             },
             format="json",
         )
@@ -233,6 +239,8 @@ class FarmListCreateViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         farm.refresh_from_db()
         self.assertIsNotNone(farm.current_crop_area)
+        self.assertEqual(farm.irrigation_method_id, 3)
+        self.assertEqual(farm.irrigation_method_name, "Drip")
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/farm-data/",
@@ -279,6 +287,8 @@ class FarmSeedTests(TestCase):
         self.assertEqual(farm.farm_uuid.hex, "11111111111111111111111111111111")
         self.assertEqual(CropArea.objects.count(), 1)
         self.assertEqual(farm.sensors.count(), 1)
+        self.assertEqual(farm.irrigation_method_id, 1)
+        self.assertEqual(farm.irrigation_method_name, "آبیاری قطره ای")
         self.assertIsNotNone(farm.sensors.first().physical_device_uuid)
         self.assertTrue(SensorCatalog.objects.filter(code="sensor_7_soil_moisture_sensor_v1_2").exists())
 

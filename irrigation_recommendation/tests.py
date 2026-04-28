@@ -7,7 +7,14 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
 
-from .views import IrrigationMethodListView, WaterStressView
+from .models import IrrigationRecommendationRequest
+from .views import (
+    IrrigationMethodListView,
+    RecommendView,
+    RecommendationDetailView,
+    RecommendationListView,
+    WaterStressView,
+)
 
 
 class WaterStressViewTests(TestCase):
@@ -138,4 +145,257 @@ class IrrigationMethodListViewTests(TestCase):
             "/api/irrigation/",
             method="POST",
             payload={"name": "Drip"},
+        )
+
+
+class RecommendViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="recommend-farmer",
+            password="secret123",
+            email="recommend@example.com",
+            phone_number="09120000002",
+        )
+        self.farm_type = FarmType.objects.create(name="باغی")
+        self.farm = FarmHub.objects.create(
+            owner=self.user,
+            farm_type=self.farm_type,
+            name="Recommend Farm",
+            irrigation_method_id=3,
+            irrigation_method_name="آبیاری قطره ای",
+        )
+
+    @patch("irrigation_recommendation.views.external_api_request")
+    def test_post_returns_full_recommendation_shape(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={
+                "data": {
+                    "result": {
+                        "plan": {
+                            "frequencyPerWeek": 4,
+                            "durationMinutes": 38,
+                            "bestTimeOfDay": "05:30 تا 08:00 صبح",
+                            "moistureLevel": 72,
+                            "warning": "در ساعات گرم روز آبیاری انجام نشود",
+                        },
+                        "water_balance": {
+                            "active_kc": 0.93,
+                            "crop_profile": {
+                                "kc_initial": 0.55,
+                                "kc_mid": 1.05,
+                                "kc_end": 0.78,
+                            },
+                            "daily": [
+                                {
+                                    "forecast_date": "2025-02-12",
+                                    "et0_mm": 5.4,
+                                    "etc_mm": 4.9,
+                                    "effective_rainfall_mm": 0,
+                                    "gross_irrigation_mm": 17,
+                                    "irrigation_timing": "05:30 - 07:00",
+                                }
+                            ],
+                        },
+                        "timeline": [
+                            {
+                                "step_number": 1,
+                                "title": "بررسی فشار",
+                                "description": "فشار ابتدا و انتهای لاین کنترل شود",
+                            }
+                        ],
+                        "sections": [
+                            {
+                                "title": "هشدار تبخیر بالا",
+                                "icon": "tabler-alert-triangle",
+                                "type": "warning",
+                                "content": "در ساعات گرم روز آبیاری انجام نشود",
+                            },
+                            {
+                                "title": "نکته بهره وری",
+                                "icon": "tabler-bulb",
+                                "type": "tip",
+                                "content": "شست وشوی فیلترها به یکنواختی آبیاری کمک می کند",
+                            },
+                        ],
+                    }
+                }
+            },
+        )
+
+        request = self.factory.post(
+            "/api/irrigation/recommend/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "plant_name": "گوجه فرنگی",
+                "growth_stage": "گلدهی",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = RecommendView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertIn("recommendation_uuid", response.data["data"])
+        self.assertEqual(response.data["data"]["status"], IrrigationRecommendationRequest.STATUS_PENDING_CONFIRMATION)
+        self.assertEqual(response.data["data"]["status_label"], "منتظر تایید")
+        self.assertEqual(response.data["data"]["plan"]["durationMinutes"], 38)
+        self.assertEqual(response.data["data"]["water_balance"]["active_kc"], 0.93)
+        self.assertEqual(response.data["data"]["timeline"][0]["step_number"], 1)
+        self.assertEqual(response.data["data"]["sections"][0]["type"], "warning")
+        mock_external_api_request.assert_called_once_with(
+            "ai",
+            "/api/irrigation/recommend/",
+            method="POST",
+            payload={
+                "farm_uuid": str(self.farm.farm_uuid),
+                "plant_name": "گوجه فرنگی",
+                "growth_stage": "گلدهی",
+                "irrigation_method_id": 3,
+                "irrigation_type": "آبیاری قطره ای",
+                "irrigation_method_name": "آبیاری قطره ای",
+            },
+        )
+
+
+class IrrigationRecommendationHistoryTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="history-farmer",
+            password="secret123",
+            email="history@example.com",
+            phone_number="09120000003",
+        )
+        self.other_user = get_user_model().objects.create_user(
+            username="other-history-farmer",
+            password="secret123",
+            email="other-history@example.com",
+            phone_number="09120000004",
+        )
+        self.farm_type = FarmType.objects.create(name="گلخانه ای")
+        self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="History Farm")
+        self.other_farm = FarmHub.objects.create(owner=self.other_user, farm_type=self.farm_type, name="Other History Farm")
+
+    def test_recommendation_list_returns_paginated_items(self):
+        first = IrrigationRecommendationRequest.objects.create(
+            farm=self.farm,
+            crop_id="گندم",
+            growth_stage="vegetative",
+            status=IrrigationRecommendationRequest.STATUS_COMPLETED,
+            request_payload={"irrigation_method_name": "بارانی"},
+            response_payload={"data": {"plan": {"durationMinutes": 20}}},
+        )
+        second = IrrigationRecommendationRequest.objects.create(
+            farm=self.farm,
+            crop_id="ذرت",
+            growth_stage="flowering",
+            status=IrrigationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
+            request_payload={"irrigation_method_name": "قطره ای"},
+            response_payload={"data": {"plan": {"durationMinutes": 35}}},
+        )
+
+        request = self.factory.get(
+            f"/api/irrigation/recommendations/?farm_uuid={self.farm.farm_uuid}&page=1&page_size=1"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = RecommendationListView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(len(response.data["data"]), 1)
+        self.assertEqual(response.data["pagination"]["total_items"], 2)
+        self.assertEqual(response.data["data"][0]["recommendation_uuid"], str(second.uuid))
+        self.assertEqual(response.data["data"][0]["plant_name"], "ذرت")
+        self.assertEqual(response.data["data"][0]["growth_stage"], "flowering")
+        self.assertEqual(response.data["data"][0]["irrigation_method_name"], "قطره ای")
+        self.assertEqual(response.data["data"][0]["status"], IrrigationRecommendationRequest.STATUS_PENDING_CONFIRMATION)
+        self.assertEqual(response.data["data"][0]["status_label"], "منتظر تایید")
+        self.assertNotEqual(response.data["data"][0]["recommendation_uuid"], str(first.uuid))
+
+    def test_recommendation_detail_returns_saved_shape(self):
+        recommendation = IrrigationRecommendationRequest.objects.create(
+            farm=self.farm,
+            crop_id="گوجه فرنگی",
+            growth_stage="fruiting",
+            status=IrrigationRecommendationRequest.STATUS_COMPLETED,
+            request_payload={"irrigation_method_name": "قطره ای"},
+            response_payload={
+                "data": {
+                    "result": {
+                        "plan": {"frequencyPerWeek": 4, "durationMinutes": 30},
+                        "water_balance": {"active_kc": 0.93, "daily": []},
+                        "timeline": [{"step_number": 1, "title": "مرحله اول", "description": "اجرا شود"}],
+                        "sections": [{"type": "tip", "title": "نکته", "content": "صبح زود آبیاری شود"}],
+                    }
+                }
+            },
+        )
+
+        request = self.factory.get(f"/api/irrigation/recommendations/{recommendation.uuid}/")
+        force_authenticate(request, user=self.user)
+
+        response = RecommendationDetailView.as_view()(request, recommendation_uuid=recommendation.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(response.data["data"]["recommendation_uuid"], str(recommendation.uuid))
+        self.assertEqual(response.data["data"]["crop_id"], "گوجه فرنگی")
+        self.assertEqual(response.data["data"]["plant_name"], "گوجه فرنگی")
+        self.assertEqual(response.data["data"]["growth_stage"], "fruiting")
+        self.assertEqual(response.data["data"]["irrigation_method_name"], "قطره ای")
+        self.assertEqual(response.data["data"]["status"], IrrigationRecommendationRequest.STATUS_COMPLETED)
+        self.assertEqual(response.data["data"]["status_label"], "پایان یافته")
+        self.assertEqual(response.data["data"]["plan"]["durationMinutes"], 30)
+        self.assertEqual(response.data["data"]["timeline"][0]["step_number"], 1)
+        self.assertEqual(response.data["data"]["sections"][0]["type"], "tip")
+
+    def test_recommendation_detail_rejects_foreign_recommendation(self):
+        recommendation = IrrigationRecommendationRequest.objects.create(
+            farm=self.other_farm,
+            crop_id="خیار",
+            status=IrrigationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
+        )
+
+        request = self.factory.get(f"/api/irrigation/recommendations/{recommendation.uuid}/")
+        force_authenticate(request, user=self.user)
+
+        response = RecommendationDetailView.as_view()(request, recommendation_uuid=recommendation.uuid)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["msg"], "Recommendation not found.")
+    @patch("irrigation_recommendation.views.external_api_request")
+    def test_post_accepts_sensor_uuid_as_farm_uuid_alias(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"sections": []}}},
+        )
+
+        request = self.factory.post(
+            "/api/irrigation/recommend/",
+            {
+                "sensor_uuid": str(self.farm.farm_uuid),
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = RecommendView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["plan"]["frequencyPerWeek"], 4)
+        mock_external_api_request.assert_called_once_with(
+            "ai",
+            "/api/irrigation/recommend/",
+            method="POST",
+            payload={
+                "farm_uuid": str(self.farm.farm_uuid),
+                "irrigation_method_id": 3,
+                "irrigation_type": "آبیاری قطره ای",
+                "irrigation_method_name": "آبیاری قطره ای",
+            },
         )

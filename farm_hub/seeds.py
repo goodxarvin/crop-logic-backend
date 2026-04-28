@@ -15,6 +15,8 @@ ADMIN_FARM_UUID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 ADMIN_FARM_DATA = {
     "name": "Admin Smart Farm",
     "is_active": True,
+    "irrigation_method_id": 1,
+    "irrigation_method_name": "آبیاری قطره ای",
     "sensors": [
         {
             "sensor_catalog_code": "sensor_7_soil_moisture_sensor_v1_2",
@@ -81,6 +83,8 @@ def seed_admin_farm():
             "farm_type": farm_type,
             "name": ADMIN_FARM_DATA["name"],
             "is_active": ADMIN_FARM_DATA["is_active"],
+            "irrigation_method_id": ADMIN_FARM_DATA["irrigation_method_id"],
+            "irrigation_method_name": ADMIN_FARM_DATA["irrigation_method_name"],
         },
     )
     farm.products.set(products)

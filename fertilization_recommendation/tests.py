@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
-from .views import RecommendView
+from .models import FertilizationRecommendationRequest
+from .views import RecommendationDetailView, RecommendationListView, RecommendView
 
 
 class FertilizationRecommendViewTests(TestCase):
@@ -78,7 +79,7 @@ class FertilizationRecommendViewTests(TestCase):
 
         request = self.factory.post(
             "/api/fertilization/recommend/",
-            {"farm_uuid": str(self.farm.farm_uuid), "plant_name": "گندم", "growth_stage": "vegetative"},
+            {"farm_uuid": str(self.farm.farm_uuid), "crop_id": "گندم", "growth_stage": "vegetative"},
             format="json",
         )
         force_authenticate(request, user=self.user)
@@ -95,13 +96,179 @@ class FertilizationRecommendViewTests(TestCase):
         self.assertEqual(response.data["data"]["primary_recommendation"]["application_interval"]["value"], 14.0)
         self.assertEqual(response.data["data"]["alternative_recommendations"][0]["usage_method"], "fertigation")
         self.assertEqual(response.data["data"]["sections"][0]["type"], "recommendation")
+        self.assertEqual(FertilizationRecommendationRequest.objects.count(), 1)
+        saved_request = FertilizationRecommendationRequest.objects.get()
+        self.assertEqual(saved_request.crop_id, "گندم")
+        self.assertEqual(saved_request.growth_stage, "vegetative")
+        self.assertEqual(
+            saved_request.status,
+            FertilizationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
+        )
+        self.assertEqual(
+            saved_request.response_payload["data"]["primary_recommendation"]["fertilizer_code"],
+            "npk-202020",
+        )
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/fertilization/recommend/",
             method="POST",
             payload={
                 "farm_uuid": str(self.farm.farm_uuid),
+                "crop_id": "گندم",
                 "plant_name": "گندم",
                 "growth_stage": "vegetative",
             },
+        )
+
+    @patch("fertilization_recommendation.views.external_api_request")
+    def test_recommend_accepts_plant_name_and_passes_it_directly_to_ai(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(status_code=200, data={"data": {}})
+
+        request = self.factory.post(
+            "/api/fertilization/recommend/",
+            {"farm_uuid": str(self.farm.farm_uuid), "plant_name": "جو", "growth_stage": "flowering"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = RecommendView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        saved_request = FertilizationRecommendationRequest.objects.latest("created_at")
+        self.assertEqual(saved_request.crop_id, "جو")
+        mock_external_api_request.assert_called_once_with(
+            "ai",
+            "/api/fertilization/recommend/",
+            method="POST",
+            payload={
+                "farm_uuid": str(self.farm.farm_uuid),
+                "crop_id": "جو",
+                "plant_name": "جو",
+                "growth_stage": "flowering",
+            },
+        )
+
+    def test_recommendation_list_returns_paginated_summary_items(self):
+        first = FertilizationRecommendationRequest.objects.create(
+            farm=self.farm,
+            crop_id="گندم",
+            growth_stage="vegetative",
+            status=FertilizationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
+            response_payload={
+                "data": {
+                    "primary_recommendation": {
+                        "fertilizer_type": "NPK",
+                    }
+                }
+            },
+        )
+        second = FertilizationRecommendationRequest.objects.create(
+            farm=self.farm,
+            crop_id="ذرت",
+            growth_stage="flowering",
+            status=FertilizationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
+            response_payload={
+                "data": {
+                    "primary_recommendation": {
+                        "fertilizer_type": "Micronutrient",
+                    }
+                }
+            },
+        )
+
+        request = self.factory.get(
+            f"/api/fertilization/recommendations/?farm_uuid={self.farm.farm_uuid}&page=1&page_size=1"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = RecommendationListView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(len(response.data["data"]), 1)
+        self.assertEqual(response.data["pagination"]["page"], 1)
+        self.assertEqual(response.data["pagination"]["page_size"], 1)
+        self.assertEqual(response.data["pagination"]["total_pages"], 2)
+        self.assertEqual(response.data["pagination"]["total_items"], 2)
+        self.assertTrue(response.data["pagination"]["has_next"])
+        self.assertFalse(response.data["pagination"]["has_previous"])
+        self.assertEqual(response.data["data"][0]["recommendation_uuid"], str(second.uuid))
+        self.assertEqual(response.data["data"][0]["plant_name"], "ذرت")
+        self.assertEqual(response.data["data"][0]["growth_stage"], "flowering")
+        self.assertEqual(response.data["data"][0]["fertilizer_type"], "Micronutrient")
+        self.assertEqual(response.data["data"][0]["status"], "pending_confirmation")
+        self.assertEqual(response.data["data"][0]["status_label"], "منتظر تایید")
+        self.assertIn("requested_at", response.data["data"][0])
+        self.assertNotEqual(response.data["data"][0]["recommendation_uuid"], str(first.uuid))
+
+    def test_recommendation_detail_returns_same_shape_as_recommend_endpoint(self):
+        recommendation = FertilizationRecommendationRequest.objects.create(
+            farm=self.farm,
+            crop_id="گندم",
+            growth_stage="vegetative",
+            status=FertilizationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
+            response_payload={
+                "data": {
+                    "primary_recommendation": {
+                        "fertilizer_code": "npk-202020",
+                        "fertilizer_type": "NPK",
+                        "summary": "خلاصه توصیه",
+                    },
+                    "nutrient_analysis": {
+                        "macro": [{"key": "n", "name": "Nitrogen", "value": 20, "unit": "percent"}],
+                        "micro": [],
+                    },
+                    "application_guide": {
+                        "safety_warning": "در هوای خنک استفاده شود",
+                        "steps": [{"step_number": 1, "title": "آماده سازی", "description": "در آب حل شود"}],
+                    },
+                    "alternative_recommendations": [
+                        {"fertilizer_code": "alt-1", "fertilizer_name": "Alt", "fertilizer_type": "NPK"}
+                    ],
+                    "sections": [{"type": "warning", "title": "هشدار", "content": "اختلاط نشود"}],
+                }
+            },
+        )
+
+        request = self.factory.get(f"/api/fertilization/recommendations/{recommendation.uuid}/")
+        force_authenticate(request, user=self.user)
+
+        response = RecommendationDetailView.as_view()(request, recommendation_uuid=recommendation.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(response.data["data"]["primary_recommendation"]["fertilizer_code"], "npk-202020")
+        self.assertEqual(response.data["data"]["primary_recommendation"]["fertilizer_type"], "NPK")
+        self.assertEqual(response.data["data"]["nutrient_analysis"]["macro"][0]["value"], 20.0)
+        self.assertEqual(response.data["data"]["application_guide"]["steps"][0]["step_number"], 1)
+        self.assertEqual(response.data["data"]["sections"][0]["type"], "warning")
+        self.assertEqual(response.data["data"]["recommendation_uuid"], str(recommendation.uuid))
+        self.assertEqual(response.data["data"]["crop_id"], "گندم")
+        self.assertEqual(response.data["data"]["plant_name"], "گندم")
+        self.assertEqual(response.data["data"]["status"], "pending_confirmation")
+        self.assertEqual(response.data["data"]["status_label"], "منتظر تایید")
+
+    def test_recommendation_detail_falls_back_to_top_level_fertilizer_code(self):
+        recommendation = FertilizationRecommendationRequest.objects.create(
+            farm=self.farm,
+            crop_id="گندم",
+            growth_stage="vegetative",
+            status=FertilizationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
+            response_payload={
+                "data": {
+                    "fertilizer_code": "legacy-code-101",
+                    "fertilizer_type": "NPK",
+                }
+            },
+        )
+
+        request = self.factory.get(f"/api/fertilization/recommendations/{recommendation.uuid}/")
+        force_authenticate(request, user=self.user)
+
+        response = RecommendationDetailView.as_view()(request, recommendation_uuid=recommendation.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["data"]["primary_recommendation"]["fertilizer_code"],
+            "legacy-code-101",
         )

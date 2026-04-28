@@ -4,7 +4,10 @@ Fertilization Recommendation API views.
 
 import logging
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
 from rest_framework import serializers, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
@@ -15,12 +18,41 @@ from farm_hub.models import FarmHub
 from .mock_data import CONFIG_RESPONSE_DATA
 from .models import FertilizationRecommendationRequest
 from .serializers import (
+    FertilizationRecommendationListItemSerializer,
+    FertilizationRecommendationListQuerySerializer,
     FertilizationRecommendRequestSerializer,
     FertilizationRecommendResponseDataSerializer,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+class FertilizationRecommendationPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+    def get_paginated_response(self, data):
+        page_size = self.get_page_size(self.request) or self.page.paginator.per_page
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": data,
+                "pagination": {
+                    "page": self.page.number,
+                    "page_size": page_size,
+                    "total_pages": self.page.paginator.num_pages,
+                    "total_items": self.page.paginator.count,
+                    "has_next": self.page.has_next(),
+                    "has_previous": self.page.has_previous(),
+                    "next": self.get_next_link(),
+                    "previous": self.get_previous_link(),
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class FarmAccessMixin:
@@ -161,21 +193,50 @@ class RecommendView(FarmAccessMixin, APIView):
 
         return normalized
 
+    @staticmethod
+    def _first_non_empty(*values):
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return ""
+
     def _normalize_primary_recommendation(self, payload):
         raw_data = payload.get("primary_recommendation")
         if not isinstance(raw_data, dict):
-            return {}
+            raw_data = {}
 
         normalized = {}
-        for key in (
-            "fertilizer_code",
-            "fertilizer_name",
-            "display_title",
-            "fertilizer_type",
-            "reasoning",
-            "summary",
-        ):
-            value = self._to_string(raw_data.get(key)).strip()
+        scalar_fields = {
+            "fertilizer_code": (
+                raw_data.get("fertilizer_code"),
+                payload.get("fertilizer_code"),
+            ),
+            "fertilizer_name": (
+                raw_data.get("fertilizer_name"),
+                payload.get("fertilizer_name"),
+            ),
+            "display_title": (
+                raw_data.get("display_title"),
+                payload.get("display_title"),
+            ),
+            "fertilizer_type": (
+                raw_data.get("fertilizer_type"),
+                payload.get("fertilizer_type"),
+            ),
+            "reasoning": (
+                raw_data.get("reasoning"),
+                payload.get("reasoning"),
+            ),
+            "summary": (
+                raw_data.get("summary"),
+                payload.get("summary"),
+            ),
+        }
+        for key, values in scalar_fields.items():
+            value = self._first_non_empty(*values)
             if value:
                 normalized[key] = value
 
@@ -305,8 +366,11 @@ class RecommendView(FarmAccessMixin, APIView):
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data.copy()
         farm = self._get_farm(request, payload.get("farm_uuid"))
+        crop_id = self._first_non_empty(payload.get("crop_id"), payload.get("plant_name"))
+        plant_name = self._first_non_empty(payload.get("plant_name"), payload.get("crop_id"))
         payload["farm_uuid"] = str(farm.farm_uuid)
-        payload["plant_name"] = payload.get("plant_name", "")
+        payload["crop_id"] = crop_id
+        payload["plant_name"] = plant_name
         payload["growth_stage"] = payload.get("growth_stage", "")
 
         adapter_response = external_api_request(
@@ -329,10 +393,10 @@ class RecommendView(FarmAccessMixin, APIView):
 
         FertilizationRecommendationRequest.objects.create(
             farm=farm,
-            crop_id=payload.get("plant_name", ""),
+            crop_id=crop_id,
             growth_stage=payload.get("growth_stage", ""),
             task_id="",
-            status="success" if adapter_response.status_code < 400 else "error",
+            status=FertilizationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
             request_payload=payload,
             response_payload=adapter_response.data if isinstance(adapter_response.data, dict) else {"raw": adapter_response.data},
         )
@@ -354,3 +418,70 @@ class RecommendView(FarmAccessMixin, APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class RecommendationListView(FarmAccessMixin, APIView):
+    permission_classes = RecommendView.permission_classes
+    pagination_class = FertilizationRecommendationPagination
+
+    @extend_schema(
+        tags=["Fertilization Recommendation"],
+        parameters=[FertilizationRecommendationListQuerySerializer],
+        responses={200: code_response("FertilizationRecommendationListResponse")},
+    )
+    def get(self, request):
+        serializer = FertilizationRecommendationListQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        farm = self._get_farm(request, serializer.validated_data["farm_uuid"])
+        recommendations = farm.fertilization_recommendations.all().order_by("-created_at", "-id")
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(recommendations, request, view=self)
+
+        items = []
+        view_helper = RecommendView()
+        for recommendation in page:
+            normalized_payload = view_helper._normalize_response_payload(recommendation.response_payload)
+            recommendation.fertilizer_type = (
+                normalized_payload.get("primary_recommendation", {}).get("fertilizer_type", "")
+            )
+            items.append(recommendation)
+
+        data = FertilizationRecommendationListItemSerializer(items, many=True).data
+        return paginator.get_paginated_response(data)
+
+
+class RecommendationDetailView(FarmAccessMixin, APIView):
+    @extend_schema(
+        tags=["Fertilization Recommendation"],
+        parameters=[
+            OpenApiParameter(
+                name="recommendation_uuid",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                required=True,
+            )
+        ],
+        responses={
+            200: code_response("FertilizationRecommendationDetailResponse", data=FertilizationRecommendResponseDataSerializer()),
+            404: code_response("FertilizationRecommendationDetailNotFoundResponse"),
+        },
+    )
+    def get(self, request, recommendation_uuid):
+        recommendation = FertilizationRecommendationRequest.objects.filter(
+            uuid=recommendation_uuid,
+            farm__owner=request.user,
+        ).select_related("farm").first()
+        if recommendation is None:
+            return Response({"code": 404, "msg": "Recommendation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        view_helper = RecommendView()
+        data = view_helper._normalize_response_payload(recommendation.response_payload)
+        data["recommendation_uuid"] = str(recommendation.uuid)
+        data["crop_id"] = recommendation.crop_id
+        data["plant_name"] = recommendation.crop_id
+        data["growth_stage"] = recommendation.growth_stage
+        data["status"] = recommendation.status
+        data["status_label"] = recommendation.get_status_display()
+        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)

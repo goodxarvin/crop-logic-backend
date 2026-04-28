@@ -72,6 +72,8 @@ class FarmHubSerializer(serializers.ModelSerializer):
             "area_uuid",
             "name",
             "is_active",
+            "irrigation_method_id",
+            "irrigation_method_name",
             "farm_type",
             "subscription_plan",
             "products",
@@ -128,7 +130,8 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
     sensors = FarmSensorWriteSerializer(many=True, required=False)
     sensor_key = serializers.CharField(write_only=True, required=False, allow_blank=True, default="sensor-7-1")
     sensor_payload = serializers.JSONField(write_only=True, required=False)
-    irrigation_method_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    irrigation_method_id = serializers.IntegerField(required=False, allow_null=True)
+    irrigation_method_name = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = FarmHub
@@ -144,6 +147,7 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
             "sensor_key",
             "sensor_payload",
             "irrigation_method_id",
+            "irrigation_method_name",
         ]
 
     def to_internal_value(self, data):
@@ -217,13 +221,20 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         attrs["farm_type"] = farm_type
         attrs["subscription_plan"] = subscription_plan
         attrs["products"] = products
+
+        irrigation_method_id = attrs.get("irrigation_method_id", serializers.empty)
+        irrigation_method_name = attrs.get("irrigation_method_name", serializers.empty)
+        if irrigation_method_id is None:
+            attrs["irrigation_method_name"] = ""
+        elif irrigation_method_name is serializers.empty and self.instance is not None:
+            attrs["irrigation_method_name"] = self.instance.irrigation_method_name
+
         return attrs
 
     def create(self, validated_data):
         validated_data.pop("area_geojson", None)
         validated_data.pop("sensor_key", None)
         validated_data.pop("sensor_payload", None)
-        validated_data.pop("irrigation_method_id", None)
         sensors_data = validated_data.pop("sensors", [])
         products = validated_data.pop("products", [])
         validated_data["farm_type"] = validated_data.pop("farm_type")
@@ -243,7 +254,6 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         validated_data.pop("area_geojson", None)
         validated_data.pop("sensor_key", None)
         validated_data.pop("sensor_payload", None)
-        validated_data.pop("irrigation_method_id", None)
         sensors_data = validated_data.pop("sensors", None)
         products = validated_data.pop("products", None)
         farm_type = validated_data.pop("farm_type", None)
