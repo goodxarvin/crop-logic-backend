@@ -2,6 +2,7 @@ import time
 
 from django.db import OperationalError, ProgrammingError
 from django.db.models import Case, IntegerField, QuerySet, Value, When
+from django.utils import timezone
 
 
 from farm_hub.models import FarmHub
@@ -13,7 +14,19 @@ DEFAULT_POLL_TIMEOUT_SECONDS = 15
 DEFAULT_POLL_INTERVAL_SECONDS = 1
 
 
-def create_notification_for_farm_uuid(*, farm_uuid, title, message, level="info", metadata=None):
+def create_notification_for_farm_uuid(
+    *,
+    farm_uuid,
+    title,
+    message,
+    level="info",
+    endpoint="",
+    suggested_action="",
+    source_alert_id="",
+    source_metric_type="",
+    payload=None,
+    metadata=None,
+):
     farm = FarmHub.objects.filter(farm_uuid=farm_uuid).first()
     if farm is None:
         raise ValueError("Farm not found.")
@@ -24,8 +37,21 @@ def create_notification_for_farm_uuid(*, farm_uuid, title, message, level="info"
             title=title,
             message=message,
             level=level,
+            endpoint=endpoint,
+            suggested_action=suggested_action,
+            source_alert_id=source_alert_id,
+            source_metric_type=source_metric_type,
+            payload=payload or {},
             metadata=metadata or {},
         )
+    except (ProgrammingError, OperationalError) as exc:
+        raise ValueError("Notifications table is not migrated.") from exc
+
+
+def get_recent_notifications_for_farm(*, farm: FarmHub, since_days=3, limit=10) -> QuerySet[FarmNotification]:
+    try:
+        since = timezone.now() - timezone.timedelta(days=max(since_days, 0))
+        return FarmNotification.objects.filter(farm=farm, created_at__gte=since).order_by("-created_at", "-id")[:limit]
     except (ProgrammingError, OperationalError) as exc:
         raise ValueError("Notifications table is not migrated.") from exc
 

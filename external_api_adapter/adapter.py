@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
+import json
 import logging
 
 import requests
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 
 from .exceptions import ExternalAPIRequestError
 from .exceptions import MockDirectoryNotFound, MockFileNotFound
@@ -72,7 +74,8 @@ class ExternalAPIAdapter:
         url = f"{base_url}/{str(path).lstrip('/')}"
 
         files = None
-        request_payload = payload
+        request_payload = self._make_json_safe(payload)
+        request_query = self._make_json_safe(query)
         request_headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -95,7 +98,7 @@ class ExternalAPIAdapter:
             request_kwargs = {
                 "method": method,
                 "url": url,
-                "params": query,
+                "params": request_query,
                 "headers": request_headers,
                 "timeout": getattr(settings, "EXTERNAL_API_TIMEOUT", 30),
             }
@@ -149,6 +152,14 @@ class ExternalAPIAdapter:
         supported_methods = {"GET", "POST", "PUT", "DELETE"}
         if method not in supported_methods:
             raise ValueError(f"Unsupported HTTP method '{method}'. Supported methods: {sorted(supported_methods)}")
+
+    @staticmethod
+    def _make_json_safe(value):
+        if value is None:
+            return None
+
+        # Match Django/DRF JSON rendering so UUID/date-like values can be forwarded safely.
+        return json.loads(json.dumps(value, cls=DjangoJSONEncoder))
 
 
 _default_adapter = ExternalAPIAdapter()
