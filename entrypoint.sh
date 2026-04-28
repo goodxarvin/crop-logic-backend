@@ -7,6 +7,7 @@ if [ "${SKIP_MIGRATE}" != "1" ]; then
   if [ "${DOCKER_VERSION}" = "develop" ]; then
     echo "Running develop seeders..."
     python manage.py seed_admin_farm
+    python manage.py seed_sensor_7_in_1
     echo "Develop seeders done."
   fi
 fi

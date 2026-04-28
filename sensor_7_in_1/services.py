@@ -1,6 +1,8 @@
 from copy import deepcopy
+from datetime import timedelta
 
 from sensor_external_api.services import get_farm_sensor_map_for_logs, get_sensor_external_request_logs_for_farm
+from django.utils import timezone
 
 from .mock_data import (
     ANOMALY_DETECTION_CARD,
@@ -81,6 +83,59 @@ SENSOR_FIELDS = [
 MIN_REQUIRED_SENSOR_FIELDS = 4
 MAX_HISTORY_ITEMS = 20
 MAX_CHART_POINTS = 7
+COMPARISON_CHART_RANGES = {"7d": 7, "30d": 30}
+VALUES_LIST_RANGES = {"1h": timedelta(hours=1), "24h": timedelta(hours=24), "7d": timedelta(days=7)}
+RADAR_CHART_RANGES = {"today": timedelta(days=1), "7d": timedelta(days=7), "30d": timedelta(days=30)}
+PERSIAN_WEEKDAYS = {
+    0: "دوشنبه",
+    1: "سه شنبه",
+    2: "چهارشنبه",
+    3: "پنج شنبه",
+    4: "جمعه",
+    5: "شنبه",
+    6: "یکشنبه",
+}
+COMPARISON_CHART_FIELD_ALIASES = {
+    "soil_moisture": "moisture",
+    "soilMoisture": "moisture",
+    "moisture": "moisture",
+    "soil_temperature": "temperature",
+    "soilTemperature": "temperature",
+    "temperature": "temperature",
+    "humidity": "humidity",
+    "soil_ph": "ph",
+    "soilPh": "ph",
+    "ph": "ph",
+    "electrical_conductivity": "ec",
+    "electricalConductivity": "ec",
+    "ec": "ec",
+    "nitrogen": "nitrogen",
+    "n": "nitrogen",
+    "phosphorus": "phosphorus",
+    "p": "phosphorus",
+    "potassium": "potassium",
+    "k": "potassium",
+}
+COMPARISON_CHART_PRIMARY_FIELDS = ("moisture", "temperature", "humidity", "ph", "ec", "nitrogen", "phosphorus", "potassium")
+VALUES_LIST_FIELDS = [
+    ("moisture", "Moisture", "%"),
+    ("temperature", "Temperature", "°C"),
+    ("humidity", "Humidity", "%"),
+    ("ph", "pH", "pH"),
+    ("ec", "EC", "dS/m"),
+    ("nitrogen", "Nitrogen", "mg/kg"),
+    ("phosphorus", "Phosphorus", "mg/kg"),
+    ("potassium", "Potassium", "mg/kg"),
+]
+RADAR_CHART_FIELDS = [
+    ("moisture", "Moisture", 60.0),
+    ("temperature", "Temperature", 26.0),
+    ("humidity", "Humidity", 55.0),
+    ("ph", "PH", 6.5),
+    ("ec", "EC", 1.3),
+    ("nitrogen", "Nitrogen", 42.0),
+    ("potassium", "Potassium", 38.0),
+]
 
 
 def _to_float(value):
@@ -105,6 +160,16 @@ def _extract_payload(payload):
             payload = nested
 
     return payload
+
+
+def _extract_numeric_payload(payload):
+    payload = _extract_payload(payload)
+    numeric_payload = {}
+    for key, value in payload.items():
+        numeric_value = _to_float(value)
+        if numeric_value is not None:
+            numeric_payload[key] = numeric_value
+    return numeric_payload
 
 
 def _extract_readings(payload):
@@ -151,44 +216,67 @@ def _get_sensor_context(farm=None):
     if farm is None:
         return None
 
+    primary_sensor = get_primary_soil_sensor(farm=farm)
+    if primary_sensor is None:
+        return None
+
     try:
-        logs_queryset = get_sensor_external_request_logs_for_farm(farm_uuid=farm.farm_uuid)
+        logs_queryset = get_sensor_external_request_logs_for_farm(
+            farm_uuid=farm.farm_uuid,
+            physical_device_uuid=primary_sensor.physical_device_uuid,
+        )
     except ValueError:
         return None
 
-    candidate_log = None
-    candidate_readings = {}
-    for log in logs_queryset[:MAX_HISTORY_ITEMS]:
-        readings = _extract_readings(log.payload)
-        if len(readings) >= MIN_REQUIRED_SENSOR_FIELDS:
-            candidate_log = log
-            candidate_readings = readings
-            break
-
-    if candidate_log is None:
-        return None
-
     history = []
-    for log in logs_queryset.filter(physical_device_uuid=candidate_log.physical_device_uuid)[:MAX_HISTORY_ITEMS]:
+    for log in logs_queryset[:MAX_HISTORY_ITEMS]:
         readings = _extract_readings(log.payload)
         if readings:
             history.append((log, readings))
 
     if not history:
-        history = [(candidate_log, candidate_readings)]
+        return None
 
-    farm_sensor_map = get_farm_sensor_map_for_logs(logs=[candidate_log])
+    latest_log, latest_readings = history[0]
+    farm_sensor_map = get_farm_sensor_map_for_logs(logs=[latest_log])
     farm_sensor = farm_sensor_map.get(
-        (candidate_log.farm_uuid, candidate_log.sensor_catalog_uuid, candidate_log.physical_device_uuid)
-    )
+        (latest_log.farm_uuid, latest_log.sensor_catalog_uuid, latest_log.physical_device_uuid)
+    ) or primary_sensor
 
     return {
         "farm_sensor": farm_sensor,
-        "latest_log": history[0][0],
-        "latest_readings": history[0][1],
+        "latest_log": latest_log,
+        "latest_readings": latest_readings,
         "previous_readings": history[1][1] if len(history) > 1 else {},
         "history": history,
     }
+
+
+def get_primary_soil_sensor(*, farm):
+    soil_sensors = list(
+        farm.sensors.select_related("sensor_catalog")
+        .order_by("created_at", "id")
+    )
+
+    def _sensor_priority(sensor):
+        sensor_type = (sensor.sensor_type or "").lower()
+        catalog_code = (sensor.sensor_catalog.code if sensor.sensor_catalog else "").lower()
+        catalog_name = (sensor.sensor_catalog.name if sensor.sensor_catalog else "").lower()
+        sensor_name = (sensor.name or "").lower()
+        haystack = " ".join([sensor_type, catalog_code, catalog_name, sensor_name])
+
+        if "sensor-7-in-1" in catalog_code or "soil_7_in_1" in sensor_type:
+            return 0
+        if "7 in 1" in haystack or "7-in-1" in haystack or "7in1" in haystack:
+            return 1
+        if "soil" in haystack:
+            return 2
+        return 3
+
+    prioritized_sensors = sorted(soil_sensors, key=_sensor_priority)
+    if prioritized_sensors and _sensor_priority(prioritized_sensors[0]) < 3:
+        return prioritized_sensors[0]
+    return soil_sensors[0] if soil_sensors else None
 
 
 def _build_sensor_meta(context, fallback_sensor):
@@ -433,4 +521,184 @@ def get_sensor_7_in_1_summary_data(farm=None):
         "sensorComparisonChart": get_sensor_7_in_1_comparison_chart_data(farm, context=context),
         "anomalyDetectionCard": get_sensor_7_in_1_anomaly_detection_card_data(farm, context=context),
         "soilMoistureHeatmap": get_sensor_7_in_1_soil_moisture_heatmap_data(farm, context=context),
+    }
+
+
+def _normalize_comparison_chart_field(field_name):
+    return COMPARISON_CHART_FIELD_ALIASES.get(field_name, field_name)
+
+
+def _format_comparison_category(bucket_date, range_value):
+    if range_value == "7d":
+        return PERSIAN_WEEKDAYS[bucket_date.weekday()]
+    return bucket_date.strftime("%m/%d")
+
+
+def _format_percent_change(current_value, baseline_value):
+    if not baseline_value:
+        return "+0.0%"
+    percent_change = ((current_value - baseline_value) / baseline_value) * 100
+    return f"{percent_change:+.1f}%"
+
+
+def _format_current_value_subtitle(title, value, unit):
+    rendered_value = _format_value(value, unit)
+    return f"مقدار فعلی: {rendered_value or title}"
+
+
+def get_sensor_comparison_chart_data(*, farm, physical_device_uuid, range_value):
+    days = COMPARISON_CHART_RANGES[range_value]
+    start_date = timezone.localdate() - timedelta(days=days - 1)
+
+    try:
+        logs_queryset = get_sensor_external_request_logs_for_farm(
+            farm_uuid=farm.farm_uuid,
+            physical_device_uuid=physical_device_uuid,
+            date_from=start_date,
+        )
+    except ValueError:
+        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+
+    grouped_logs = {}
+    for log in reversed(list(logs_queryset[: days * 24])):
+        bucket_date = timezone.localtime(log.created_at).date()
+        numeric_payload = _extract_numeric_payload(log.payload)
+        if not numeric_payload:
+            continue
+        grouped_logs[bucket_date] = numeric_payload
+
+    if not grouped_logs:
+        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+
+    sorted_dates = sorted(grouped_logs.keys())
+    categories = [_format_comparison_category(bucket_date, range_value) for bucket_date in sorted_dates]
+
+    series_map = {}
+    for bucket_date in sorted_dates:
+        payload = grouped_logs[bucket_date]
+        normalized_payload = {}
+        for key, value in payload.items():
+            normalized_key = _normalize_comparison_chart_field(key)
+            normalized_payload[normalized_key] = value
+        for key, value in normalized_payload.items():
+            series_map.setdefault(key, []).append(round(value, 2))
+
+    ordered_field_names = [
+        field_name for field_name in COMPARISON_CHART_PRIMARY_FIELDS if field_name in series_map
+    ] + sorted(field_name for field_name in series_map if field_name not in COMPARISON_CHART_PRIMARY_FIELDS)
+
+    series = [{"name": field_name, "data": series_map[field_name]} for field_name in ordered_field_names]
+    primary_field = ordered_field_names[0]
+    primary_data = series_map[primary_field]
+
+    return {
+        "series": series,
+        "categories": categories,
+        "currentValue": round(primary_data[-1], 2),
+        "vsLastWeek": _format_percent_change(primary_data[-1], primary_data[0]),
+    }
+
+
+def get_sensor_values_list_data(*, farm, physical_device_uuid, range_value):
+    start_time = timezone.now() - VALUES_LIST_RANGES[range_value]
+
+    try:
+        logs_queryset = get_sensor_external_request_logs_for_farm(
+            farm_uuid=farm.farm_uuid,
+            physical_device_uuid=physical_device_uuid,
+        )
+    except ValueError:
+        return {"sensors": []}
+
+    logs = list(logs_queryset.filter(created_at__gte=start_time).order_by("created_at", "id"))
+    if not logs:
+        latest_log = logs_queryset.order_by("-created_at", "-id").first()
+        if latest_log is None:
+            return {"sensors": []}
+        logs = [latest_log]
+
+    earliest_payload = {}
+    latest_payload = {}
+    for log in logs:
+        numeric_payload = {
+            _normalize_comparison_chart_field(key): value
+            for key, value in _extract_numeric_payload(log.payload).items()
+        }
+        if not numeric_payload:
+            continue
+        if not earliest_payload:
+            earliest_payload = numeric_payload
+        latest_payload = numeric_payload
+
+    if not latest_payload:
+        return {"sensors": []}
+
+    sensors = []
+    for field_name, title, unit in VALUES_LIST_FIELDS:
+        current_value = latest_payload.get(field_name)
+        if current_value is None:
+            continue
+
+        previous_value = earliest_payload.get(field_name, current_value)
+        delta = round(current_value - previous_value, 2)
+        sensors.append(
+            {
+                "title": title,
+                "subtitle": _format_current_value_subtitle(title, current_value, unit),
+                "trendNumber": abs(delta),
+                "trend": "positive" if delta >= 0 else "negative",
+                "unit": unit,
+            }
+        )
+
+    return {"sensors": sensors}
+
+
+def get_sensor_radar_chart_data(*, farm, physical_device_uuid, range_value):
+    start_time = timezone.now() - RADAR_CHART_RANGES[range_value]
+
+    try:
+        logs_queryset = get_sensor_external_request_logs_for_farm(
+            farm_uuid=farm.farm_uuid,
+            physical_device_uuid=physical_device_uuid,
+        )
+    except ValueError:
+        return {"labels": [], "series": []}
+
+    logs = list(logs_queryset.filter(created_at__gte=start_time).order_by("created_at", "id"))
+    if not logs:
+        latest_log = logs_queryset.order_by("-created_at", "-id").first()
+        if latest_log is None:
+            return {"labels": [], "series": []}
+        logs = [latest_log]
+
+    latest_payload = {}
+    for log in logs:
+        numeric_payload = {
+            _normalize_comparison_chart_field(key): value
+            for key, value in _extract_numeric_payload(log.payload).items()
+        }
+        if numeric_payload:
+            latest_payload = numeric_payload
+
+    if not latest_payload:
+        return {"labels": [], "series": []}
+
+    labels = []
+    current_data = []
+    ideal_data = []
+    for field_name, label, ideal_value in RADAR_CHART_FIELDS:
+        current_value = latest_payload.get(field_name)
+        if current_value is None:
+            continue
+        labels.append(label)
+        current_data.append(round(current_value, 2))
+        ideal_data.append(round(ideal_value, 2))
+
+    return {
+        "labels": labels,
+        "series": [
+            {"name": "وضعیت فعلی", "data": current_data},
+            {"name": "بازه ایده آل", "data": ideal_data},
+        ],
     }

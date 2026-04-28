@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/pest-detection/", include("pest_detection.urls")),
     path("api/pest-disease/", include("pest_detection.pest_disease_urls")),
     path("api/sensor-7-in-1/", include("sensor_7_in_1.urls")),
+    path("api/sensors/", include("sensor_7_in_1.comparison_urls")),
     path("api/irrigation/", include("irrigation_recommendation.urls")),
 
     path("api/weather/", include("water.weather_urls")),

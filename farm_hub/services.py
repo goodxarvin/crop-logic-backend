@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.db import transaction
 
@@ -9,6 +11,9 @@ from crop_zoning.services import (
 )
 from external_api_adapter import request as external_api_request
 from external_api_adapter.exceptions import ExternalAPIRequestError
+
+
+logger = logging.getLogger(__name__)
 
 
 class FarmDataSyncError(Exception):
@@ -86,8 +91,18 @@ def sync_farm_data(
 
     api_key = getattr(settings, "FARM_DATA_API_KEY", "")
     if not api_key:
+        logger.error("Farm data sync failed: FARM_DATA_API_KEY missing for farm_uuid=%s", farm.farm_uuid)
         raise FarmDataSyncError("FARM_DATA_API_KEY is not configured.")
 
+    logger.warning(
+        "Farm data sync start: farm_uuid=%s sensor_key=%s has_sensor_payload=%s plant_ids=%s irrigation_method_id=%s boundary_type=%s",
+        farm.farm_uuid,
+        request_payload.get("sensor_key"),
+        "sensor_payload" in request_payload,
+        request_payload.get("plant_ids"),
+        request_payload.get("irrigation_method_id"),
+        request_payload["farm_boundary"].get("type") if isinstance(request_payload["farm_boundary"], dict) else None,
+    )
     try:
         response = external_api_request(
             "ai",
@@ -102,12 +117,20 @@ def sync_farm_data(
             },
         )
     except ExternalAPIRequestError as exc:
+        logger.exception("Farm data sync request exception: farm_uuid=%s", farm.farm_uuid)
         raise FarmDataSyncError(f"Farm data API request failed: {exc}") from exc
 
     if response.status_code >= 400:
         response_body = response.data
+        logger.error(
+            "Farm data sync rejected: farm_uuid=%s status_code=%s response=%s",
+            farm.farm_uuid,
+            response.status_code,
+            response_body,
+        )
         raise FarmDataSyncError(f"Farm data API returned status {response.status_code}: {response_body}")
 
+    logger.warning("Farm data sync success: farm_uuid=%s status_code=%s", farm.farm_uuid, response.status_code)
     return request_payload
 
 

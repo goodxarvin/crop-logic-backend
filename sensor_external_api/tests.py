@@ -1,6 +1,9 @@
+from datetime import datetime, timezone as dt_timezone
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory
+from rest_framework_simplejwt.tokens import AccessToken
 from unittest.mock import patch
 
 from external_api_adapter.adapter import AdapterResponse
@@ -118,8 +121,9 @@ class SensorExternalAPIViewTests(TestCase):
             payload={
                 "farm_uuid": str(self.farm.farm_uuid),
                 "farm_boundary": self.crop_area.geometry,
+                "sensor_key": self.sensor_catalog.code,
                 "sensor_payload": {
-                    "sensor-7-1": {"temp": 12},
+                    self.sensor_catalog.code: {"temp": 12},
                 },
             },
             headers={
@@ -202,6 +206,7 @@ class SensorExternalRequestLogListAPIViewTests(TestCase):
             email="sensor-external-log@example.com",
             phone_number="09120000016",
         )
+        self.access_token = str(AccessToken.for_user(self.user))
         self.farm_type = FarmType.objects.create(name="لاگ سنسور خارجی")
         self.farm = FarmHub.objects.create(
             owner=self.user,
@@ -261,17 +266,31 @@ class SensorExternalRequestLogListAPIViewTests(TestCase):
             payload={"temp": 24},
         )
 
-    def test_requires_api_key(self):
-        request = self.factory.get(f"/api/sensor-external-api/logs/?farm_uuid={self.farm_uuid}")
+    def test_requires_bearer_token(self):
+        request = self.factory.get(
+            f"/api/sensor-external-api/logs/?farm_uuid={self.farm_uuid}&page=1&page_size=20"
+        )
 
         response = SensorExternalRequestLogListAPIView.as_view()(request)
 
         self.assertEqual(response.status_code, 401)
 
+    def test_requires_page_and_page_size(self):
+        request = self.factory.get(
+            f"/api/sensor-external-api/logs/?farm_uuid={self.farm_uuid}",
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}",
+        )
+
+        response = SensorExternalRequestLogListAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("page", response.data)
+        self.assertIn("page_size", response.data)
+
     def test_returns_paginated_logs_for_farm_uuid(self):
         request = self.factory.get(
             f"/api/sensor-external-api/logs/?farm_uuid={self.farm_uuid}&page=1&page_size=1",
-            HTTP_X_API_KEY="12345",
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}",
         )
 
         response = SensorExternalRequestLogListAPIView.as_view()(request)
@@ -301,3 +320,61 @@ class SensorExternalRequestLogListAPIViewTests(TestCase):
             response.data["data"][0]["farm_sensor"]["physical_device_uuid"],
             str(self.second_sensor.physical_device_uuid),
         )
+        self.assertEqual(response.data["data"][0]["payload"]["temp"], 18)
+        self.assertIsInstance(response.data["data"][0]["payload"]["temp"], int)
+
+    def test_filters_logs_by_physical_device_uuid(self):
+        request = self.factory.get(
+            (
+                "/api/sensor-external-api/logs/"
+                f"?farm_uuid={self.farm_uuid}"
+                f"&physical_device_uuid={self.first_sensor.physical_device_uuid}"
+                "&page=1&page_size=20"
+            ),
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}",
+        )
+
+        response = SensorExternalRequestLogListAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["data"][0]["id"], self.first_log.id)
+
+    def test_filters_logs_by_sensor_type(self):
+        request = self.factory.get(
+            (
+                "/api/sensor-external-api/logs/"
+                f"?farm_uuid={self.farm_uuid}"
+                "&sensor_type=soil_sensor"
+                "&page=1&page_size=20"
+            ),
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}",
+        )
+
+        response = SensorExternalRequestLogListAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["data"][0]["id"], self.second_log.id)
+
+    def test_filters_logs_by_date_range(self):
+        older_timestamp = datetime(2025, 5, 1, 10, 0, tzinfo=dt_timezone.utc)
+        newer_timestamp = datetime(2025, 5, 2, 11, 0, tzinfo=dt_timezone.utc)
+        SensorExternalRequestLog.objects.filter(id=self.first_log.id).update(created_at=older_timestamp)
+        SensorExternalRequestLog.objects.filter(id=self.second_log.id).update(created_at=newer_timestamp)
+
+        request = self.factory.get(
+            (
+                "/api/sensor-external-api/logs/"
+                f"?farm_uuid={self.farm_uuid}"
+                "&date_from=2025-05-02&date_to=2025-05-02"
+                "&page=1&page_size=20"
+            ),
+            HTTP_AUTHORIZATION=f"Bearer {self.access_token}",
+        )
+
+        response = SensorExternalRequestLogListAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["data"][0]["id"], self.second_log.id)
