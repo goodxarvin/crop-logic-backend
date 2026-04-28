@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "fertilization_recommendation",
     "farm_ai_assistant",
     "notifications.apps.NotificationsConfig",
+    "plants.apps.PlantsConfig",
     "external_api_adapter.apps.ExternalApiAdapterConfig",
     "sensor_external_api.apps.SensorExternalApiConfig",
     "rest_framework",

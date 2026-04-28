@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/farm-ai-assistant/", include("farm_ai_assistant.urls")),
     path("api/notifications/", include("notifications.urls")),
     path("api/farm-alerts/", include("farm_alerts.urls")),
+    path("api/plants/", include("plants.urls")),
 
     path("api/sensor-external-api/", include("sensor_external_api.urls")),
 ]
