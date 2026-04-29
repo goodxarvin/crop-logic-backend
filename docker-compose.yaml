@@ -121,6 +121,40 @@ services:
     networks:
       - crop_network
 
+  celery-beat:
+    build:
+      context: .
+      args:
+        APT_MIRROR: mirror2.chabokan.net
+        PIP_INDEX_URL: https://package-mirror.liara.ir/repository/pypi/simple
+        PIP_EXTRA_INDEX_URL: https://mirror2.chabokan.net/pypi/simple
+        PYTHON_MIRROR: mirror2.chabokan.net
+    container_name: backend-celery-beat
+    command: ["celery", "-A", "config", "beat", "-l", "info"]
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      DOCKER_VERSION: ${DOCKER_VERSION:-develop}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,web,backend-web}
+      AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://ai-web:8000}
+      DB_HOST: croplogic-db
+      CELERY_BROKER_URL: redis://backend-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://backend-redis:6379/0
+      CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP: "true"
+      SKIP_MIGRATE: "1"
+      ACCESS_CONTROL_AUTHZ_BASE_URL: http://croplogic-accsess-opa:8181
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - crop_network
+
 volumes:
   backend_mysql_data:
   backend_redis_data:

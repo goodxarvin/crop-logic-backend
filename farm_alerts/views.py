@@ -1,3 +1,5 @@
+import logging
+
 from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
@@ -5,44 +7,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from config.swagger import code_response
-from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
 
 from .serializers import AlertTrackerAIResponseSerializer, FarmAlertsTrackerRequestSerializer
-from .services import AlertService, build_tracker_context, build_tracker_response
+from .services import AlertService, build_tracker_response_from_snapshot
+
+logger = logging.getLogger("farm_alerts")
 
 
 class FarmAlertsBaseView(APIView):
     permission_classes = [IsAuthenticated]
-
-    @staticmethod
-    def _extract_result(adapter_data):
-        if not isinstance(adapter_data, dict):
-            return {}
-
-        data = adapter_data.get("data")
-        if isinstance(data, dict) and isinstance(data.get("result"), dict):
-            return data["result"]
-        if isinstance(data, dict):
-            return data
-
-        result = adapter_data.get("result")
-        if isinstance(result, dict):
-            return result
-
-        return adapter_data
-
-    @staticmethod
-    def _error_response(adapter_response):
-        response_data = (
-            adapter_response.data
-            if isinstance(adapter_response.data, dict)
-            else {"message": str(adapter_response.data)}
-        )
-        return Response(
-            {"code": adapter_response.status_code, "msg": "error", "data": response_data},
-            status=adapter_response.status_code,
-        )
 
     @staticmethod
     def _get_farm(request, farm_uuid):
@@ -63,16 +37,6 @@ class AlertTrackerView(FarmAlertsBaseView):
                 "Tracker Request",
                 value={
                     "farm_uuid": "11111111-1111-1111-1111-111111111111",
-                    "alerts": [
-                        {
-                            "alert_id": "soil-moisture-001",
-                            "level": "warning",
-                            "title": "افت رطوبت خاک",
-                            "message": "رطوبت خاک کمتر از حد مطلوب گزارش شده است.",
-                            "suggested_action": "آبیاری اصلاحی بررسی شود.",
-                            "source_metric_type": "moisture",
-                        }
-                    ],
                 },
                 request_only=True,
             )
@@ -84,20 +48,17 @@ class AlertTrackerView(FarmAlertsBaseView):
         request_serializer.is_valid(raise_exception=True)
 
         farm = self._get_farm(request, request_serializer.validated_data["farm_uuid"])
-        incoming_alerts = request_serializer.validated_data.get("alerts", [])
-        AlertService.persist_incoming_alerts(farm=farm, alerts=incoming_alerts)
-
-        tracker_payload = build_tracker_context(farm=farm, alerts=incoming_alerts)
-        adapter_response = external_api_request(
-            "ai",
-            "/api/farm-alerts/tracker/",
-            method="POST",
-            payload=tracker_payload,
+        logger.info(
+            "tracker endpoint received request farm=%s payload=%s",
+            farm.farm_uuid,
+            request.data,
         )
-        if adapter_response.status_code >= 400:
-            return self._error_response(adapter_response)
 
-        payload = self._extract_result(adapter_response.data)
-        response_data = build_tracker_response(farm=farm, adapter_payload=payload)
+        response_data = build_tracker_response_from_snapshot(farm=farm)
+        logger.info(
+            "tracker endpoint returning cached response farm=%s response=%s",
+            farm.farm_uuid,
+            response_data,
+        )
         serializer = AlertTrackerAIResponseSerializer(instance=response_data)
         return Response({"code": 200, "msg": "success", "data": serializer.data}, status=status.HTTP_200_OK)

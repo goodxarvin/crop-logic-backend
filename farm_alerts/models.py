@@ -71,3 +71,28 @@ class Recommendation(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class FarmAlertTrackerSnapshot(models.Model):
+    farm = models.OneToOneField(
+        FarmHub,
+        on_delete=models.CASCADE,
+        related_name="alert_tracker_snapshot",
+    )
+    service_id = models.CharField(max_length=64, default="farm_alerts")
+    tracker = models.JSONField(default=dict, blank=True)
+    headline = models.CharField(max_length=255, blank=True, default="")
+    overview = models.TextField(blank=True, default="")
+    status_level = models.CharField(max_length=32, default="info", choices=SEVERITY_CHOICES)
+    raw_llm_response = models.TextField(blank=True, default="")
+    structured_context = models.JSONField(default=dict, blank=True)
+    last_ai_synced_at = models.DateTimeField(null=True, blank=True)
+    last_source_update_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "farm_alert_tracker_snapshots"
+
+    def __str__(self):
+        return f"Tracker snapshot for {self.farm_id}"

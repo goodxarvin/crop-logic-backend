@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
+from celery.schedules import crontab
 
 load_dotenv()
 
@@ -227,6 +228,18 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIP
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "120"))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "90"))
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = os.getenv("CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP", "true").lower() == "true"
+FARM_ALERTS_AI_SYNC_CRON_MINUTE = os.getenv("FARM_ALERTS_AI_SYNC_CRON_MINUTE", "0")
+FARM_ALERTS_AI_SYNC_CRON_HOUR = os.getenv("FARM_ALERTS_AI_SYNC_CRON_HOUR", "*")
+
+CELERY_BEAT_SCHEDULE = {
+    "sync-farm-alert-trackers": {
+        "task": "farm_alerts.tasks.sync_farm_alert_trackers",
+        "schedule": crontab(
+            minute=FARM_ALERTS_AI_SYNC_CRON_MINUTE,
+            hour=FARM_ALERTS_AI_SYNC_CRON_HOUR,
+        ),
+    }
+}
 
 LOGGING = {
     "version": 1,
@@ -243,6 +256,12 @@ LOGGING = {
             "filename": LOG_DIR / "farm_ai_assistant.log",
             "formatter": "standard",
         },
+        "farm_alerts_file": {
+            "level": "INFO",
+            "class": "logging.FileHandler",
+            "filename": LOG_DIR / "farm_alerts.log",
+            "formatter": "standard",
+        },
         "external_api_adapter_file": {
             "level": "WARNING",
             "class": "logging.FileHandler",
@@ -254,6 +273,11 @@ LOGGING = {
         "farm_ai_assistant": {
             "handlers": ["farm_ai_assistant_file"],
             "level": "WARNING",
+            "propagate": False,
+        },
+        "farm_alerts": {
+            "handlers": ["farm_alerts_file"],
+            "level": "INFO",
             "propagate": False,
         },
         "external_api_adapter": {
