@@ -59,19 +59,32 @@ class YieldHarvestSummarySerializer(serializers.Serializer):
 
 
 class CropSimulationRequestSerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای اجرای شبیه‌سازی.")
-    plant_name = serializers.CharField(required=False, allow_blank=True, default="", help_text="نام گیاه یا محصول.")
+    farm_uuid = serializers.UUIDField(
+        required=True,
+        initial="11111111-1111-1111-1111-111111111111",
+        help_text="UUID مزرعه برای اجرای شبیه‌سازی.",
+    )
 
 
 class GrowthSimulationRequestSerializer(serializers.Serializer):
-    plant_name = serializers.CharField(required=True, help_text="نام گیاه برای شروع شبیه‌سازی رشد.")
+    plant_name = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="نام گیاه؛ اگر farm_uuid ارسال شود از محصول مزرعه استفاده می‌شود.",
+    )
     dynamic_parameters = serializers.ListField(
         child=serializers.CharField(),
         required=True,
         allow_empty=False,
         help_text="لیست پارامترهای دینامیک موردنیاز مانند DVS یا LAI.",
     )
-    farm_uuid = serializers.UUIDField(required=False, allow_null=True, help_text="UUID مزرعه؛ در صورت نبود باید weather ارسال شود.")
+    farm_uuid = serializers.UUIDField(
+        required=False,
+        allow_null=True,
+        initial="11111111-1111-1111-1111-111111111111",
+        help_text="UUID مزرعه؛ در صورت نبود باید weather ارسال شود.",
+    )
     weather = serializers.JSONField(required=False, help_text="آب‌وهوا به‌صورت object یا array.")
     soil_parameters = serializers.DictField(required=False, help_text="پارامترهای خاک.")
     site_parameters = serializers.DictField(required=False, help_text="پارامترهای سایت.")
@@ -82,6 +95,8 @@ class GrowthSimulationRequestSerializer(serializers.Serializer):
     def validate(self, attrs):
         if not attrs.get("farm_uuid") and attrs.get("weather") in (None, "", [], {}):
             raise serializers.ValidationError("At least one of 'farm_uuid' or 'weather' must be provided.")
+        if not attrs.get("farm_uuid") and not (attrs.get("plant_name") or "").strip():
+            raise serializers.ValidationError({"plant_name": ["This field is required when farm_uuid is not provided."]})
         return attrs
 
 

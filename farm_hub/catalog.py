@@ -16,8 +16,8 @@ CATALOG_SEED_DATA = {
         {"name": "برنج", "planting_season": "بهار", "harvest_time": "اواخر تابستان", "soil": "رسی", "icon": "leaf", "growth_stage": "vegetative", "growth_stages": ["initial", "vegetative", "flowering", "maturity"]},
     ],
     "گلخانه ای": [
-        {"name": "گوجه فرنگی", "planting_season": "چهار فصل", "harvest_time": "چند مرحله ای", "soil": "کوکوپیت", "icon": "tomato", "growth_stage": "fruiting", "growth_stages": ["initial", "vegetative", "flowering", "fruiting", "maturity"]},
+        {"name": "گوجه‌فرنگی", "planting_season": "چهار فصل", "harvest_time": "چند مرحله ای", "soil": "کوکوپیت", "icon": "tomato", "growth_stage": "fruiting", "growth_stages": ["initial", "vegetative", "flowering", "fruiting", "maturity"]},
         {"name": "خیار", "planting_season": "چهار فصل", "harvest_time": "چند مرحله ای", "soil": "پرلیت", "icon": "leaf", "growth_stage": "fruiting", "growth_stages": ["initial", "vegetative", "flowering", "fruiting", "maturity"]},
-        {"name": "فلفل دلمه ای", "planting_season": "چهار فصل", "harvest_time": "چند مرحله ای", "soil": "بستر هیدروپونیک", "icon": "pepper", "growth_stage": "flowering", "growth_stages": ["initial", "vegetative", "flowering", "fruiting", "maturity"]},
+        {"name": "فلفل دلمه‌ای", "planting_season": "چهار فصل", "harvest_time": "چند مرحله ای", "soil": "بستر هیدروپونیک", "icon": "pepper", "growth_stage": "flowering", "growth_stages": ["initial", "vegetative", "flowering", "fruiting", "maturity"]},
     ],
 }

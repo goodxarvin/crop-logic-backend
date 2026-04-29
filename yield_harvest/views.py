@@ -179,6 +179,18 @@ class CropSimulationBaseView(APIView):
             status=adapter_response.status_code,
         )
 
+    @staticmethod
+    def _get_first_farm_product_name(farm):
+        first_product = farm.products.order_by("id").first()
+        if first_product is not None:
+            return (first_product.name or "").strip()
+
+        fallback_product = farm.farm_type.products.order_by("id").first()
+        if fallback_product is not None:
+            return (fallback_product.name or "").strip()
+
+        return ""
+
 
 class CurrentFarmChartView(CropSimulationBaseView):
     ai_path = "/api/crop-simulation/current-farm-chart/"
@@ -197,7 +209,10 @@ class CurrentFarmChartView(CropSimulationBaseView):
         if error_response is not None:
             return error_response
 
-        ai_payload = {"farm_uuid": str(farm.farm_uuid), "plant_name": payload.get("plant_name", "")}
+        ai_payload = {
+            "farm_uuid": str(farm.farm_uuid),
+            "plant_name": self._get_first_farm_product_name(farm),
+        }
         adapter_response = external_api_request("ai", self.ai_path, method="POST", payload=ai_payload)
 
         if adapter_response.status_code >= 400:
@@ -226,7 +241,10 @@ class HarvestPredictionView(CropSimulationBaseView):
         if error_response is not None:
             return error_response
 
-        ai_payload = {"farm_uuid": str(farm.farm_uuid), "plant_name": payload.get("plant_name", "")}
+        ai_payload = {
+            "farm_uuid": str(farm.farm_uuid),
+            "plant_name": self._get_first_farm_product_name(farm),
+        }
         adapter_response = external_api_request("ai", self.ai_path, method="POST", payload=ai_payload)
 
         if adapter_response.status_code >= 400:
@@ -255,7 +273,10 @@ class YieldPredictionView(CropSimulationBaseView):
         if error_response is not None:
             return error_response
 
-        ai_payload = {"farm_uuid": str(farm.farm_uuid), "plant_name": payload.get("plant_name", "")}
+        ai_payload = {
+            "farm_uuid": str(farm.farm_uuid),
+            "plant_name": self._get_first_farm_product_name(farm),
+        }
         adapter_response = external_api_request("ai", self.ai_path, method="POST", payload=ai_payload)
 
         if adapter_response.status_code >= 400:
@@ -278,8 +299,13 @@ class GrowthSimulationView(APIView):
         serializer.is_valid(raise_exception=True)
 
         payload = serializer.validated_data.copy()
-        if payload.get("farm_uuid") is not None:
-            payload["farm_uuid"] = str(payload["farm_uuid"])
+        farm_uuid = payload.get("farm_uuid")
+        if farm_uuid is not None:
+            farm, error_response = CropSimulationBaseView._get_farm(request, farm_uuid)
+            if error_response is not None:
+                return error_response
+            payload["farm_uuid"] = str(farm.farm_uuid)
+            payload["plant_name"] = CropSimulationBaseView._get_first_farm_product_name(farm)
 
         adapter_response = external_api_request(
             "ai",

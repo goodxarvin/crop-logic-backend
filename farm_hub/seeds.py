@@ -50,7 +50,7 @@ ADMIN_FARM_AREA_GEOJSON = {
 
 
 def _get_default_catalog():
-    default_farm_type_name = "زراعی"
+    default_farm_type_name = "گلخانه ای"
     created_products = []
 
     for farm_type_name, products in CATALOG_SEED_DATA.items():
