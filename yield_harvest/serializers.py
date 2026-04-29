@@ -48,9 +48,14 @@ class HarvestPredictionCardSerializer(serializers.Serializer):
 
 
 class YieldHarvestSummarySerializer(serializers.Serializer):
-    yield_prediction_card = YieldPredictionCardSerializer(required=False)
-    yield_prediction_chart = YieldPredictionChartSerializer(required=False)
-    harvest_prediction_card = HarvestPredictionCardSerializer(required=False)
+    farm_uuid = serializers.CharField(required=False, allow_blank=True)
+    season_highlights_card = serializers.DictField(required=False)
+    yield_prediction = serializers.DictField(required=False)
+    harvest_prediction_card = serializers.DictField(required=False)
+    harvest_readiness_zones = serializers.DictField(required=False)
+    yield_quality_bands = serializers.DictField(required=False)
+    harvest_operations_card = serializers.DictField(required=False)
+    yield_prediction_chart = serializers.DictField(required=False)
 
 
 class CropSimulationRequestSerializer(serializers.Serializer):
@@ -133,11 +138,11 @@ class CurrentFarmChartSerializer(serializers.Serializer):
     scenario_id = serializers.IntegerField(required=False)
     simulation_warning = serializers.CharField(required=False, allow_blank=True)
     categories = serializers.ListField(child=serializers.CharField(), required=False)
-    series = serializers.DictField(required=False)
-    summary = serializers.DictField(required=False)
+    series = serializers.ListField(child=serializers.DictField(), required=False)
+    summary = serializers.ListField(child=serializers.DictField(), required=False)
     current_state = serializers.DictField(required=False)
     metrics = serializers.DictField(required=False)
-    daily_output = serializers.DictField(required=False)
+    daily_output = serializers.ListField(child=serializers.DictField(), required=False)
 
 
 class HarvestPredictionSerializer(serializers.Serializer):

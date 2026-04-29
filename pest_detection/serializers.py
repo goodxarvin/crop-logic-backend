@@ -37,11 +37,13 @@ class PestDetectionAnalyzeResponseSerializer(serializers.Serializer):
 
 
 class PestDetectionRiskRequestSerializer(serializers.Serializer):
-    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای تحلیل ریسک آفت/بیماری.")
-    sensor_uuid = serializers.UUIDField(required=False, help_text="UUID سنسور مرتبط در صورت وجود.")
-    plant_name = serializers.CharField(required=False, allow_blank=True, default="", help_text="نام محصول یا گیاه.")
-    growth_stage = serializers.CharField(required=False, allow_blank=True, default="", help_text="مرحله رشد گیاه.")
-    query = serializers.CharField(required=False, allow_blank=True, default="", help_text="پرسش تکمیلی کاربر.")
+    farm_uuid = serializers.UUIDField(default="11111111-1111-1111-1111-111111111111", help_text="UUID مزرعه برای تحلیل ریسک آفت/بیماری.")
+    plant_name = serializers.CharField(required=False, allow_blank=True, default="پیاز", help_text="نام محصول یا گیاه.")
+    growth_stage = serializers.CharField(required=False, allow_blank=True, default="گلدهی", help_text="مرحله رشد گیاه.")
+
+
+class PestDetectionRiskSummaryRequestSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای خلاصه ریسک آفت/بیماری.")
 
 
 class RiskBreakdownSerializer(serializers.Serializer):

@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,6 +20,39 @@ from .services import (
     get_avg_soil_moisture_data,
     get_soil_moisture_heatmap_data,
 )
+
+
+SOIL_ANOMALIES_CACHE_KEY = "soil:anomalies:recent"
+SOIL_ANOMALIES_CACHE_LIMIT = 4
+SOIL_SUMMARY_CACHE_KEY = "soil:summary:recent"
+SOIL_SUMMARY_CACHE_LIMIT = 4
+
+
+def _store_recent_soil_anomalies(payload):
+    cached_items = cache.get(SOIL_ANOMALIES_CACHE_KEY, [])
+    if not isinstance(cached_items, list):
+        cached_items = []
+
+    cached_items.insert(0, payload)
+    cache.set(SOIL_ANOMALIES_CACHE_KEY, cached_items[:SOIL_ANOMALIES_CACHE_LIMIT], timeout=None)
+
+
+def _store_recent_soil_summary(payload):
+    cached_items = cache.get(SOIL_SUMMARY_CACHE_KEY, [])
+    if not isinstance(cached_items, list):
+        cached_items = []
+
+    cached_items.insert(0, payload)
+    cache.set(SOIL_SUMMARY_CACHE_KEY, cached_items[:SOIL_SUMMARY_CACHE_LIMIT], timeout=None)
+
+
+def _build_soil_summary_cache_key(farm_uuid):
+    return f"soil:summary:{farm_uuid}"
+
+
+def _build_soil_anomalies_cache_key(farm_uuid):
+    return f"soil:anomalies:{farm_uuid}"
+
 
 
 def _get_farm_from_request(request):
@@ -85,6 +120,14 @@ class SoilAnomalyDetectionView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        cache_key = _build_soil_anomalies_cache_key(farm.farm_uuid)
+        cached_anomalies = cache.get(cache_key)
+        if isinstance(cached_anomalies, dict):
+            return Response(
+                {"code": 200, "msg": "success", "data": cached_anomalies},
+                status=status.HTTP_200_OK,
+            )
+
         adapter_response = external_api_request(
             "ai",
             "/api/soile/anomaly-detection/",
@@ -102,8 +145,11 @@ class SoilAnomalyDetectionView(APIView):
                 status=adapter_response.status_code,
             )
 
+        response_payload = _extract_adapter_result(adapter_response.data)
+        cache.set(cache_key, response_payload, timeout=settings.SOIL_ANOMALIES_CACHE_TTL)
+        _store_recent_soil_anomalies(response_payload)
         return Response(
-            {"code": 200, "msg": "success", "data": _extract_adapter_result(adapter_response.data)},
+            {"code": 200, "msg": "success", "data": response_payload},
             status=status.HTTP_200_OK,
         )
 
@@ -177,6 +223,14 @@ class SoilSummaryView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        cache_key = _build_soil_summary_cache_key(farm.farm_uuid)
+        cached_summary = cache.get(cache_key)
+        if isinstance(cached_summary, dict):
+            return Response(
+                {"code": 200, "msg": "success", "data": cached_summary},
+                status=status.HTTP_200_OK,
+            )
+
         adapter_response = external_api_request(
             "ai",
             "/api/soile/health-summary/",
@@ -194,7 +248,10 @@ class SoilSummaryView(APIView):
                 status=adapter_response.status_code,
             )
 
+        response_payload = _extract_adapter_result(adapter_response.data)
+        cache.set(cache_key, response_payload, timeout=settings.SOIL_SUMMARY_CACHE_TTL)
+        _store_recent_soil_summary(response_payload)
         return Response(
-            {"code": 200, "msg": "success", "data": _extract_adapter_result(adapter_response.data)},
+            {"code": 200, "msg": "success", "data": response_payload},
             status=status.HTTP_200_OK,
         )

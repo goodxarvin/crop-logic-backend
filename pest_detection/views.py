@@ -4,6 +4,8 @@ Pest detection API views.
 
 import json
 
+from django.conf import settings
+from django.core.cache import cache
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
@@ -18,10 +20,27 @@ from .serializers import (
     PestDetectionRiskRequestSerializer,
     PestDetectionRiskResponseSerializer,
     PestDetectionRiskSummaryResponseSerializer,
+    PestDetectionRiskSummaryRequestSerializer,
 )
 
 
 class PestDetectionFarmMixin:
+    RISK_SUMMARY_CACHE_KEY = "pest-disease:risk-summary:recent"
+    RISK_SUMMARY_CACHE_LIMIT = 4
+
+    @classmethod
+    def _store_recent_risk_summary(cls, payload):
+        cached_items = cache.get(cls.RISK_SUMMARY_CACHE_KEY, [])
+        if not isinstance(cached_items, list):
+            cached_items = []
+
+        cached_items.insert(0, payload)
+        cache.set(cls.RISK_SUMMARY_CACHE_KEY, cached_items[:cls.RISK_SUMMARY_CACHE_LIMIT], timeout=None)
+
+    @staticmethod
+    def _build_risk_summary_cache_key(user_id, farm_uuid):
+        return f"pest-disease:risk-summary:{user_id}:{farm_uuid}"
+
     @staticmethod
     def _get_farm(request, farm_uuid):
         if not farm_uuid:
@@ -61,6 +80,13 @@ class PestDetectionFarmMixin:
             parsed = self._parse_json_array(image_urls)
             image_urls = parsed if parsed is not None else [image_urls]
         return [str(item) for item in image_urls if str(item).strip()]
+
+    @staticmethod
+    def _get_first_farm_product_name(farm):
+        first_product = farm.products.order_by("id").first()
+        if first_product is None:
+            return ""
+        return (first_product.name or "").strip()
 
     @staticmethod
     def _attach_uploaded_files(payload, uploaded_images):
@@ -187,15 +213,12 @@ class RiskView(PestDetectionFarmMixin, APIView):
         if error_response is not None:
             return error_response
 
+        plant_name = self._get_first_farm_product_name(farm)
         ai_payload = {
             "farm_uuid": str(farm.farm_uuid),
-            "plant_name": payload.get("plant_name", ""),
-            "growth_stage": payload.get("growth_stage", ""),
-            "query": payload.get("query", ""),
+            "plant_name": plant_name,
+            "growth_stage": "گلدهی",
         }
-        sensor_uuid = payload.get("sensor_uuid")
-        if sensor_uuid:
-            ai_payload["sensor_uuid"] = str(sensor_uuid)
 
         adapter_response = external_api_request(
             "ai",
@@ -216,26 +239,40 @@ class RiskView(PestDetectionFarmMixin, APIView):
 class RiskSummaryView(PestDetectionFarmMixin, APIView):
     @extend_schema(
         tags=["Pest Detection"],
-        request=PestDetectionRiskRequestSerializer,
+        request=PestDetectionRiskSummaryRequestSerializer,
         responses={200: status_response("PestDetectionRiskSummaryResponse", data=PestDetectionRiskSummaryResponseSerializer())},
     )
     def post(self, request):
-        farm_uuid = request.data.get("farm_uuid")
-        sensor_uuid = request.data.get("sensor_uuid")
+        serializer = PestDetectionRiskSummaryRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        farm_uuid = payload.get("farm_uuid")
 
         farm, error_response = self._get_farm(request, farm_uuid)
         if error_response is not None:
             return error_response
 
-        payload = {"farm_uuid": str(farm.farm_uuid)}
-        if sensor_uuid:
-            payload["sensor_uuid"] = str(sensor_uuid)
+        cache_key = self._build_risk_summary_cache_key(request.user.id, farm.farm_uuid)
+        cached_response = cache.get(cache_key)
+        if isinstance(cached_response, dict):
+            return Response(
+                {"code": 200, "msg": "success", "data": cached_response},
+                status=status.HTTP_200_OK,
+            )
+
+        plant_name = self._get_first_farm_product_name(farm)
+        ai_payload = {
+            "farm_uuid": str(farm.farm_uuid),
+            "plant_name": plant_name,
+            "growth_stage": "گلدهی",
+        }
 
         adapter_response = external_api_request(
             "ai",
-            "/api/pest-disease/risk-summary/",
+            "/api/pest-disease/risk/",
             method="POST",
-            payload=payload,
+            payload=ai_payload,
         )
 
         if adapter_response.status_code >= 400:
@@ -248,6 +285,8 @@ class RiskSummaryView(PestDetectionFarmMixin, APIView):
             "pestRisk": result.get("pestRisk") or result.get("pest_risk") or {},
             "drivers": result.get("drivers") if isinstance(result.get("drivers"), dict) else {},
         }
+        cache.set(cache_key, response_payload, timeout=settings.PEST_DISEASE_RISK_SUMMARY_CACHE_TTL)
+        self._store_recent_risk_summary(response_payload)
         return Response(
             {"code": 200, "msg": "success", "data": response_payload},
             status=status.HTTP_200_OK,

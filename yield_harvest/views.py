@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
-from config.swagger import farm_uuid_query_param, status_response
+from config.swagger import code_response, farm_uuid_query_param
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
 from .models import YieldHarvestPredictionLog
@@ -46,28 +46,60 @@ class YieldHarvestSummaryView(APIView):
     @extend_schema(
         tags=["Yield & Harvest Prediction"],
         parameters=[
-            farm_uuid_query_param(required=False, description="UUID of the farm for yield and harvest prediction."),
+            farm_uuid_query_param(required=True, description="UUID of the farm for yield and harvest prediction."),
+            OpenApiParameter(
+                name="season_year",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="سال زراعی.",
+            ),
+            OpenApiParameter(
+                name="crop_name",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="نام محصول.",
+            ),
+            OpenApiParameter(
+                name="include_narrative",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="در صورت true بودن متن های narrative نیز اضافه می شوند.",
+            ),
         ],
-        responses={200: status_response("YieldHarvestSummaryResponse", data=YieldHarvestSummarySerializer())},
+        responses={200: code_response("YieldHarvestSummaryResponse", data=YieldHarvestSummarySerializer())},
     )
     def get(self, request):
         farm_uuid = request.query_params.get("farm_uuid")
-        query = {"farm_uuid": str(farm_uuid)} if farm_uuid else {}
+        farm, error_response = CropSimulationBaseView._get_farm(request, farm_uuid)
+        if error_response is not None:
+            return error_response
+
+        query = {"farm_uuid": str(farm.farm_uuid)}
+        if request.query_params.get("season_year"):
+            query["season_year"] = request.query_params.get("season_year")
+        if request.query_params.get("crop_name"):
+            query["crop_name"] = request.query_params.get("crop_name")
+        if request.query_params.get("include_narrative") is not None:
+            query["include_narrative"] = request.query_params.get("include_narrative")
 
         adapter_response = external_api_request(
             "ai",
-            "/yield-harvest/summary",
+            "/api/crop-simulation/yield-harvest-summary/",
             method="GET",
             query=query,
         )
+        if adapter_response.status_code >= 400:
+            return CropSimulationBaseView._error_response(adapter_response)
 
-        response_data = adapter_response.data if isinstance(adapter_response.data, dict) else {}
-        summary = response_data.get("result", response_data.get("data", response_data))
+        summary = CropSimulationBaseView._extract_result(adapter_response.data)
 
-        self._persist_log(farm_uuid, summary)
+        self._persist_log(farm.farm_uuid, summary)
 
         return Response(
-            {"status": "success", "data": summary},
+            {"code": 200, "msg": "success", "data": summary},
             status=status.HTTP_200_OK,
         )
 
@@ -80,18 +112,25 @@ class YieldHarvestSummaryView(APIView):
             except (FarmHub.DoesNotExist, Exception):
                 pass
 
-        yield_card = summary.get("yield_prediction_card", {})
+        yield_card = summary.get("yield_prediction") or summary.get("yield_prediction_card") or {}
         harvest_card = summary.get("harvest_prediction_card", {})
+        yield_chart = summary.get("yield_prediction_chart", {})
+        if not isinstance(yield_card, dict):
+            yield_card = {}
+        if not isinstance(harvest_card, dict):
+            harvest_card = {}
+        if not isinstance(yield_chart, dict):
+            yield_chart = {}
 
         YieldHarvestPredictionLog.objects.create(
             farm=farm,
-            yield_stats=yield_card.get("stats", ""),
-            yield_chip_text=yield_card.get("chipText", ""),
-            harvest_date=harvest_card.get("date") or None,
-            days_until_harvest=harvest_card.get("daysUntil"),
-            optimal_window_start=harvest_card.get("optimalWindowStart") or None,
-            optimal_window_end=harvest_card.get("optimalWindowEnd") or None,
-            chart_data=summary.get("yield_prediction_chart", {}),
+            yield_stats=str(yield_card.get("predicted_yield_tons") or yield_card.get("stats") or ""),
+            yield_chip_text=str(yield_card.get("unit") or yield_card.get("chipText") or ""),
+            harvest_date=harvest_card.get("harvest_date") or harvest_card.get("date") or None,
+            days_until_harvest=harvest_card.get("days_until") or harvest_card.get("daysUntil"),
+            optimal_window_start=harvest_card.get("optimal_window_start") or harvest_card.get("optimalWindowStart") or None,
+            optimal_window_end=harvest_card.get("optimal_window_end") or harvest_card.get("optimalWindowEnd") or None,
+            chart_data=yield_chart,
         )
 
 
@@ -147,7 +186,7 @@ class CurrentFarmChartView(CropSimulationBaseView):
     @extend_schema(
         tags=["Crop Simulation"],
         request=CropSimulationRequestSerializer,
-        responses={200: status_response("CurrentFarmChartResponse", data=CurrentFarmChartSerializer())},
+        responses={200: code_response("CurrentFarmChartResponse", data=CurrentFarmChartSerializer())},
     )
     def post(self, request):
         serializer = CropSimulationRequestSerializer(data=request.data)
@@ -176,7 +215,7 @@ class HarvestPredictionView(CropSimulationBaseView):
     @extend_schema(
         tags=["Crop Simulation"],
         request=CropSimulationRequestSerializer,
-        responses={200: status_response("CropSimulationHarvestPredictionResponse", data=HarvestPredictionSerializer())},
+        responses={200: code_response("CropSimulationHarvestPredictionResponse", data=HarvestPredictionSerializer())},
     )
     def post(self, request):
         serializer = CropSimulationRequestSerializer(data=request.data)
@@ -205,7 +244,7 @@ class YieldPredictionView(CropSimulationBaseView):
     @extend_schema(
         tags=["Crop Simulation"],
         request=CropSimulationRequestSerializer,
-        responses={200: status_response("CropSimulationYieldPredictionResponse", data=YieldPredictionSerializer())},
+        responses={200: code_response("CropSimulationYieldPredictionResponse", data=YieldPredictionSerializer())},
     )
     def post(self, request):
         serializer = CropSimulationRequestSerializer(data=request.data)
@@ -232,7 +271,7 @@ class GrowthSimulationView(APIView):
     @extend_schema(
         tags=["Crop Simulation"],
         request=GrowthSimulationRequestSerializer,
-        responses={202: status_response("GrowthSimulationQueuedResponse", data=GrowthSimulationQueuedDataSerializer())},
+        responses={202: code_response("GrowthSimulationQueuedResponse", data=GrowthSimulationQueuedDataSerializer())},
     )
     def post(self, request):
         serializer = GrowthSimulationRequestSerializer(data=request.data)
@@ -279,7 +318,7 @@ class GrowthSimulationStatusView(APIView):
                 description="اندازه صفحه بین 1 تا 50.",
             ),
         ],
-        responses={200: status_response("GrowthSimulationStatusResponse", data=GrowthSimulationStatusDataSerializer())},
+        responses={200: code_response("GrowthSimulationStatusResponse", data=GrowthSimulationStatusDataSerializer())},
     )
     def get(self, request, task_id):
         query = {}

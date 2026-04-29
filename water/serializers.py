@@ -1,6 +1,14 @@
 from rest_framework import serializers
 
 
+class WeatherFarmCardRequestSerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(
+        required=True,
+        initial="11111111-1111-1111-1111-111111111111",
+        help_text="UUID مزرعه.",
+    )
+
+
 class WeatherChartDataSerializer(serializers.Serializer):
     labels = serializers.ListField(child=serializers.CharField(), required=False)
     series = serializers.ListField(

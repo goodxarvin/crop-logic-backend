@@ -1,9 +1,8 @@
-import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
@@ -13,12 +12,14 @@ from .views import (
     GrowthSimulationStatusView,
     GrowthSimulationView,
     HarvestPredictionView,
+    YieldHarvestSummaryView,
     YieldPredictionView,
 )
 
 
 class CropSimulationViewTests(TestCase):
     def setUp(self):
+        self.api_client = APIClient()
         self.factory = APIRequestFactory()
         self.user = get_user_model().objects.create_user(
             username="farmer",
@@ -35,6 +36,7 @@ class CropSimulationViewTests(TestCase):
         self.farm_type = FarmType.objects.create(name="زراعی")
         self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="Farm 1")
         self.other_farm = FarmHub.objects.create(owner=self.other_user, farm_type=self.farm_type, name="Farm 2")
+        self.api_client.force_authenticate(user=self.user)
 
     @patch("yield_harvest.views.external_api_request")
     def test_growth_queues_simulation_task(self, mock_external_api_request):
@@ -54,6 +56,7 @@ class CropSimulationViewTests(TestCase):
             {"plant_name": "گوجه‌فرنگی", "dynamic_parameters": ["DVS", "LAI"], "farm_uuid": str(self.farm.farm_uuid)},
             format="json",
         )
+        force_authenticate(request, user=self.user)
 
         response = GrowthSimulationView.as_view()(request)
 
@@ -84,16 +87,14 @@ class CropSimulationViewTests(TestCase):
             },
         )
 
-        response = self.client.post(
+        response = self.api_client.post(
             "/api/crop-simulation/growth/",
-            data=json.dumps(
-                {
-                    "plant_name": "گوجه‌فرنگی",
-                    "dynamic_parameters": ["DVS", "LAI"],
-                    "farm_uuid": str(self.farm.farm_uuid),
-                }
-            ),
-            content_type="application/json",
+            {
+                "plant_name": "گوجه‌فرنگی",
+                "dynamic_parameters": ["DVS", "LAI"],
+                "farm_uuid": str(self.farm.farm_uuid),
+            },
+            format="json",
         )
 
         self.assertEqual(response.status_code, 202)
@@ -105,6 +106,7 @@ class CropSimulationViewTests(TestCase):
             {"plant_name": "گوجه‌فرنگی", "dynamic_parameters": ["DVS"]},
             format="json",
         )
+        force_authenticate(request, user=self.user)
 
         response = GrowthSimulationView.as_view()(request)
 
@@ -131,6 +133,7 @@ class CropSimulationViewTests(TestCase):
         )
 
         request = self.factory.get("/api/yield-harvest/crop-simulation/growth/growth-task-123/status/?page=1&page_size=10")
+        force_authenticate(request, user=self.user)
         response = GrowthSimulationStatusView.as_view()(request, task_id="growth-task-123")
 
         self.assertEqual(response.status_code, 200)
@@ -163,7 +166,7 @@ class CropSimulationViewTests(TestCase):
             },
         )
 
-        response = self.client.get("/api/crop-simulation/growth/growth-task-123/status/?page=1&page_size=10")
+        response = self.api_client.get("/api/crop-simulation/growth/growth-task-123/status/?page=1&page_size=10")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"]["status"], "SUCCESS")
@@ -219,6 +222,22 @@ class CropSimulationViewTests(TestCase):
         )
 
     @patch("yield_harvest.views.external_api_request")
+    def test_current_farm_chart_top_level_route_proxies_to_ai_service(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"farm_uuid": str(self.farm.farm_uuid), "plant_name": "wheat"}}},
+        )
+
+        response = self.api_client.post(
+            "/api/crop-simulation/current-farm-chart/",
+            {"farm_uuid": str(self.farm.farm_uuid), "plant_name": "wheat"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["farm_uuid"], str(self.farm.farm_uuid))
+
+    @patch("yield_harvest.views.external_api_request")
     def test_harvest_prediction_proxies_to_ai_service(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -253,6 +272,22 @@ class CropSimulationViewTests(TestCase):
         )
 
     @patch("yield_harvest.views.external_api_request")
+    def test_harvest_prediction_top_level_route_proxies_to_ai_service(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"date": "2026-07-15", "daysUntil": 96}}},
+        )
+
+        response = self.api_client.post(
+            "/api/crop-simulation/harvest-prediction/",
+            {"farm_uuid": str(self.farm.farm_uuid)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["daysUntil"], 96)
+
+    @patch("yield_harvest.views.external_api_request")
     def test_yield_prediction_proxies_to_ai_service(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -278,6 +313,60 @@ class CropSimulationViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["predictedYieldTons"], 8.4)
+
+    @patch("yield_harvest.views.external_api_request")
+    def test_yield_prediction_top_level_route_proxies_to_ai_service(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"farm_uuid": str(self.farm.farm_uuid), "predictedYieldTons": 8.4}}},
+        )
+
+        response = self.api_client.post(
+            "/api/crop-simulation/yield-prediction/",
+            {"farm_uuid": str(self.farm.farm_uuid)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["predictedYieldTons"], 8.4)
+
+    @patch("yield_harvest.views.external_api_request")
+    def test_yield_harvest_summary_top_level_route_proxies_to_ai_service(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={
+                "data": {
+                    "result": {
+                        "farm_uuid": str(self.farm.farm_uuid),
+                        "season_highlights_card": {"title": "Season highlights"},
+                        "yield_prediction": {"predicted_yield_tons": 5.1},
+                        "harvest_prediction_card": {"harvest_date": "2026-09-28", "days_until": 152},
+                        "harvest_readiness_zones": {"zones": []},
+                        "yield_quality_bands": {"primary_quality_grade": "B"},
+                        "harvest_operations_card": {"steps": []},
+                        "yield_prediction_chart": {"series": []},
+                    }
+                }
+            },
+        )
+
+        response = self.api_client.get(
+            f"/api/crop-simulation/yield-harvest-summary/?farm_uuid={self.farm.farm_uuid}&season_year=1404&crop_name=wheat&include_narrative=true"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["farm_uuid"], str(self.farm.farm_uuid))
+        mock_external_api_request.assert_called_once_with(
+            "ai",
+            "/api/crop-simulation/yield-harvest-summary/",
+            method="GET",
+            query={
+                "farm_uuid": str(self.farm.farm_uuid),
+                "season_year": "1404",
+                "crop_name": "wheat",
+                "include_narrative": "true",
+            },
+        )
 
     def test_crop_simulation_rejects_foreign_farm_uuid(self):
         request = self.factory.post(

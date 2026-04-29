@@ -2,6 +2,8 @@
 WATER API views.
 """
 
+from django.conf import settings
+from django.core.cache import cache
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,7 +14,13 @@ from config.swagger import farm_uuid_query_param, sensor_uuid_query_param, statu
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
 from .models import WeatherForecastLog
-from .serializers import FarmWeatherCardSerializer, WaterNeedPredictionSerializer, WaterStressIndexSerializer, WaterSummarySerializer
+from .serializers import (
+    FarmWeatherCardSerializer,
+    WaterNeedPredictionSerializer,
+    WaterStressIndexSerializer,
+    WaterSummarySerializer,
+    WeatherFarmCardRequestSerializer,
+)
 from .services import get_water_need_prediction_data, get_water_stress_index_data, get_water_summary_data
 
 
@@ -85,6 +93,32 @@ class FarmWeatherCardView(APIView):
 
 
 class WeatherFarmBaseView(APIView):
+    WATER_NEED_PREDICTION_CACHE_KEY = "water:need-prediction:recent"
+    WATER_NEED_PREDICTION_CACHE_LIMIT = 4
+    WATER_SUMMARY_CACHE_KEY = "water:summary:recent"
+    WATER_SUMMARY_CACHE_LIMIT = 4
+
+    @classmethod
+    def _store_recent_entries(cls, cache_key, cache_limit, payload):
+        cached_items = cache.get(cache_key, [])
+        if not isinstance(cached_items, list):
+            cached_items = []
+
+        cached_items.insert(0, payload)
+        cache.set(cache_key, cached_items[:cache_limit], timeout=None)
+
+    @classmethod
+    def _store_recent_water_need_prediction(cls, payload):
+        cls._store_recent_entries(cls.WATER_NEED_PREDICTION_CACHE_KEY, cls.WATER_NEED_PREDICTION_CACHE_LIMIT, payload)
+
+    @classmethod
+    def _store_recent_water_summary(cls, payload):
+        cls._store_recent_entries(cls.WATER_SUMMARY_CACHE_KEY, cls.WATER_SUMMARY_CACHE_LIMIT, payload)
+
+    @staticmethod
+    def _build_water_need_prediction_cache_key(user_id, farm_uuid):
+        return f"water:need-prediction:{user_id}:{farm_uuid}"
+
     @staticmethod
     def _get_farm(request, farm_uuid):
         if not farm_uuid:
@@ -149,7 +183,7 @@ class WeatherFarmBaseView(APIView):
 class WeatherFarmCardView(WeatherFarmBaseView):
     @extend_schema(
         tags=["WEATHER"],
-        request=serializers.Serializer,
+        request=WeatherFarmCardRequestSerializer,
         responses={200: status_response("WeatherFarmCardResponse", data=FarmWeatherCardSerializer())},
     )
     def post(self, request):
@@ -187,9 +221,22 @@ class WaterNeedPredictionView(APIView):
             except (FarmHub.DoesNotExist, Exception):
                 farm = None
             else:
+                cache_key = WeatherFarmBaseView._build_water_need_prediction_cache_key(
+                    getattr(request.user, "id", "anonymous"),
+                    farm.farm_uuid,
+                )
+                cached_prediction = cache.get(cache_key)
+                if isinstance(cached_prediction, dict):
+                    return Response(
+                        {"status": "success", "data": cached_prediction},
+                        status=status.HTTP_200_OK,
+                    )
+
                 prediction_data, error_response = WeatherFarmBaseView._fetch_water_need_prediction_data(farm.farm_uuid)
                 if error_response is not None:
                     return error_response
+                cache.set(cache_key, prediction_data, timeout=settings.WATER_NEED_PREDICTION_CACHE_TTL)
+                WeatherFarmBaseView._store_recent_water_need_prediction(prediction_data)
                 return Response(
                     {"status": "success", "data": prediction_data},
                     status=status.HTTP_200_OK,
@@ -292,7 +339,9 @@ class WaterSummaryView(APIView):
             except (FarmHub.DoesNotExist, Exception):
                 farm = None
 
+        summary_data = get_water_summary_data(farm)
+        WeatherFarmBaseView._store_recent_water_summary(summary_data)
         return Response(
-            {"status": "success", "data": get_water_summary_data(farm)},
+            {"status": "success", "data": summary_data},
             status=status.HTTP_200_OK,
         )
