@@ -66,6 +66,45 @@ class IrrigationRecommendationListItemSerializer(serializers.Serializer):
     requested_at = serializers.DateTimeField(source="created_at", read_only=True)
 
 
+class FreeTextPlanParserRequestSerializer(serializers.Serializer):
+    message = serializers.CharField(required=False, allow_blank=True, help_text="متن آزاد کاربر.")
+    answers = serializers.DictField(required=False, help_text="پاسخ های تکمیلی کاربر.")
+    partial_plan = serializers.DictField(required=False, help_text="داده استخراج شده از مرحله قبل.")
+    farm_uuid = serializers.UUIDField(
+        required=False,
+        allow_null=True,
+        initial="11111111-1111-1111-1111-111111111111",
+        help_text="UUID مزرعه برای context اختیاری.",
+    )
+
+    def validate(self, attrs):
+        has_message = bool((attrs.get("message") or "").strip())
+        has_answers = isinstance(attrs.get("answers"), dict) and bool(attrs.get("answers"))
+        has_partial_plan = isinstance(attrs.get("partial_plan"), dict) and bool(attrs.get("partial_plan"))
+        if not (has_message or has_answers or has_partial_plan):
+            raise serializers.ValidationError(
+                {"non_field_errors": ["حداقل یکی از message، answers یا partial_plan باید ارسال شود."]}
+            )
+        return attrs
+
+
+class PlanParserQuestionSerializer(serializers.Serializer):
+    id = serializers.CharField(required=False, allow_blank=True)
+    field = serializers.CharField(required=False, allow_blank=True)
+    question = serializers.CharField(required=False, allow_blank=True)
+    rationale = serializers.CharField(required=False, allow_blank=True)
+
+
+class FreeTextPlanParserResponseDataSerializer(serializers.Serializer):
+    status = serializers.CharField(required=False, allow_blank=True)
+    status_fa = serializers.CharField(required=False, allow_blank=True)
+    summary = serializers.CharField(required=False, allow_blank=True)
+    missing_fields = serializers.ListField(child=serializers.CharField(), required=False)
+    questions = PlanParserQuestionSerializer(many=True, required=False)
+    collected_data = serializers.DictField(required=False)
+    final_plan = serializers.DictField(required=False, allow_null=True)
+
+
 class IrrigationRecommendResponseDataSerializer(serializers.Serializer):
     recommendation_uuid = serializers.UUIDField(read_only=True, required=False)
     crop_id = serializers.CharField(read_only=True, required=False, allow_blank=True)

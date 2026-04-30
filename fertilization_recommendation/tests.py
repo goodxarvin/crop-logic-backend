@@ -6,7 +6,7 @@ from unittest.mock import patch
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
 from .models import FertilizationRecommendationRequest
-from .views import RecommendationDetailView, RecommendationListView, RecommendView
+from .views import PlanFromTextView, RecommendationDetailView, RecommendationListView, RecommendView
 
 
 class FertilizationRecommendViewTests(TestCase):
@@ -20,6 +20,52 @@ class FertilizationRecommendViewTests(TestCase):
         )
         self.farm_type = FarmType.objects.create(name="زراعی")
         self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="fert-farm")
+
+    @patch("fertilization_recommendation.views.external_api_request")
+    def test_plan_from_text_proxies_to_ai_service(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={
+                "code": 200,
+                "msg": "موفق",
+                "data": {
+                    "status": "needs_clarification",
+                    "status_fa": "نیازمند پرسش تکمیلی",
+                    "summary": "need more",
+                    "missing_fields": ["growth_stage"],
+                    "questions": [{"id": "growth_stage", "field": "growth_stage", "question": "?", "rationale": "!"}],
+                    "collected_data": {"crop_name": "گندم"},
+                    "final_plan": None,
+                },
+            },
+        )
+
+        request = self.factory.post(
+            "/api/fertilization/plan-from-text/",
+            {"message": "متن کودهی", "farm_uuid": str(self.farm.farm_uuid)},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = PlanFromTextView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["status"], "needs_clarification")
+        mock_external_api_request.assert_called_once_with(
+            "ai",
+            "/api/fertilization/plan-from-text/",
+            method="POST",
+            payload={"message": "متن کودهی", "farm_uuid": str(self.farm.farm_uuid)},
+        )
+
+    def test_plan_from_text_requires_message_or_answers_or_partial_plan(self):
+        request = self.factory.post("/api/fertilization/plan-from-text/", {}, format="json")
+        force_authenticate(request, user=self.user)
+
+        response = PlanFromTextView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("non_field_errors", response.data)
 
     @patch("fertilization_recommendation.views.external_api_request")
     def test_recommend_returns_updated_response_shape(self, mock_external_api_request):

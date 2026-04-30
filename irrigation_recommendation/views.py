@@ -20,6 +20,8 @@ from water.views import WaterStressIndexView
 from .mock_data import CONFIG_RESPONSE_DATA
 from .models import IrrigationRecommendationRequest
 from .serializers import (
+    FreeTextPlanParserRequestSerializer,
+    FreeTextPlanParserResponseDataSerializer,
     IrrigationMethodSerializer,
     IrrigationRecommendationListItemSerializer,
     IrrigationRecommendationListQuerySerializer,
@@ -351,5 +353,41 @@ class WaterStressView(APIView):
         stress_payload = WaterStressIndexView.extract_stress_payload(adapter_response.data, farm.farm_uuid)
         return Response(
             {"code": 200, "msg": "success", "data": stress_payload},
+            status=status.HTTP_200_OK,
+        )
+
+
+class PlanFromTextView(FarmAccessMixin, APIView):
+    @extend_schema(
+        tags=["Irrigation Recommendation"],
+        request=FreeTextPlanParserRequestSerializer,
+        responses={200: code_response("IrrigationPlanFromTextResponse", data=FreeTextPlanParserResponseDataSerializer())},
+    )
+    def post(self, request):
+        serializer = FreeTextPlanParserRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data.copy()
+
+        farm_uuid = payload.get("farm_uuid")
+        if farm_uuid:
+            farm = self._get_farm(request, farm_uuid)
+            payload["farm_uuid"] = str(farm.farm_uuid)
+
+        adapter_response = external_api_request(
+            "ai",
+            "/api/irrigation/plan-from-text/",
+            method="POST",
+            payload=payload,
+        )
+
+        response_data = adapter_response.data if isinstance(adapter_response.data, dict) else {"message": str(adapter_response.data)}
+        if adapter_response.status_code >= 400:
+            return Response(
+                {"code": adapter_response.status_code, "msg": "error", "data": response_data},
+                status=adapter_response.status_code,
+            )
+
+        return Response(
+            {"code": 200, "msg": response_data.get("msg", "موفق"), "data": response_data.get("data", response_data)},
             status=status.HTTP_200_OK,
         )

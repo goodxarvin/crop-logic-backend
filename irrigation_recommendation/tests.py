@@ -10,6 +10,7 @@ from farm_hub.models import FarmHub, FarmType
 from .models import IrrigationRecommendationRequest
 from .views import (
     IrrigationMethodListView,
+    PlanFromTextView,
     RecommendView,
     RecommendationDetailView,
     RecommendationListView,
@@ -87,6 +88,65 @@ class WaterStressViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data["code"], 404)
         self.assertEqual(response.data["data"]["farm_uuid"][0], "Farm not found.")
+
+
+class IrrigationPlanFromTextViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="plan-parser-user",
+            password="secret123",
+            email="plan-parser@example.com",
+            phone_number="09120000005",
+        )
+        self.farm_type = FarmType.objects.create(name="گلخانه ای")
+        self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="Plan Parser Farm")
+
+    @patch("irrigation_recommendation.views.external_api_request")
+    def test_plan_from_text_proxies_to_ai_service(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={
+                "code": 200,
+                "msg": "موفق",
+                "data": {
+                    "status": "completed",
+                    "status_fa": "تکمیل شد",
+                    "summary": "done",
+                    "missing_fields": [],
+                    "questions": [],
+                    "collected_data": {"crop_name": "گوجه فرنگی"},
+                    "final_plan": {"crop_name": "گوجه فرنگی"},
+                },
+            },
+        )
+
+        request = self.factory.post(
+            "/api/irrigation/plan-from-text/",
+            {"message": "متن برنامه", "farm_uuid": str(self.farm.farm_uuid)},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = PlanFromTextView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["status"], "completed")
+        mock_external_api_request.assert_called_once_with(
+            "ai",
+            "/api/irrigation/plan-from-text/",
+            method="POST",
+            payload={"message": "متن برنامه", "farm_uuid": str(self.farm.farm_uuid)},
+        )
+
+    def test_plan_from_text_requires_message_or_answers_or_partial_plan(self):
+        request = self.factory.post("/api/irrigation/plan-from-text/", {}, format="json")
+        force_authenticate(request, user=self.user)
+
+        response = PlanFromTextView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("non_field_errors", response.data)
 
 
 class IrrigationMethodListViewTests(TestCase):
