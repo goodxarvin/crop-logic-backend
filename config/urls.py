@@ -36,6 +36,8 @@ urlpatterns = [
     path("api/notifications/", include("notifications.urls")),
     path("api/farm-alerts/", include("farm_alerts.urls")),
     path("api/plants/", include("plants.urls")),
+    path("api/events/", include("farmer_calendar.urls")),
+    path("api/farmer-todos/", include("farmer_todos.urls")),
 
     path("api/sensor-external-api/", include("sensor_external_api.urls")),
 ]

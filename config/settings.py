@@ -57,6 +57,8 @@ INSTALLED_APPS = [
     "farm_ai_assistant",
     "notifications.apps.NotificationsConfig",
     "plants.apps.PlantsConfig",
+    "farmer_calendar.apps.FarmerCalendarConfig",
+    "farmer_todos.apps.FarmerTodosConfig",
     "external_api_adapter.apps.ExternalApiAdapterConfig",
     "sensor_external_api.apps.SensorExternalApiConfig",
     "rest_framework",
