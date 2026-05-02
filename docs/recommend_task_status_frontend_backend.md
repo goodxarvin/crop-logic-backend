@@ -1,6 +1,6 @@
 # Recommend Task Status API Guide
 
-این فایل برای تیم فرانت‌اند توضیح می‌دهد که برای ماژول‌های `fertilization_recommendation` و `irrigation_recommendation` چه درخواست‌هایی باید به بک‌اند ارسال شود و چه پاسخ‌هایی باید دریافت شود.
+این فایل برای تیم فرانت‌اند توضیح می‌دهد که برای ماژول‌های `fertilization` و `irrigation` چه درخواست‌هایی باید به بک‌اند ارسال شود و چه پاسخ‌هایی باید دریافت شود.
 
 ## Fertilization Recommendation
 

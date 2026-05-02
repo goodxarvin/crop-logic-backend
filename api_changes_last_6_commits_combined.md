@@ -2,8 +2,8 @@
 
 این فایل تغییرات مربوط به سه فایل زیر را نسبت به **۶ کامیت قبل** (`HEAD~6`) مستند می‌کند:
 
-- `irrigation_recommendation/urls.py`
-- `fertilization_recommendation/apps.py`
+- `irrigation/urls.py`
+- `fertilization/apps.py`
 - `farm_ai_assistant/views.py`
 
 ## بازه مقایسه
@@ -11,11 +11,11 @@
 - مقصد: `HEAD`
 
 ## نتیجه سریع
-- در `irrigation_recommendation/urls.py`، API آبیاری از مدل دارای endpoint بررسی وضعیت task فاصله گرفته و دو endpoint جدید برای لیست روش‌های آبیاری و water stress اضافه شده است.
-- در `fertilization_recommendation/apps.py`، در این بازه **هیچ تغییری** ثبت نشده است.
+- در `irrigation/urls.py`، API آبیاری از مدل دارای endpoint بررسی وضعیت task فاصله گرفته و دو endpoint جدید برای لیست روش‌های آبیاری و water stress اضافه شده است.
+- در `fertilization/apps.py`، در این بازه **هیچ تغییری** ثبت نشده است.
 - در `farm_ai_assistant/views.py`، API چت از flow مبتنی بر task/polling به flow مستقیم request/response تغییر کرده و پشتیبانی از `history`، `image_urls` و ورودی‌های multipart/JSON بهتر شده است.
 
-## 1) تغییرات `irrigation_recommendation/urls.py`
+## 1) تغییرات `irrigation/urls.py`
 
 ### وضعیت قبلی
 مسیرهای زیر وجود داشتند:
@@ -33,7 +33,7 @@
 ### تغییرات دقیق
 #### الف) اضافه شدن endpoint ریشه برای لیست روش‌های آبیاری
 مسیر جدید:
-- `GET irrigation_recommendation/`
+- `GET irrigation/`
 - view: `IrrigationMethodListView`
 - name: `irrigation-method-list`
 
@@ -52,7 +52,7 @@
 
 #### ج) اضافه شدن endpoint جدید water stress
 مسیر جدید:
-- `POST irrigation_recommendation/water-stress/`
+- `POST irrigation/water-stress/`
 - view: `WaterStressView`
 - name: `irrigation-water-stress`
 
@@ -63,18 +63,18 @@
 - `config/`
 - `recommend/`
 
-## 2) تغییرات `fertilization_recommendation/apps.py`
+## 2) تغییرات `fertilization/apps.py`
 
 در بازه `HEAD~6..HEAD` برای این فایل **هیچ diffای وجود ندارد**.
 
 ### وضعیت فعلی و قبلی یکسان است
 مقدارهای مهم بدون تغییر مانده‌اند:
 - `default_auto_field = "django.db.models.BigAutoField"`
-- `name = "fertilization_recommendation"`
+- `name = "fertilization"`
 - `verbose_name = "Fertilization Recommendation"`
 
 ### نتیجه
-- از نظر ثبت app در Django، در این ۶ کامیت اخیر تغییری در `fertilization_recommendation/apps.py` اعمال نشده است.
+- از نظر ثبت app در Django، در این ۶ کامیت اخیر تغییری در `fertilization/apps.py` اعمال نشده است.
 - اگر منظورت بررسی APIهای recommendation بوده، این فایل خودش route یا view API ندارد و فقط تنظیمات app را نگه می‌دارد.
 
 ## 3) تغییرات `farm_ai_assistant/views.py`
@@ -215,12 +215,12 @@ API چت از این مدل:
 ## جمع‌بندی نهایی
 در این ۶ کامیت اخیر:
 
-- `irrigation_recommendation/urls.py`
+- `irrigation/urls.py`
   - endpoint بررسی وضعیت task حذف شده
   - endpoint ریشه برای لیست روش‌های آبیاری اضافه شده
   - endpoint جدید `water-stress/` اضافه شده
 
-- `fertilization_recommendation/apps.py`
+- `fertilization/apps.py`
   - هیچ تغییری نداشته است
 
 - `farm_ai_assistant/views.py`

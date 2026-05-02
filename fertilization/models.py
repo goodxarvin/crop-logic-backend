@@ -19,7 +19,7 @@ class FertilizationRecommendationRequest(models.Model):
     farm = models.ForeignKey(
         FarmHub,
         on_delete=models.CASCADE,
-        related_name="fertilization_recommendations",
+        related_name="fertilizations",
     )
     crop_id = models.CharField(max_length=255, blank=True, default="")
     growth_stage = models.CharField(max_length=255, blank=True, default="")
@@ -36,7 +36,7 @@ class FertilizationRecommendationRequest(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "fertilization_recommendation_requests"
+        db_table = "fertilization_requests"
         ordering = ["-created_at", "-id"]
 
     def __str__(self):

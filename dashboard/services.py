@@ -12,8 +12,8 @@ from farm_alerts.services import (
     get_alert_tracker_data,
     get_recommendations_list_data,
 )
-from fertilization_recommendation.services import get_fertilization_dashboard_recommendation
-from irrigation_recommendation.services import get_irrigation_dashboard_recommendation
+from fertilization.services import get_fertilization_dashboard_recommendation
+from irrigation.services import get_irrigation_dashboard_recommendation
 from pest_detection.services import get_risk_summary_data
 from sensor_7_in_1.services import (
     get_sensor_7_in_1_summary_data,

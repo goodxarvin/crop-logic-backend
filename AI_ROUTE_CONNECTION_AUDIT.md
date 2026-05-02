@@ -17,9 +17,9 @@
 | `POST /api/farm-data/` | بله | `farm_hub/services.py:166`, `farm_hub/services.py:89`, `sensor_external_api/services.py:165`, `sensor_external_api/services.py:125` |
 | `POST /api/weather/water-need-prediction/` | بله | `water/views.py:136` |
 | `POST /api/economy/overview/` | بله | `economic_overview/views.py:73` |
-| `GET /api/irrigation/` | بله | `irrigation_recommendation/views.py:78` |
-| `POST /api/irrigation/recommend/` | بله | `irrigation_recommendation/views.py:165` |
-| `POST /api/fertilization/recommend/` | بله | `fertilization_recommendation/views.py:122` |
+| `GET /api/irrigation/` | بله | `irrigation/views.py:78` |
+| `POST /api/irrigation/recommend/` | بله | `irrigation/views.py:165` |
+| `POST /api/fertilization/recommend/` | بله | `fertilization/views.py:122` |
 | `POST /api/crop-simulation/growth/` | بله | `yield_harvest/views.py:247` |
 | `GET /api/crop-simulation/growth/<task_id>/status/` | بله | `yield_harvest/views.py:293` |
 | `POST /api/crop-simulation/current-farm-chart/` | بله | `yield_harvest/views.py:145`, `yield_harvest/views.py:162` |
@@ -31,12 +31,12 @@
 | API درخواستی | وضعیت | route واقعی AI در کد | شواهد |
 |---|---|---|---|
 | `POST /api/weather/farm-card/` | با همین route به AI وصل نیست | `GET /weather-forecast/card` | `water/views.py:49` |
-| `POST /api/irrigation/water-stress/` | با همین route به AI وصل نیست | `GET /api/water/stress-index/` | `irrigation_recommendation/views.py:246` |
+| `POST /api/irrigation/water-stress/` | با همین route به AI وصل نیست | `GET /api/water/stress-index/` | `irrigation/views.py:246` |
 | `POST /api/pest-disease/detect/` | با همین route به AI وصل نیست | `POST /api/pest-detection/analyze/` | `pest_detection/views.py:161` |
 | `POST /api/pest-disease/risk/` | با همین route به AI وصل نیست | `POST /api/pest-detection/risk/` | `pest_detection/views.py:202` |
 | `POST /api/pest-disease/risk-summary/` | با همین route به AI وصل نیست | `GET /api/pest-detection/risk-summary/` | `pest_detection/views.py:235` |
 | `POST /api/soil-data/ndvi-health/` | با همین route به AI وصل نیست | برای این path اتصال AI پیدا نشد؛ endpoint محلی پروژه با path دیگری ارائه شده | `crop_health/urls.py:6`, `crop_health/tests.py:82` |
-| `POST /api/irrigation/` | route به AI با همین method پیدا نشد | فقط `GET /api/irrigation/` در کد استفاده می‌شود | `irrigation_recommendation/views.py:78` |
+| `POST /api/irrigation/` | route به AI با همین method پیدا نشد | فقط `GET /api/irrigation/` در کد استفاده می‌شود | `irrigation/views.py:78` |
 
 ## متصل نیستند
 

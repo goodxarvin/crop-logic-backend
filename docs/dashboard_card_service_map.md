@@ -109,10 +109,10 @@
 
 - app aggregator call: `water`
 - service: `water/services.py` -> `get_water_need_prediction_data`
-- source واقعی داده: `irrigation_recommendation.models.IrrigationRecommendationRequest`
+- source واقعی داده: `irrigation.models.IrrigationRecommendationRequest`
 - منطق: از `response_payload` آخرین recommendation آبیاری، `water_balance.daily` را می خواند.
 
-نکته مهم: تابعی با همین نام در `irrigation_recommendation/services.py` هم وجود دارد، اما داشبورد فعلی نسخه `water` را صدا می زند. پس منبع business data عملا app آبیاری است، ولی facade فعلی داخل app `water` قرار دارد.
+نکته مهم: تابعی با همین نام در `irrigation/services.py` هم وجود دارد، اما داشبورد فعلی نسخه `water` را صدا می زند. پس منبع business data عملا app آبیاری است، ولی facade فعلی داخل app `water` قرار دارد.
 
 ### 10) `harvestPredictionCard`
 
@@ -150,10 +150,10 @@
 
 - `farm_alerts.services.get_recommendations_list_data`
   - model/source: `farm_alerts.models.Recommendation`
-- `irrigation_recommendation.services.get_irrigation_dashboard_recommendation`
-  - model/source: `irrigation_recommendation.models.IrrigationRecommendationRequest`
-- `fertilization_recommendation.services.get_fertilization_dashboard_recommendation`
-  - model/source: `fertilization_recommendation.models.FertilizationRecommendationRequest`
+- `irrigation.services.get_irrigation_dashboard_recommendation`
+  - model/source: `irrigation.models.IrrigationRecommendationRequest`
+- `fertilization.services.get_fertilization_dashboard_recommendation`
+  - model/source: `fertilization.models.FertilizationRecommendationRequest`
 - `yield_harvest.services.get_yield_harvest_summary_data`
   - برای ساخت recommendation مرتبط با بازه برداشت
 

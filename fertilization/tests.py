@@ -21,7 +21,7 @@ class FertilizationRecommendViewTests(TestCase):
         self.farm_type = FarmType.objects.create(name="زراعی")
         self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="fert-farm")
 
-    @patch("fertilization_recommendation.views.external_api_request")
+    @patch("fertilization.views.external_api_request")
     def test_plan_from_text_proxies_to_ai_service(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -67,7 +67,7 @@ class FertilizationRecommendViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("non_field_errors", response.data)
 
-    @patch("fertilization_recommendation.views.external_api_request")
+    @patch("fertilization.views.external_api_request")
     def test_recommend_returns_updated_response_shape(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -166,7 +166,7 @@ class FertilizationRecommendViewTests(TestCase):
             },
         )
 
-    @patch("fertilization_recommendation.views.external_api_request")
+    @patch("fertilization.views.external_api_request")
     def test_recommend_accepts_plant_name_and_passes_it_directly_to_ai(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(status_code=200, data={"data": {}})
 

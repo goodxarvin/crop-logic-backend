@@ -25,13 +25,13 @@ urlpatterns = [
     path("api/pest-disease/", include("pest_detection.pest_disease_urls")),
     path("api/sensor-7-in-1/", include("sensor_7_in_1.urls")),
     path("api/sensors/", include("sensor_7_in_1.comparison_urls")),
-    path("api/irrigation/", include("irrigation_recommendation.urls")),
+    path("api/irrigation/", include("irrigation.urls")),
 
     path("api/weather/", include("water.weather_urls")),
     path("api/water/", include("water.urls")),
     path("api/economy/", include("economic_overview.urls")),
 
-    path("api/fertilization/", include("fertilization_recommendation.urls")),
+    path("api/fertilization/", include("fertilization.urls")),
     path("api/farm-ai-assistant/", include("farm_ai_assistant.urls")),
     path("api/notifications/", include("notifications.urls")),
     path("api/farm-alerts/", include("farm_alerts.urls")),

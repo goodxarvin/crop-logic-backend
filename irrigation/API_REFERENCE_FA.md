@@ -3,7 +3,7 @@
 این فایل برای تحویل به فرانت نوشته شده و endpointهای مرتبط با آبیاری را به‌صورت کامل توضیح می‌دهد.
 
 محدوده این مستند:
-- همه endpointهای `irrigation_recommendation/urls.py`
+- همه endpointهای `irrigation/urls.py`
 - endpoint دریافت محصولات انتخاب‌شده مزرعه: `GET /api/plants/selected/`
 
 ## نکات عمومی

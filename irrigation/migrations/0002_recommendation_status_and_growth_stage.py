@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("irrigation_recommendation", "0001_initial"),
+        ("irrigation", "0001_initial"),
     ]
 
     operations = [

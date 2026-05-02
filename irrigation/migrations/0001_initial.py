@@ -12,12 +12,11 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name="FertilizationRecommendationRequest",
+            name="IrrigationRecommendationRequest",
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("uuid", models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
                 ("crop_id", models.CharField(blank=True, default="", max_length=255)),
-                ("growth_stage", models.CharField(blank=True, default="", max_length=255)),
                 ("task_id", models.CharField(blank=True, db_index=True, default="", max_length=255)),
                 ("status", models.CharField(blank=True, default="", max_length=64)),
                 ("request_payload", models.JSONField(blank=True, default=dict)),
@@ -28,13 +27,13 @@ class Migration(migrations.Migration):
                     "farm",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="fertilization_recommendations",
+                        related_name="irrigations",
                         to="farm_hub.farmhub",
                     ),
                 ),
             ],
             options={
-                "db_table": "fertilization_recommendation_requests",
+                "db_table": "irrigation_requests",
                 "ordering": ["-created_at", "-id"],
             },
         ),

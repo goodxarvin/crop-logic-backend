@@ -37,7 +37,7 @@ class WaterStressViewTests(TestCase):
         self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="Farm 1")
         self.other_farm = FarmHub.objects.create(owner=self.other_user, farm_type=self.farm_type, name="Farm 2")
 
-    @patch("irrigation_recommendation.views.external_api_request")
+    @patch("irrigation.views.external_api_request")
     def test_post_proxies_request_to_ai_service(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -102,7 +102,7 @@ class IrrigationPlanFromTextViewTests(TestCase):
         self.farm_type = FarmType.objects.create(name="گلخانه ای")
         self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="Plan Parser Farm")
 
-    @patch("irrigation_recommendation.views.external_api_request")
+    @patch("irrigation.views.external_api_request")
     def test_plan_from_text_proxies_to_ai_service(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -153,7 +153,7 @@ class IrrigationMethodListViewTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
 
-    @patch("irrigation_recommendation.views.external_api_request")
+    @patch("irrigation.views.external_api_request")
     def test_get_proxies_irrigation_methods_from_ai(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -182,7 +182,7 @@ class IrrigationMethodListViewTests(TestCase):
             method="GET",
         )
 
-    @patch("irrigation_recommendation.views.external_api_request")
+    @patch("irrigation.views.external_api_request")
     def test_post_proxies_irrigation_method_creation_to_ai(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=201,
@@ -226,7 +226,7 @@ class RecommendViewTests(TestCase):
             irrigation_method_name="آبیاری قطره ای",
         )
 
-    @patch("irrigation_recommendation.views.external_api_request")
+    @patch("irrigation.views.external_api_request")
     def test_post_returns_full_recommendation_shape(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -428,7 +428,7 @@ class IrrigationRecommendationHistoryTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data["msg"], "Recommendation not found.")
-    @patch("irrigation_recommendation.views.external_api_request")
+    @patch("irrigation.views.external_api_request")
     def test_post_accepts_sensor_uuid_as_farm_uuid_alias(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,

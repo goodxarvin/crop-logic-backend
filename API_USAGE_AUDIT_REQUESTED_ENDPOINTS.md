@@ -14,10 +14,10 @@
 |---|---|---|
 | `POST /api/weather/farm-card/` | فعال و استفاده‌شده | `water/weather_urls.py`, `water/views.py`, `water/tests.py` |
 | `POST /api/economy/overview/` | فعال و استفاده‌شده | `economic_overview/urls.py`, `economic_overview/views.py`, `FRONTEND_PAGES_APIS_GUIDE.md` |
-| `GET /api/irrigation/` | فعال و استفاده‌شده | `irrigation_recommendation/urls.py`, `irrigation_recommendation/views.py`, `API_DATA_SOURCE_AUDIT_FA.md` |
-| `POST /api/irrigation/recommend/` | فعال و استفاده‌شده | `irrigation_recommendation/urls.py`, `irrigation_recommendation/views.py`, `irrigation_recommendation/tests.py` |
-| `POST /api/irrigation/water-stress/` | فعال و استفاده‌شده | `irrigation_recommendation/urls.py`, `irrigation_recommendation/tests.py` |
-| `POST /api/fertilization/recommend/` | فعال و استفاده‌شده | `fertilization_recommendation/urls.py`, `fertilization_recommendation/views.py`, `API_DATA_SOURCE_AUDIT_FA.md` |
+| `GET /api/irrigation/` | فعال و استفاده‌شده | `irrigation/urls.py`, `irrigation/views.py`, `API_DATA_SOURCE_AUDIT_FA.md` |
+| `POST /api/irrigation/recommend/` | فعال و استفاده‌شده | `irrigation/urls.py`, `irrigation/views.py`, `irrigation/tests.py` |
+| `POST /api/irrigation/water-stress/` | فعال و استفاده‌شده | `irrigation/urls.py`, `irrigation/tests.py` |
+| `POST /api/fertilization/recommend/` | فعال و استفاده‌شده | `fertilization/urls.py`, `fertilization/views.py`, `API_DATA_SOURCE_AUDIT_FA.md` |
 
 ## 2) در پروژه استفاده شده‌اند، اما به عنوان endpoint مستقیم backend اکسپوز نیستند
 
@@ -61,11 +61,11 @@
 | `POST /api/pest-disease/detect/` | استفاده نمی‌شود | endpoint واقعی پروژه `POST /api/pest-detection/analyze/` است | `pest_detection/urls.py`, `pest_detection/views.py` |
 | `POST /api/pest-disease/risk/` | استفاده نمی‌شود | endpoint واقعی پروژه `POST /api/pest-detection/risk/` است | `pest_detection/urls.py`, `pest_detection/views.py` |
 | `POST /api/pest-disease/risk-summary/` | استفاده نمی‌شود | path و method هر دو متفاوت‌اند؛ endpoint واقعی `GET /api/pest-detection/risk-summary/` است | `pest_detection/urls.py`, `pest_detection/views.py`, `pest_detection/tests.py` |
-| `POST /api/irrigation/` | استفاده نمی‌شود | path وجود دارد ولی فقط `GET` list پیاده‌سازی شده | `irrigation_recommendation/urls.py`, `irrigation_recommendation/views.py` |
-| `GET /api/irrigation/<pk>/` | استفاده نمی‌شود | route detail پیدا نشد | `irrigation_recommendation/urls.py` |
-| `PUT /api/irrigation/<pk>/` | استفاده نمی‌شود | route detail/update پیدا نشد | `irrigation_recommendation/urls.py` |
-| `PATCH /api/irrigation/<pk>/` | استفاده نمی‌شود | route detail/update پیدا نشد | `irrigation_recommendation/urls.py` |
-| `DELETE /api/irrigation/<pk>/` | استفاده نمی‌شود | route detail/delete پیدا نشد | `irrigation_recommendation/urls.py` |
+| `POST /api/irrigation/` | استفاده نمی‌شود | path وجود دارد ولی فقط `GET` list پیاده‌سازی شده | `irrigation/urls.py`, `irrigation/views.py` |
+| `GET /api/irrigation/<pk>/` | استفاده نمی‌شود | route detail پیدا نشد | `irrigation/urls.py` |
+| `PUT /api/irrigation/<pk>/` | استفاده نمی‌شود | route detail/update پیدا نشد | `irrigation/urls.py` |
+| `PATCH /api/irrigation/<pk>/` | استفاده نمی‌شود | route detail/update پیدا نشد | `irrigation/urls.py` |
+| `DELETE /api/irrigation/<pk>/` | استفاده نمی‌شود | route detail/delete پیدا نشد | `irrigation/urls.py` |
 
 ## 4) جمع‌بندی سریع
 

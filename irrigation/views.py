@@ -250,7 +250,7 @@ class RecommendationListView(FarmAccessMixin, APIView):
         serializer.is_valid(raise_exception=True)
 
         farm = self._get_farm(request, serializer.validated_data["farm_uuid"])
-        recommendations = farm.irrigation_recommendations.all().order_by("-created_at", "-id")
+        recommendations = farm.irrigations.all().order_by("-created_at", "-id")
 
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(recommendations, request, view=self)

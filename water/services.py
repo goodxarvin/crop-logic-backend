@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from irrigation_recommendation.models import IrrigationRecommendationRequest
+from irrigation.models import IrrigationRecommendationRequest
 
 from .mock_data import FARM_WEATHER_CARD, WATER_NEED_PREDICTION, WATER_STRESS_INDEX
 from .models import WeatherForecastLog
