@@ -20,7 +20,7 @@
 
 - `farm_uuid` ورودی اصلی و الزامی است.
 - `plant_name` اگر هم توسط client ارسال شود، مبنای نهایی backend نیست و از روی مزرعه بازنویسی/resolve می‌شود.
-- در صورت نیاز، `irrigation_plan_id` و `fertilization_plan_id` هم می‌توانند ارسال شوند.
+- در صورت نیاز، `irrigation_plan_uuid` و `fertilization_plan_uuid` هم می‌توانند ارسال شوند.
 - اگر plan انتخابی معتبر و متعلق به همان مزرعه کاربر باشد، backend محتوای آن را به payload ارسالی به AI اضافه می‌کند.
 - خروجی backend به‌صورت یکدست با فرمت `code / msg / data` برگردانده می‌شود.
 
@@ -33,16 +33,16 @@
 ```json
 {
   "farm_uuid": "11111111-1111-1111-1111-111111111111",
-  "irrigation_plan_id": 12,
-  "fertilization_plan_id": 34
+  "irrigation_plan_uuid": "6d6a1f0d-1a9b-4f2f-8fe1-2d73d9d2d9f1",
+  "fertilization_plan_uuid": "7e7b2f1e-2b0c-4a3a-9fe2-3e84e0e3e0a2"
 }
 ```
 
 ### فیلدها
 
 - `farm_uuid` اجباری
-- `irrigation_plan_id` اختیاری
-- `fertilization_plan_id` اختیاری
+- `irrigation_plan_uuid` اختیاری
+- `fertilization_plan_uuid` اختیاری
 
 ### نکته مهم
 
@@ -56,8 +56,8 @@
 
 - ورودی endpoint عملاً بر پایه `farm_uuid` کار می‌کند و `plant_name` از context مزرعه تعیین می‌شود.
 - backend به‌صورت خودکار `plant_name` را از مزرعه پیدا می‌کند.
-- در صورت ارسال `irrigation_plan_id`، اطلاعات برنامه آبیاری داخل payload ارسالی به AI قرار می‌گیرد.
-- در صورت ارسال `fertilization_plan_id`، اطلاعات برنامه کودی هم اضافه می‌شود.
+- در صورت ارسال `irrigation_plan_uuid`، اطلاعات برنامه آبیاری داخل payload ارسالی به AI قرار می‌گیرد.
+- در صورت ارسال `fertilization_plan_uuid`، اطلاعات برنامه کودی هم اضافه می‌شود.
 
 ### نمونه request
 
@@ -122,7 +122,7 @@
 ### تغییرات
 
 - ورودی endpoint عملاً بر پایه `farm_uuid` کار می‌کند و `plant_name` توسط backend تعیین می‌شود.
-- امکان ارسال `fertilization_plan_id` و `irrigation_plan_id` برای enrich کردن context اضافه/پشتیبانی شده است.
+- امکان ارسال `fertilization_plan_uuid` و `irrigation_plan_uuid` برای enrich کردن context اضافه/پشتیبانی شده است.
 - پاسخ AI بعد از extract شدن در `data.result`، به شکل مستقیم در `data` برگردانده می‌شود.
 
 ### نمونه request
@@ -130,7 +130,7 @@
 ```json
 {
   "farm_uuid": "11111111-1111-1111-1111-111111111111",
-  "fertilization_plan_id": 34
+  "fertilization_plan_uuid": "7e7b2f1e-2b0c-4a3a-9fe2-3e84e0e3e0a2"
 }
 ```
 
@@ -176,7 +176,7 @@
 
 - مثل دو endpoint دیگر، `plant_name` از روی مزرعه resolve می‌شود.
 - در نبود محصول مستقیم روی مزرعه، backend از fallback مناسب مزرعه استفاده می‌کند.
-- امکان ارسال `irrigation_plan_id` و `fertilization_plan_id` برای فرستادن context planها به AI اضافه/پشتیبانی شده است.
+- امکان ارسال `irrigation_plan_uuid` و `fertilization_plan_uuid` برای فرستادن context planها به AI اضافه/پشتیبانی شده است.
 - پاسخ نهایی با ساختار یکنواخت `code / msg / data` برگردانده می‌شود.
 
 ### نمونه request
@@ -184,8 +184,8 @@
 ```json
 {
   "farm_uuid": "11111111-1111-1111-1111-111111111111",
-  "irrigation_plan_id": 12,
-  "fertilization_plan_id": 34
+  "irrigation_plan_uuid": "6d6a1f0d-1a9b-4f2f-8fe1-2d73d9d2d9f1",
+  "fertilization_plan_uuid": "7e7b2f1e-2b0c-4a3a-9fe2-3e84e0e3e0a2"
 }
 ```
 
@@ -238,7 +238,7 @@
 
 ### 2) plan نامعتبر یا متعلق به مزرعه دیگر
 
-اگر `irrigation_plan_id` یا `fertilization_plan_id` متعلق به همان مزرعه کاربر نباشد، درخواست با خطا رد می‌شود.
+اگر `irrigation_plan_uuid` یا `fertilization_plan_uuid` متعلق به همان مزرعه کاربر نباشد، درخواست با خطا رد می‌شود.
 
 نمونه:
 
@@ -247,7 +247,7 @@
   "code": 404,
   "msg": "error",
   "data": {
-    "irrigation_plan_id": [
+    "irrigation_plan_uuid": [
       "Irrigation plan not found."
     ]
   }
@@ -256,7 +256,7 @@
 
 ### 3) خطای validation ورودی
 
-اگر `farm_uuid` ارسال نشود یا `plan_id`ها نامعتبر باشند، serializer خطای validation برمی‌گرداند.
+اگر `farm_uuid` ارسال نشود یا `plan_uuid`ها نامعتبر باشند، serializer خطای validation برمی‌گرداند.
 
 ---
 
@@ -264,6 +264,6 @@
 
 - دیگر لازم نیست `plant_name` را برای این 3 API بفرستید.
 - فقط `farm_uuid` اجباری است.
-- اگر کاربر plan خاصی را انتخاب کرده، `irrigation_plan_id` و/یا `fertilization_plan_id` را هم بفرستید.
+- اگر کاربر plan خاصی را انتخاب کرده، `irrigation_plan_uuid` و/یا `fertilization_plan_uuid` را هم بفرستید.
 - response هر 3 endpoint با ساختار یکنواخت `code`, `msg`, `data` برمی‌گردد.
 - backend خودش payload مناسب AI را از context مزرعه و planهای انتخابی می‌سازد.

@@ -64,15 +64,13 @@ class CropSimulationRequestSerializer(serializers.Serializer):
         initial="11111111-1111-1111-1111-111111111111",
         help_text="UUID مزرعه برای اجرای شبیه‌سازی.",
     )
-    irrigation_plan_id = serializers.IntegerField(
+    irrigation_plan_uuid = serializers.UUIDField(
         required=False,
-        min_value=1,
-        help_text="شناسه داخلی برنامه آبیاری برای ارسال context به AI.",
+        help_text="UUID برنامه آبیاری برای ارسال context به AI.",
     )
-    fertilization_plan_id = serializers.IntegerField(
+    fertilization_plan_uuid = serializers.UUIDField(
         required=False,
-        min_value=1,
-        help_text="شناسه داخلی برنامه کودی برای ارسال context به AI.",
+        help_text="UUID برنامه کودی برای ارسال context به AI.",
     )
 
 
