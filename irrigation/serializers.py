@@ -117,3 +117,39 @@ class IrrigationRecommendResponseDataSerializer(serializers.Serializer):
     water_balance = serializers.DictField(read_only=True)
     timeline = serializers.ListField(child=serializers.DictField(), read_only=True)
     sections = serializers.ListField(child=serializers.DictField(), read_only=True)
+
+
+class IrrigationPlanListQuerySerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای دریافت لیست برنامه های آبیاری.")
+    page = serializers.IntegerField(required=False, min_value=1)
+    page_size = serializers.IntegerField(required=False, min_value=1, max_value=100)
+
+
+class IrrigationPlanListItemSerializer(serializers.Serializer):
+    plan_uuid = serializers.UUIDField(source="uuid", read_only=True)
+    source = serializers.CharField(read_only=True)
+    source_label = serializers.CharField(source="get_source_display", read_only=True)
+    title = serializers.CharField(read_only=True)
+    crop_id = serializers.CharField(read_only=True)
+    plant_name = serializers.CharField(source="crop_id", read_only=True)
+    growth_stage = serializers.CharField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class IrrigationPlanDetailSerializer(serializers.Serializer):
+    plan_uuid = serializers.UUIDField(source="uuid", read_only=True)
+    source = serializers.CharField(read_only=True)
+    source_label = serializers.CharField(source="get_source_display", read_only=True)
+    title = serializers.CharField(read_only=True)
+    crop_id = serializers.CharField(read_only=True)
+    plant_name = serializers.CharField(source="crop_id", read_only=True)
+    growth_stage = serializers.CharField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+    plan_payload = serializers.DictField(read_only=True)
+
+
+class IrrigationPlanStatusUpdateSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField(required=True)

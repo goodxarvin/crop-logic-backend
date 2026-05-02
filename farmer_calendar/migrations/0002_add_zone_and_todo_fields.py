@@ -39,7 +39,7 @@ def sync_farmer_calendar_schema(apps, schema_editor):
                 updated_at DATETIME(6) NOT NULL,
                 farm_id BIGINT NOT NULL,
                 CONSTRAINT farmer_calendar_zones_farm_id_fk
-                    FOREIGN KEY (farm_id) REFERENCES farm_hub_farmhub (id)
+                    FOREIGN KEY (farm_id) REFERENCES farm_hubs (id)
             )
             """
         )

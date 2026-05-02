@@ -5,8 +5,16 @@ from unittest.mock import patch
 
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
-from .models import FertilizationRecommendationRequest
-from .views import PlanFromTextView, RecommendationDetailView, RecommendationListView, RecommendView
+from .models import FertilizationPlan, FertilizationRecommendationRequest
+from .views import (
+    FertilizationPlanDetailView,
+    FertilizationPlanListView,
+    FertilizationPlanStatusView,
+    PlanFromTextView,
+    RecommendationDetailView,
+    RecommendationListView,
+    RecommendView,
+)
 
 
 class FertilizationRecommendViewTests(TestCase):
@@ -51,6 +59,7 @@ class FertilizationRecommendViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["status"], "needs_clarification")
+        self.assertEqual(FertilizationPlan.objects.count(), 0)
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/fertilization/plan-from-text/",
@@ -143,9 +152,16 @@ class FertilizationRecommendViewTests(TestCase):
         self.assertEqual(response.data["data"]["alternative_recommendations"][0]["usage_method"], "fertigation")
         self.assertEqual(response.data["data"]["sections"][0]["type"], "recommendation")
         self.assertEqual(FertilizationRecommendationRequest.objects.count(), 1)
+        self.assertEqual(FertilizationPlan.objects.count(), 1)
         saved_request = FertilizationRecommendationRequest.objects.get()
+        saved_plan = FertilizationPlan.objects.get()
         self.assertEqual(saved_request.crop_id, "گندم")
         self.assertEqual(saved_request.growth_stage, "vegetative")
+        self.assertEqual(saved_plan.source, FertilizationPlan.SOURCE_RECOMMENDATION)
+        self.assertEqual(saved_plan.recommendation_id, saved_request.id)
+        self.assertTrue(saved_plan.is_active)
+        self.assertFalse(saved_plan.is_deleted)
+        self.assertEqual(saved_plan.plan_payload["primary_recommendation"]["fertilizer_code"], "npk-202020")
         self.assertEqual(
             saved_request.status,
             FertilizationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
@@ -193,6 +209,79 @@ class FertilizationRecommendViewTests(TestCase):
                 "growth_stage": "flowering",
             },
         )
+
+    @patch("fertilization.views.external_api_request")
+    def test_recommend_includes_active_fertilization_plan_in_ai_payload(self, mock_external_api_request):
+        FertilizationPlan.objects.create(
+            farm=self.farm,
+            source=FertilizationPlan.SOURCE_FREE_TEXT,
+            title="برنامه فعال",
+            crop_id="گندم",
+            growth_stage="vegetative",
+            plan_payload={
+                "primary_recommendation": {"fertilizer_code": "npk-101010", "fertilizer_name": "NPK 10-10-10"},
+                "nutrient_analysis": {"macro": [{"key": "n", "value": 10}]},
+                "application_guide": {"steps": [{"step_number": 1, "title": "مرحله اول"}]},
+                "sections": [{"type": "recommendation", "title": "اصلی"}],
+            },
+            is_active=True,
+        )
+        mock_external_api_request.return_value = AdapterResponse(status_code=200, data={"data": {}})
+
+        request = self.factory.post(
+            "/api/fertilization/recommend/",
+            {"farm_uuid": str(self.farm.farm_uuid), "crop_id": "گندم", "growth_stage": "vegetative"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = RecommendView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        sent_payload = mock_external_api_request.call_args.kwargs["payload"]
+        self.assertIn("active_fertilization_plan", sent_payload)
+        self.assertEqual(
+            sent_payload["active_fertilization_plan"]["primary_recommendation"]["fertilizer_code"],
+            "npk-101010",
+        )
+
+    @patch("fertilization.views.external_api_request")
+    def test_plan_from_text_creates_plan_when_final_plan_exists(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={
+                "code": 200,
+                "msg": "موفق",
+                "data": {
+                    "status": "completed",
+                    "final_plan": {
+                        "title": "برنامه کوددهی گندم",
+                        "crop_name": "گندم",
+                        "growth_stage": "flowering",
+                        "items": [{"name": "NPK 20-20-20"}],
+                    },
+                },
+            },
+        )
+
+        request = self.factory.post(
+            "/api/fertilization/plan-from-text/",
+            {"message": "برنامه کودی", "farm_uuid": str(self.farm.farm_uuid)},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = PlanFromTextView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(FertilizationPlan.objects.count(), 1)
+        plan = FertilizationPlan.objects.get()
+        self.assertEqual(plan.source, FertilizationPlan.SOURCE_FREE_TEXT)
+        self.assertEqual(plan.title, "برنامه کوددهی گندم")
+        self.assertEqual(plan.crop_id, "گندم")
+        self.assertEqual(plan.growth_stage, "flowering")
+        self.assertTrue(plan.is_active)
+        self.assertFalse(plan.is_deleted)
 
     def test_recommendation_list_returns_paginated_summary_items(self):
         first = FertilizationRecommendationRequest.objects.create(
@@ -318,3 +407,79 @@ class FertilizationRecommendViewTests(TestCase):
             response.data["data"]["primary_recommendation"]["fertilizer_code"],
             "legacy-code-101",
         )
+
+
+class FertilizationPlanApiTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="fert-plan-user",
+            password="secret123",
+            email="fert-plan@example.com",
+            phone_number="09123334455",
+        )
+        self.farm_type = FarmType.objects.create(name="باغی")
+        self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="fert-plan-farm")
+        self.plan = FertilizationPlan.objects.create(
+            farm=self.farm,
+            source=FertilizationPlan.SOURCE_FREE_TEXT,
+            title="برنامه نمونه",
+            crop_id="گوجه",
+            growth_stage="flowering",
+            plan_payload={"items": [{"title": "مرحله اول"}]},
+        )
+
+    def test_plan_list_returns_non_deleted_plans(self):
+        FertilizationPlan.objects.create(
+            farm=self.farm,
+            source=FertilizationPlan.SOURCE_RECOMMENDATION,
+            title="حذف شده",
+            is_deleted=True,
+            is_active=False,
+        )
+
+        request = self.factory.get(f"/api/fertilization/plans/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+
+        response = FertilizationPlanListView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(len(response.data["data"]), 1)
+        self.assertEqual(response.data["data"][0]["plan_uuid"], str(self.plan.uuid))
+        self.assertEqual(response.data["data"][0]["source"], FertilizationPlan.SOURCE_FREE_TEXT)
+
+    def test_plan_detail_returns_plan_payload(self):
+        request = self.factory.get(f"/api/fertilization/plans/{self.plan.uuid}/")
+        force_authenticate(request, user=self.user)
+
+        response = FertilizationPlanDetailView.as_view()(request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["plan_uuid"], str(self.plan.uuid))
+        self.assertEqual(response.data["data"]["plan_payload"]["items"][0]["title"], "مرحله اول")
+
+    def test_plan_delete_is_soft_delete(self):
+        request = self.factory.delete(f"/api/fertilization/plans/{self.plan.uuid}/")
+        force_authenticate(request, user=self.user)
+
+        response = FertilizationPlanDetailView.as_view()(request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertTrue(self.plan.is_deleted)
+        self.assertFalse(self.plan.is_active)
+
+    def test_plan_status_patch_updates_is_active(self):
+        request = self.factory.patch(
+            f"/api/fertilization/plans/{self.plan.uuid}/status/",
+            {"is_active": False},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = FertilizationPlanStatusView.as_view()(request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertFalse(self.plan.is_active)

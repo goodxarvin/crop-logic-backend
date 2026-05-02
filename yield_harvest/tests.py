@@ -6,6 +6,8 @@ from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType, Product
+from fertilization.models import FertilizationPlan
+from irrigation.models import IrrigationPlan
 
 from .views import (
     CurrentFarmChartView,
@@ -379,6 +381,52 @@ class CropSimulationViewTests(TestCase):
         )
 
     @patch("yield_harvest.views.external_api_request")
+    def test_current_farm_chart_includes_selected_plans(self, mock_external_api_request):
+        irrigation_plan = IrrigationPlan.objects.create(
+            farm=self.farm,
+            source=IrrigationPlan.SOURCE_FREE_TEXT,
+            title="برنامه آبیاری",
+            plan_payload={"plan": {"durationMinutes": 20}},
+        )
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"farm_uuid": str(self.farm.farm_uuid), "series": []}}},
+        )
+
+        response = self.api_client.post(
+            "/api/yield-harvest/current-farm-chart/",
+            {"farm_uuid": str(self.farm.farm_uuid), "irrigation_plan_id": irrigation_plan.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        sent_payload = mock_external_api_request.call_args.kwargs["payload"]
+        self.assertEqual(sent_payload["irrigation_plan"]["id"], irrigation_plan.id)
+
+    @patch("yield_harvest.views.external_api_request")
+    def test_harvest_prediction_includes_selected_plans(self, mock_external_api_request):
+        fertilization_plan = FertilizationPlan.objects.create(
+            farm=self.farm,
+            source=FertilizationPlan.SOURCE_FREE_TEXT,
+            title="برنامه کودی",
+            plan_payload={"primary_recommendation": {"fertilizer_code": "npk-151515"}},
+        )
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"date": "2026-07-15", "daysUntil": 96}}},
+        )
+
+        response = self.api_client.post(
+            "/api/yield-harvest/harvest-prediction/",
+            {"farm_uuid": str(self.farm.farm_uuid), "fertilization_plan_id": fertilization_plan.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        sent_payload = mock_external_api_request.call_args.kwargs["payload"]
+        self.assertEqual(sent_payload["fertilization_plan"]["id"], fertilization_plan.id)
+
+    @patch("yield_harvest.views.external_api_request")
     def test_yield_prediction_proxies_to_ai_service(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -471,6 +519,72 @@ class CropSimulationViewTests(TestCase):
         )
 
     @patch("yield_harvest.views.external_api_request")
+    def test_yield_prediction_includes_selected_irrigation_and_fertilization_plans(self, mock_external_api_request):
+        irrigation_plan = IrrigationPlan.objects.create(
+            farm=self.farm,
+            source=IrrigationPlan.SOURCE_FREE_TEXT,
+            title="برنامه آبیاری",
+            crop_id="گوجه‌فرنگی",
+            growth_stage="flowering",
+            plan_payload={"plan": {"durationMinutes": 30}},
+            request_payload={"source": "manual"},
+            response_payload={"ok": True},
+        )
+        fertilization_plan = FertilizationPlan.objects.create(
+            farm=self.farm,
+            source=FertilizationPlan.SOURCE_FREE_TEXT,
+            title="برنامه کودی",
+            crop_id="گوجه‌فرنگی",
+            growth_stage="flowering",
+            plan_payload={"primary_recommendation": {"fertilizer_code": "npk-202020"}},
+            request_payload={"source": "manual"},
+            response_payload={"ok": True},
+        )
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"farm_uuid": str(self.farm.farm_uuid), "predictedYieldTons": 8.4}}},
+        )
+
+        response = self.api_client.post(
+            "/api/yield-harvest/yield-prediction/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "irrigation_plan_id": irrigation_plan.id,
+                "fertilization_plan_id": fertilization_plan.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        sent_payload = mock_external_api_request.call_args.kwargs["payload"]
+        self.assertEqual(sent_payload["irrigation_plan"]["id"], irrigation_plan.id)
+        self.assertEqual(sent_payload["irrigation_plan"]["plan_payload"]["plan"]["durationMinutes"], 30)
+        self.assertEqual(sent_payload["fertilization_plan"]["id"], fertilization_plan.id)
+        self.assertEqual(
+            sent_payload["fertilization_plan"]["plan_payload"]["primary_recommendation"]["fertilizer_code"],
+            "npk-202020",
+        )
+
+    def test_yield_prediction_rejects_foreign_plan_ids(self):
+        other_irrigation_plan = IrrigationPlan.objects.create(
+            farm=self.other_farm,
+            source=IrrigationPlan.SOURCE_FREE_TEXT,
+            title="other irrigation",
+        )
+
+        response = self.api_client.post(
+            "/api/yield-harvest/yield-prediction/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "irrigation_plan_id": other_irrigation_plan.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["data"]["irrigation_plan_id"][0], "Irrigation plan not found.")
+
+    @patch("yield_harvest.views.external_api_request")
     def test_yield_harvest_summary_top_level_route_proxies_to_ai_service(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
             status_code=200,
@@ -519,6 +633,34 @@ class CropSimulationViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"]["farm_uuid"], str(self.farm.farm_uuid))
+
+    @patch("yield_harvest.views.external_api_request")
+    def test_yield_harvest_summary_includes_selected_plans_in_query(self, mock_external_api_request):
+        irrigation_plan = IrrigationPlan.objects.create(
+            farm=self.farm,
+            source=IrrigationPlan.SOURCE_FREE_TEXT,
+            title="برنامه آبیاری",
+            plan_payload={"plan": {"durationMinutes": 18}},
+        )
+        fertilization_plan = FertilizationPlan.objects.create(
+            farm=self.farm,
+            source=FertilizationPlan.SOURCE_FREE_TEXT,
+            title="برنامه کودی",
+            plan_payload={"primary_recommendation": {"fertilizer_code": "npk-111111"}},
+        )
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"farm_uuid": str(self.farm.farm_uuid), "yield_prediction_chart": {"series": []}}}},
+        )
+
+        response = self.api_client.get(
+            f"/api/yield-harvest/yield-harvest-summary/?farm_uuid={self.farm.farm_uuid}&irrigation_plan_id={irrigation_plan.id}&fertilization_plan_id={fertilization_plan.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        sent_query = mock_external_api_request.call_args.kwargs["query"]
+        self.assertEqual(sent_query["irrigation_plan"]["id"], irrigation_plan.id)
+        self.assertEqual(sent_query["fertilization_plan"]["id"], fertilization_plan.id)
 
     def test_crop_simulation_rejects_foreign_farm_uuid(self):
         request = self.factory.post(

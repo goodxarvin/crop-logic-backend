@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 from .mock_data import FERTILIZATION_DASHBOARD_RECOMMENDATION, RECOMMEND_RESPONSE_DATA
-from .models import FertilizationRecommendationRequest
+from .models import FertilizationPlan, FertilizationRecommendationRequest
 
 
 def _extract_result(response_payload):
@@ -29,6 +29,51 @@ def _get_latest_result(farm):
             return result
 
     return {}
+
+
+def get_active_plan_payload(farm):
+    if farm is None:
+        return {}
+
+    plan = (
+        FertilizationPlan.objects.filter(farm=farm, is_active=True, is_deleted=False)
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if plan is None or not isinstance(plan.plan_payload, dict):
+        return {}
+
+    return deepcopy(plan.plan_payload)
+
+
+def build_active_plan_context(farm):
+    plan_payload = get_active_plan_payload(farm)
+    if not plan_payload:
+        return {}
+
+    context = {"plan_payload": plan_payload}
+
+    primary_recommendation = plan_payload.get("primary_recommendation")
+    if isinstance(primary_recommendation, dict) and primary_recommendation:
+        context["primary_recommendation"] = deepcopy(primary_recommendation)
+
+    nutrient_analysis = plan_payload.get("nutrient_analysis")
+    if isinstance(nutrient_analysis, dict) and nutrient_analysis:
+        context["nutrient_analysis"] = deepcopy(nutrient_analysis)
+
+    application_guide = plan_payload.get("application_guide")
+    if isinstance(application_guide, dict) and application_guide:
+        context["application_guide"] = deepcopy(application_guide)
+
+    alternative_recommendations = plan_payload.get("alternative_recommendations")
+    if isinstance(alternative_recommendations, list) and alternative_recommendations:
+        context["alternative_recommendations"] = deepcopy(alternative_recommendations)
+
+    sections = plan_payload.get("sections")
+    if isinstance(sections, list) and sections:
+        context["sections"] = deepcopy(sections)
+
+    return context
 
 
 def get_fertilization_dashboard_recommendation(farm=None):

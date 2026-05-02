@@ -167,3 +167,39 @@ class FertilizationRecommendResponseDataSerializer(serializers.Serializer):
     application_guide = ApplicationGuideSerializer(read_only=True)
     alternative_recommendations = AlternativeRecommendationSerializer(many=True, read_only=True)
     sections = FertilizationSectionSerializer(many=True, read_only=True)
+
+
+class FertilizationPlanListQuerySerializer(serializers.Serializer):
+    farm_uuid = serializers.UUIDField(required=True, help_text="UUID مزرعه برای دریافت لیست برنامه های کودی.")
+    page = serializers.IntegerField(required=False, min_value=1)
+    page_size = serializers.IntegerField(required=False, min_value=1, max_value=100)
+
+
+class FertilizationPlanListItemSerializer(serializers.Serializer):
+    plan_uuid = serializers.UUIDField(source="uuid", read_only=True)
+    source = serializers.CharField(read_only=True)
+    source_label = serializers.CharField(source="get_source_display", read_only=True)
+    title = serializers.CharField(read_only=True)
+    crop_id = serializers.CharField(read_only=True)
+    plant_name = serializers.CharField(source="crop_id", read_only=True)
+    growth_stage = serializers.CharField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class FertilizationPlanDetailSerializer(serializers.Serializer):
+    plan_uuid = serializers.UUIDField(source="uuid", read_only=True)
+    source = serializers.CharField(read_only=True)
+    source_label = serializers.CharField(source="get_source_display", read_only=True)
+    title = serializers.CharField(read_only=True)
+    crop_id = serializers.CharField(read_only=True)
+    plant_name = serializers.CharField(source="crop_id", read_only=True)
+    growth_stage = serializers.CharField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+    plan_payload = serializers.DictField(read_only=True)
+
+
+class FertilizationPlanStatusUpdateSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField(required=True)

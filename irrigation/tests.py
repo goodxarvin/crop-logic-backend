@@ -7,9 +7,12 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
 
-from .models import IrrigationRecommendationRequest
+from .models import IrrigationPlan, IrrigationRecommendationRequest
 from .views import (
     IrrigationMethodListView,
+    IrrigationPlanDetailView,
+    IrrigationPlanListView,
+    IrrigationPlanStatusView,
     PlanFromTextView,
     RecommendView,
     RecommendationDetailView,
@@ -132,6 +135,10 @@ class IrrigationPlanFromTextViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["status"], "completed")
+        self.assertEqual(IrrigationPlan.objects.count(), 1)
+        plan = IrrigationPlan.objects.get()
+        self.assertEqual(plan.source, IrrigationPlan.SOURCE_FREE_TEXT)
+        self.assertEqual(plan.crop_id, "گوجه فرنگی")
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/irrigation/plan-from-text/",
@@ -302,6 +309,11 @@ class RecommendViewTests(TestCase):
         self.assertIn("recommendation_uuid", response.data["data"])
         self.assertEqual(response.data["data"]["status"], IrrigationRecommendationRequest.STATUS_PENDING_CONFIRMATION)
         self.assertEqual(response.data["data"]["status_label"], "منتظر تایید")
+        self.assertEqual(IrrigationPlan.objects.count(), 1)
+        plan = IrrigationPlan.objects.get()
+        self.assertEqual(plan.source, IrrigationPlan.SOURCE_RECOMMENDATION)
+        self.assertTrue(plan.is_active)
+        self.assertFalse(plan.is_deleted)
         self.assertEqual(response.data["data"]["plan"]["durationMinutes"], 38)
         self.assertEqual(response.data["data"]["water_balance"]["active_kc"], 0.93)
         self.assertEqual(response.data["data"]["timeline"][0]["step_number"], 1)
@@ -319,6 +331,39 @@ class RecommendViewTests(TestCase):
                 "irrigation_method_name": "آبیاری قطره ای",
             },
         )
+
+    @patch("irrigation.views.external_api_request")
+    def test_post_includes_active_irrigation_plan_in_ai_payload(self, mock_external_api_request):
+        IrrigationPlan.objects.create(
+            farm=self.farm,
+            source=IrrigationPlan.SOURCE_FREE_TEXT,
+            title="برنامه فعال",
+            crop_id="گوجه فرنگی",
+            growth_stage="گلدهی",
+            plan_payload={
+                "plan": {"frequencyPerWeek": 2, "durationMinutes": 25, "bestTimeOfDay": "صبح"},
+                "water_balance": {"active_kc": 0.82, "daily": []},
+                "timeline": [{"step_number": 1, "title": "مرحله", "description": "توضیح"}],
+                "sections": [{"type": "warning", "title": "هشدار", "content": "متن"}],
+            },
+            is_active=True,
+        )
+        mock_external_api_request.return_value = AdapterResponse(status_code=200, data={"data": {"result": {"plan": {}}}})
+
+        request = self.factory.post(
+            "/api/irrigation/recommend/",
+            {"farm_uuid": str(self.farm.farm_uuid), "plant_name": "گوجه فرنگی", "growth_stage": "گلدهی"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = RecommendView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        sent_payload = mock_external_api_request.call_args.kwargs["payload"]
+        self.assertIn("active_irrigation_plan", sent_payload)
+        self.assertEqual(sent_payload["active_irrigation_plan"]["plan"]["durationMinutes"], 25)
+        self.assertEqual(sent_payload["active_irrigation_plan"]["water_balance"]["active_kc"], 0.82)
 
 
 class IrrigationRecommendationHistoryTests(TestCase):
@@ -428,6 +473,7 @@ class IrrigationRecommendationHistoryTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data["msg"], "Recommendation not found.")
+
     @patch("irrigation.views.external_api_request")
     def test_post_accepts_sensor_uuid_as_farm_uuid_alias(self, mock_external_api_request):
         mock_external_api_request.return_value = AdapterResponse(
@@ -459,3 +505,78 @@ class IrrigationRecommendationHistoryTests(TestCase):
                 "irrigation_method_name": "آبیاری قطره ای",
             },
         )
+
+
+class IrrigationPlanApiTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="irrigation-plan-user",
+            password="secret123",
+            email="irrigation-plan@example.com",
+            phone_number="09124445566",
+        )
+        self.farm_type = FarmType.objects.create(name="زراعی")
+        self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="Irrigation Plan Farm")
+        self.plan = IrrigationPlan.objects.create(
+            farm=self.farm,
+            source=IrrigationPlan.SOURCE_FREE_TEXT,
+            title="برنامه آبیاری نمونه",
+            crop_id="گندم",
+            growth_stage="flowering",
+            plan_payload={"plan": {"durationMinutes": 25}},
+        )
+
+    def test_plan_list_returns_non_deleted_plans(self):
+        IrrigationPlan.objects.create(
+            farm=self.farm,
+            source=IrrigationPlan.SOURCE_RECOMMENDATION,
+            title="حذف شده",
+            is_deleted=True,
+            is_active=False,
+        )
+
+        request = self.factory.get(f"/api/irrigation/plans/?farm_uuid={self.farm.farm_uuid}")
+        force_authenticate(request, user=self.user)
+
+        response = IrrigationPlanListView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(len(response.data["data"]), 1)
+        self.assertEqual(response.data["data"][0]["plan_uuid"], str(self.plan.uuid))
+
+    def test_plan_detail_returns_plan_payload(self):
+        request = self.factory.get(f"/api/irrigation/plans/{self.plan.uuid}/")
+        force_authenticate(request, user=self.user)
+
+        response = IrrigationPlanDetailView.as_view()(request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["plan_uuid"], str(self.plan.uuid))
+        self.assertEqual(response.data["data"]["plan_payload"]["plan"]["durationMinutes"], 25)
+
+    def test_plan_delete_is_soft_delete(self):
+        request = self.factory.delete(f"/api/irrigation/plans/{self.plan.uuid}/")
+        force_authenticate(request, user=self.user)
+
+        response = IrrigationPlanDetailView.as_view()(request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertTrue(self.plan.is_deleted)
+        self.assertFalse(self.plan.is_active)
+
+    def test_plan_status_patch_updates_is_active(self):
+        request = self.factory.patch(
+            f"/api/irrigation/plans/{self.plan.uuid}/status/",
+            {"is_active": False},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = IrrigationPlanStatusView.as_view()(request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertFalse(self.plan.is_active)

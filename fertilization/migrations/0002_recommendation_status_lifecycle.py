@@ -6,7 +6,7 @@ OLD_STATUSES = {"", "success", "error", None}
 
 
 def migrate_existing_statuses(apps, schema_editor):
-    Recommendation = apps.get_model("fertilization", "FertilizationRecommendationRequest")
+    Recommendation = apps.get_model("fertilization_recommendation", "FertilizationRecommendationRequest")
     Recommendation.objects.filter(status__in=[status for status in OLD_STATUSES if status is not None]).update(
         status=PENDING_STATUS
     )
@@ -15,7 +15,7 @@ def migrate_existing_statuses(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("fertilization", "0001_initial"),
+        ("fertilization_recommendation", "0001_initial"),
     ]
 
     operations = [

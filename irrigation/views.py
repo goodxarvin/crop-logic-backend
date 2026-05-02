@@ -18,11 +18,15 @@ from farm_hub.models import FarmHub
 from water.serializers import WaterStressIndexSerializer
 from water.views import WaterStressIndexView
 from .mock_data import CONFIG_RESPONSE_DATA
-from .models import IrrigationRecommendationRequest
+from .models import IrrigationPlan, IrrigationRecommendationRequest
 from .serializers import (
     FreeTextPlanParserRequestSerializer,
     FreeTextPlanParserResponseDataSerializer,
     IrrigationMethodSerializer,
+    IrrigationPlanDetailSerializer,
+    IrrigationPlanListItemSerializer,
+    IrrigationPlanListQuerySerializer,
+    IrrigationPlanStatusUpdateSerializer,
     IrrigationRecommendationListItemSerializer,
     IrrigationRecommendationListQuerySerializer,
     IrrigationRecommendRequestSerializer,
@@ -30,6 +34,7 @@ from .serializers import (
     WaterStressRequestSerializer,
 )
 from .services import build_recommendation_response
+from .services import build_active_plan_context
 
 
 logger = logging.getLogger(__name__)
@@ -157,6 +162,35 @@ class IrrigationMethodListView(APIView):
 
 
 class RecommendView(FarmAccessMixin, APIView):
+    @staticmethod
+    def _build_plan_title(crop_id, growth_stage, plan):
+        best_time = ""
+        if isinstance(plan, dict):
+            best_time = str(plan.get("bestTimeOfDay") or "").strip()
+        parts = [part for part in [crop_id, growth_stage, best_time] if part]
+        return " - ".join(parts) if parts else "برنامه آبیاری"
+
+    def _create_plan_from_recommendation(self, recommendation, recommendation_data):
+        IrrigationPlan.objects.create(
+            farm=recommendation.farm,
+            source=IrrigationPlan.SOURCE_RECOMMENDATION,
+            recommendation=recommendation,
+            title=self._build_plan_title(recommendation.crop_id, recommendation.growth_stage, recommendation_data.get("plan")),
+            crop_id=recommendation.crop_id,
+            growth_stage=recommendation.growth_stage,
+            plan_payload=recommendation_data,
+            request_payload=recommendation.request_payload,
+            response_payload=recommendation.response_payload,
+        )
+
+    @staticmethod
+    def _enrich_ai_payload(payload, farm):
+        enriched_payload = payload.copy()
+        active_plan_context = build_active_plan_context(farm)
+        if active_plan_context:
+            enriched_payload["active_irrigation_plan"] = active_plan_context
+        return enriched_payload
+
     @extend_schema(
         tags=["Irrigation Recommendation"],
         request=IrrigationRecommendRequestSerializer,
@@ -178,11 +212,13 @@ class RecommendView(FarmAccessMixin, APIView):
         if farm.irrigation_method_id is not None:
             payload["irrigation_method_id"] = farm.irrigation_method_id
 
+        ai_payload = self._enrich_ai_payload(payload, farm)
+
         adapter_response = external_api_request(
             "ai",
             "/api/irrigation/recommend/",
             method="POST",
-            payload=payload,
+            payload=ai_payload,
         )
 
         response_data = adapter_response.data if isinstance(adapter_response.data, dict) else {}
@@ -206,7 +242,7 @@ class RecommendView(FarmAccessMixin, APIView):
                 if adapter_response.status_code < 400
                 else IrrigationRecommendationRequest.STATUS_ERROR
             ),
-            request_payload=payload,
+            request_payload=ai_payload,
             response_payload=adapter_response.data if isinstance(adapter_response.data, dict) else {"raw": adapter_response.data},
         )
         if adapter_response.status_code >= 400:
@@ -218,6 +254,8 @@ class RecommendView(FarmAccessMixin, APIView):
                 },
                 status=adapter_response.status_code,
             )
+
+        self._create_plan_from_recommendation(recommendation, recommendation_data)
 
         recommendation_data["recommendation_uuid"] = str(recommendation.uuid)
         recommendation_data["crop_id"] = recommendation.crop_id
@@ -358,6 +396,30 @@ class WaterStressView(APIView):
 
 
 class PlanFromTextView(FarmAccessMixin, APIView):
+    @staticmethod
+    def _extract_final_plan(response_data):
+        if not isinstance(response_data, dict):
+            return None
+        data = response_data.get("data")
+        if isinstance(data, dict):
+            final_plan = data.get("final_plan")
+            if isinstance(final_plan, dict) and final_plan:
+                return final_plan
+        final_plan = response_data.get("final_plan")
+        if isinstance(final_plan, dict) and final_plan:
+            return final_plan
+        return None
+
+    @staticmethod
+    def _build_free_text_plan_title(final_plan):
+        if not isinstance(final_plan, dict):
+            return "برنامه آبیاری"
+        for key in ("title", "plan_title", "crop_name", "crop_id", "plant_name"):
+            value = str(final_plan.get(key, "")).strip()
+            if value:
+                return value
+        return "برنامه آبیاری"
+
     @extend_schema(
         tags=["Irrigation Recommendation"],
         request=FreeTextPlanParserRequestSerializer,
@@ -387,7 +449,114 @@ class PlanFromTextView(FarmAccessMixin, APIView):
                 status=adapter_response.status_code,
             )
 
+        final_plan = self._extract_final_plan(response_data)
+        if final_plan and farm_uuid:
+            IrrigationPlan.objects.create(
+                farm=farm,
+                source=IrrigationPlan.SOURCE_FREE_TEXT,
+                title=self._build_free_text_plan_title(final_plan),
+                crop_id=str(
+                    final_plan.get("crop_id")
+                    or final_plan.get("crop_name")
+                    or final_plan.get("plant_name")
+                    or ""
+                ).strip(),
+                growth_stage=str(final_plan.get("growth_stage") or "").strip(),
+                plan_payload=final_plan,
+                request_payload=payload,
+                response_payload=response_data,
+            )
+
         return Response(
             {"code": 200, "msg": response_data.get("msg", "موفق"), "data": response_data.get("data", response_data)},
+            status=status.HTTP_200_OK,
+        )
+
+
+class IrrigationPlanListView(FarmAccessMixin, APIView):
+    pagination_class = IrrigationRecommendationPagination
+
+    @extend_schema(
+        tags=["Irrigation Recommendation"],
+        parameters=[IrrigationPlanListQuerySerializer],
+        responses={200: code_response("IrrigationPlanListResponse")},
+    )
+    def get(self, request):
+        serializer = IrrigationPlanListQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        farm = self._get_farm(request, serializer.validated_data["farm_uuid"])
+        plans = farm.irrigation_plans.filter(is_deleted=False).order_by("-created_at", "-id")
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(plans, request, view=self)
+        data = IrrigationPlanListItemSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
+
+
+class IrrigationPlanDetailView(APIView):
+    @extend_schema(
+        tags=["Irrigation Recommendation"],
+        parameters=[
+            OpenApiParameter(
+                name="plan_uuid",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                required=True,
+            )
+        ],
+        responses={200: code_response("IrrigationPlanDetailResponse", data=IrrigationPlanDetailSerializer())},
+    )
+    def get(self, request, plan_uuid):
+        plan = IrrigationPlan.objects.filter(
+            uuid=plan_uuid,
+            farm__owner=request.user,
+            is_deleted=False,
+        ).select_related("farm").first()
+        if plan is None:
+            return Response({"code": 404, "msg": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        data = IrrigationPlanDetailSerializer(plan).data
+        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        tags=["Irrigation Recommendation"],
+        responses={200: status_response("IrrigationPlanDeleteResponse", data=serializers.JSONField())},
+    )
+    def delete(self, request, plan_uuid):
+        plan = IrrigationPlan.objects.filter(
+            uuid=plan_uuid,
+            farm__owner=request.user,
+            is_deleted=False,
+        ).first()
+        if plan is None:
+            return Response({"code": 404, "msg": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        plan.soft_delete()
+        return Response({"code": 200, "msg": "success", "data": {"plan_uuid": str(plan.uuid), "is_deleted": True}}, status=status.HTTP_200_OK)
+
+
+class IrrigationPlanStatusView(APIView):
+    @extend_schema(
+        tags=["Irrigation Recommendation"],
+        request=IrrigationPlanStatusUpdateSerializer,
+        responses={200: code_response("IrrigationPlanStatusResponse", data=serializers.JSONField())},
+    )
+    def patch(self, request, plan_uuid):
+        serializer = IrrigationPlanStatusUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        plan = IrrigationPlan.objects.filter(
+            uuid=plan_uuid,
+            farm__owner=request.user,
+            is_deleted=False,
+        ).first()
+        if plan is None:
+            return Response({"code": 404, "msg": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        plan.is_active = serializer.validated_data["is_active"]
+        plan.save(update_fields=["is_active", "updated_at"])
+        return Response(
+            {"code": 200, "msg": "success", "data": {"plan_uuid": str(plan.uuid), "is_active": plan.is_active}},
             status=status.HTTP_200_OK,
         )

@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 from .mock_data import IRRIGATION_DASHBOARD_RECOMMENDATION, RECOMMEND_RESPONSE_DATA, WATER_NEED_PREDICTION
-from .models import IrrigationRecommendationRequest
+from .models import IrrigationPlan, IrrigationRecommendationRequest
 
 
 def _extract_result(response_payload):
@@ -35,6 +35,47 @@ def _get_latest_result(farm):
             return result
 
     return {}
+
+
+def get_active_plan_payload(farm):
+    if farm is None:
+        return {}
+
+    plan = (
+        IrrigationPlan.objects.filter(farm=farm, is_active=True, is_deleted=False)
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if plan is None or not isinstance(plan.plan_payload, dict):
+        return {}
+
+    return deepcopy(plan.plan_payload)
+
+
+def build_active_plan_context(farm):
+    plan_payload = get_active_plan_payload(farm)
+    if not plan_payload:
+        return {}
+
+    context = {"plan_payload": plan_payload}
+
+    plan = _normalize_plan(plan_payload.get("plan"))
+    if plan:
+        context["plan"] = plan
+
+    water_balance = _normalize_water_balance(plan_payload.get("water_balance"))
+    if water_balance:
+        context["water_balance"] = water_balance
+
+    timeline = _normalize_timeline(plan_payload.get("timeline"))
+    if timeline:
+        context["timeline"] = timeline
+
+    sections = _normalize_sections(plan_payload.get("sections"))
+    if sections:
+        context["sections"] = sections
+
+    return context
 
 
 def _normalize_plan(plan):

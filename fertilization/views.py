@@ -15,11 +15,16 @@ from drf_spectacular.utils import extend_schema
 from config.swagger import code_response, status_response
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
+from .models import FertilizationPlan, FertilizationRecommendationRequest
+from .services import build_active_plan_context
 from .mock_data import CONFIG_RESPONSE_DATA
-from .models import FertilizationRecommendationRequest
 from .serializers import (
     FreeTextPlanParserRequestSerializer,
     FreeTextPlanParserResponseDataSerializer,
+    FertilizationPlanDetailSerializer,
+    FertilizationPlanListItemSerializer,
+    FertilizationPlanListQuerySerializer,
+    FertilizationPlanStatusUpdateSerializer,
     FertilizationRecommendationListItemSerializer,
     FertilizationRecommendationListQuerySerializer,
     FertilizationRecommendRequestSerializer,
@@ -358,6 +363,34 @@ class RecommendView(FarmAccessMixin, APIView):
             "sections": normalized_sections,
         }
 
+    @staticmethod
+    def _build_plan_title(crop_id, growth_stage, primary_recommendation):
+        fertilizer_name = str(primary_recommendation.get("display_title") or primary_recommendation.get("fertilizer_name") or "").strip()
+        parts = [part for part in [fertilizer_name, crop_id, growth_stage] if part]
+        return " - ".join(parts) if parts else "برنامه کودی"
+
+    def _create_plan_from_recommendation(self, recommendation, public_data):
+        primary_recommendation = public_data.get("primary_recommendation", {})
+        FertilizationPlan.objects.create(
+            farm=recommendation.farm,
+            source=FertilizationPlan.SOURCE_RECOMMENDATION,
+            recommendation=recommendation,
+            title=self._build_plan_title(recommendation.crop_id, recommendation.growth_stage, primary_recommendation),
+            crop_id=recommendation.crop_id,
+            growth_stage=recommendation.growth_stage,
+            plan_payload=public_data,
+            request_payload=recommendation.request_payload,
+            response_payload=recommendation.response_payload,
+        )
+
+    @staticmethod
+    def _enrich_ai_payload(payload, farm):
+        enriched_payload = payload.copy()
+        active_plan_context = build_active_plan_context(farm)
+        if active_plan_context:
+            enriched_payload["active_fertilization_plan"] = active_plan_context
+        return enriched_payload
+
     @extend_schema(
         tags=["Fertilization Recommendation"],
         request=FertilizationRecommendRequestSerializer,
@@ -374,12 +407,13 @@ class RecommendView(FarmAccessMixin, APIView):
         payload["crop_id"] = crop_id
         payload["plant_name"] = plant_name
         payload["growth_stage"] = payload.get("growth_stage", "")
+        ai_payload = self._enrich_ai_payload(payload, farm)
 
         adapter_response = external_api_request(
             "ai",
             "/api/fertilization/recommend/",
             method="POST",
-            payload=payload,
+            payload=ai_payload,
         )
 
         response_data = adapter_response.data if isinstance(adapter_response.data, dict) else {}
@@ -393,13 +427,13 @@ class RecommendView(FarmAccessMixin, APIView):
             len(public_data.get("sections", [])),
         )
 
-        FertilizationRecommendationRequest.objects.create(
+        recommendation = FertilizationRecommendationRequest.objects.create(
             farm=farm,
             crop_id=crop_id,
             growth_stage=payload.get("growth_stage", ""),
             task_id="",
             status=FertilizationRecommendationRequest.STATUS_PENDING_CONFIRMATION,
-            request_payload=payload,
+            request_payload=ai_payload,
             response_payload=adapter_response.data if isinstance(adapter_response.data, dict) else {"raw": adapter_response.data},
         )
         if adapter_response.status_code >= 400:
@@ -411,6 +445,8 @@ class RecommendView(FarmAccessMixin, APIView):
                 },
                 status=adapter_response.status_code,
             )
+
+        self._create_plan_from_recommendation(recommendation, public_data)
 
         return Response(
             {
@@ -490,6 +526,30 @@ class RecommendationDetailView(FarmAccessMixin, APIView):
 
 
 class PlanFromTextView(FarmAccessMixin, APIView):
+    @staticmethod
+    def _extract_final_plan(response_data):
+        if not isinstance(response_data, dict):
+            return None
+        data = response_data.get("data")
+        if isinstance(data, dict):
+            final_plan = data.get("final_plan")
+            if isinstance(final_plan, dict) and final_plan:
+                return final_plan
+        final_plan = response_data.get("final_plan")
+        if isinstance(final_plan, dict) and final_plan:
+            return final_plan
+        return None
+
+    @staticmethod
+    def _build_free_text_plan_title(final_plan):
+        if not isinstance(final_plan, dict):
+            return "برنامه کودی"
+        for key in ("title", "plan_title", "crop_name", "crop_id", "plant_name"):
+            value = str(final_plan.get(key, "")).strip()
+            if value:
+                return value
+        return "برنامه کودی"
+
     @extend_schema(
         tags=["Fertilization Recommendation"],
         request=FreeTextPlanParserRequestSerializer,
@@ -519,7 +579,114 @@ class PlanFromTextView(FarmAccessMixin, APIView):
                 status=adapter_response.status_code,
             )
 
+        final_plan = self._extract_final_plan(response_data)
+        if final_plan and farm_uuid:
+            FertilizationPlan.objects.create(
+                farm=farm,
+                source=FertilizationPlan.SOURCE_FREE_TEXT,
+                title=self._build_free_text_plan_title(final_plan),
+                crop_id=str(
+                    final_plan.get("crop_id")
+                    or final_plan.get("crop_name")
+                    or final_plan.get("plant_name")
+                    or ""
+                ).strip(),
+                growth_stage=str(final_plan.get("growth_stage") or "").strip(),
+                plan_payload=final_plan,
+                request_payload=payload,
+                response_payload=response_data,
+            )
+
         return Response(
             {"code": 200, "msg": response_data.get("msg", "موفق"), "data": response_data.get("data", response_data)},
+            status=status.HTTP_200_OK,
+        )
+
+
+class FertilizationPlanListView(FarmAccessMixin, APIView):
+    pagination_class = FertilizationRecommendationPagination
+
+    @extend_schema(
+        tags=["Fertilization Recommendation"],
+        parameters=[FertilizationPlanListQuerySerializer],
+        responses={200: code_response("FertilizationPlanListResponse")},
+    )
+    def get(self, request):
+        serializer = FertilizationPlanListQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        farm = self._get_farm(request, serializer.validated_data["farm_uuid"])
+        plans = farm.fertilization_plans.filter(is_deleted=False).order_by("-created_at", "-id")
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(plans, request, view=self)
+        data = FertilizationPlanListItemSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
+
+
+class FertilizationPlanDetailView(APIView):
+    @extend_schema(
+        tags=["Fertilization Recommendation"],
+        parameters=[
+            OpenApiParameter(
+                name="plan_uuid",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                required=True,
+            )
+        ],
+        responses={200: code_response("FertilizationPlanDetailResponse", data=FertilizationPlanDetailSerializer())},
+    )
+    def get(self, request, plan_uuid):
+        plan = FertilizationPlan.objects.filter(
+            uuid=plan_uuid,
+            farm__owner=request.user,
+            is_deleted=False,
+        ).select_related("farm").first()
+        if plan is None:
+            return Response({"code": 404, "msg": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        data = FertilizationPlanDetailSerializer(plan).data
+        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        tags=["Fertilization Recommendation"],
+        responses={200: status_response("FertilizationPlanDeleteResponse", data=serializers.JSONField())},
+    )
+    def delete(self, request, plan_uuid):
+        plan = FertilizationPlan.objects.filter(
+            uuid=plan_uuid,
+            farm__owner=request.user,
+            is_deleted=False,
+        ).first()
+        if plan is None:
+            return Response({"code": 404, "msg": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        plan.soft_delete()
+        return Response({"code": 200, "msg": "success", "data": {"plan_uuid": str(plan.uuid), "is_deleted": True}}, status=status.HTTP_200_OK)
+
+
+class FertilizationPlanStatusView(APIView):
+    @extend_schema(
+        tags=["Fertilization Recommendation"],
+        request=FertilizationPlanStatusUpdateSerializer,
+        responses={200: code_response("FertilizationPlanStatusResponse", data=serializers.JSONField())},
+    )
+    def patch(self, request, plan_uuid):
+        serializer = FertilizationPlanStatusUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        plan = FertilizationPlan.objects.filter(
+            uuid=plan_uuid,
+            farm__owner=request.user,
+            is_deleted=False,
+        ).first()
+        if plan is None:
+            return Response({"code": 404, "msg": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        plan.is_active = serializer.validated_data["is_active"]
+        plan.save(update_fields=["is_active", "updated_at"])
+        return Response(
+            {"code": 200, "msg": "success", "data": {"plan_uuid": str(plan.uuid), "is_active": plan.is_active}},
             status=status.HTTP_200_OK,
         )

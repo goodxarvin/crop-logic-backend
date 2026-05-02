@@ -9,6 +9,8 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from config.swagger import code_response, farm_uuid_query_param
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
+from fertilization.models import FertilizationPlan
+from irrigation.models import IrrigationPlan
 from .models import YieldHarvestPredictionLog
 from .serializers import (
     CropSimulationRequestSerializer,
@@ -77,6 +79,20 @@ class YieldHarvestSummaryView(APIView):
         if error_response is not None:
             return error_response
 
+        irrigation_plan_id, irrigation_plan_error = CropSimulationBaseView._parse_optional_plan_id(
+            request.query_params.get("irrigation_plan_id"),
+            "irrigation_plan_id",
+        )
+        if irrigation_plan_error is not None:
+            return irrigation_plan_error
+
+        fertilization_plan_id, fertilization_plan_error = CropSimulationBaseView._parse_optional_plan_id(
+            request.query_params.get("fertilization_plan_id"),
+            "fertilization_plan_id",
+        )
+        if fertilization_plan_error is not None:
+            return fertilization_plan_error
+
         query = {"farm_uuid": str(farm.farm_uuid)}
         if request.query_params.get("season_year"):
             query["season_year"] = request.query_params.get("season_year")
@@ -84,6 +100,15 @@ class YieldHarvestSummaryView(APIView):
             query["crop_name"] = request.query_params.get("crop_name")
         if request.query_params.get("include_narrative") is not None:
             query["include_narrative"] = request.query_params.get("include_narrative")
+
+        ai_payload, plan_error = self._build_ai_payload_with_selected_plans(
+            farm,
+            irrigation_plan_id=irrigation_plan_id,
+            fertilization_plan_id=fertilization_plan_id,
+        )
+        if plan_error is not None:
+            return plan_error
+        query.update(ai_payload)
 
         adapter_response = external_api_request(
             "ai",
@@ -191,6 +216,98 @@ class CropSimulationBaseView(APIView):
 
         return ""
 
+    @staticmethod
+    def _get_irrigation_plan_or_error(farm, plan_id):
+        if not plan_id:
+            return None, None
+
+        plan = IrrigationPlan.objects.filter(
+            id=plan_id,
+            farm=farm,
+            is_deleted=False,
+        ).first()
+        if plan is None:
+            return None, Response(
+                {"code": 404, "msg": "error", "data": {"irrigation_plan_id": ["Irrigation plan not found."]}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return plan, None
+
+    @staticmethod
+    def _get_fertilization_plan_or_error(farm, plan_id):
+        if not plan_id:
+            return None, None
+
+        plan = FertilizationPlan.objects.filter(
+            id=plan_id,
+            farm=farm,
+            is_deleted=False,
+        ).first()
+        if plan is None:
+            return None, Response(
+                {"code": 404, "msg": "error", "data": {"fertilization_plan_id": ["Fertilization plan not found."]}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return plan, None
+
+    @staticmethod
+    def _build_plan_payload(plan):
+        if plan is None:
+            return None
+
+        return {
+            "id": plan.id,
+            "uuid": str(plan.uuid),
+            "source": plan.source,
+            "title": plan.title,
+            "crop_id": plan.crop_id,
+            "growth_stage": plan.growth_stage,
+            "is_active": plan.is_active,
+            "plan_payload": plan.plan_payload if isinstance(plan.plan_payload, dict) else {},
+            "request_payload": plan.request_payload if isinstance(plan.request_payload, dict) else {},
+            "response_payload": plan.response_payload if isinstance(plan.response_payload, dict) else {},
+        }
+
+    def _build_ai_payload_with_selected_plans(self, farm, irrigation_plan_id=None, fertilization_plan_id=None):
+        irrigation_plan, irrigation_error = self._get_irrigation_plan_or_error(farm, irrigation_plan_id)
+        if irrigation_error is not None:
+            return None, irrigation_error
+
+        fertilization_plan, fertilization_error = self._get_fertilization_plan_or_error(
+            farm, fertilization_plan_id
+        )
+        if fertilization_error is not None:
+            return None, fertilization_error
+
+        ai_payload = {
+            "farm_uuid": str(farm.farm_uuid),
+            "plant_name": self._get_first_farm_product_name(farm),
+        }
+        if irrigation_plan is not None:
+            ai_payload["irrigation_plan"] = self._build_plan_payload(irrigation_plan)
+        if fertilization_plan is not None:
+            ai_payload["fertilization_plan"] = self._build_plan_payload(fertilization_plan)
+
+        return ai_payload, None
+
+    @staticmethod
+    def _parse_optional_plan_id(raw_value, field_name):
+        if raw_value in (None, ""):
+            return None, None
+        try:
+            parsed_value = int(raw_value)
+        except (TypeError, ValueError):
+            return None, Response(
+                {"code": 400, "msg": "error", "data": {field_name: ["A valid integer is required."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if parsed_value < 1:
+            return None, Response(
+                {"code": 400, "msg": "error", "data": {field_name: ["Ensure this value is greater than or equal to 1."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return parsed_value, None
+
 
 class CurrentFarmChartView(CropSimulationBaseView):
     ai_path = "/api/crop-simulation/current-farm-chart/"
@@ -209,10 +326,13 @@ class CurrentFarmChartView(CropSimulationBaseView):
         if error_response is not None:
             return error_response
 
-        ai_payload = {
-            "farm_uuid": str(farm.farm_uuid),
-            "plant_name": self._get_first_farm_product_name(farm),
-        }
+        ai_payload, plan_error = self._build_ai_payload_with_selected_plans(
+            farm,
+            irrigation_plan_id=payload.get("irrigation_plan_id"),
+            fertilization_plan_id=payload.get("fertilization_plan_id"),
+        )
+        if plan_error is not None:
+            return plan_error
         adapter_response = external_api_request("ai", self.ai_path, method="POST", payload=ai_payload)
 
         if adapter_response.status_code >= 400:
@@ -241,10 +361,13 @@ class HarvestPredictionView(CropSimulationBaseView):
         if error_response is not None:
             return error_response
 
-        ai_payload = {
-            "farm_uuid": str(farm.farm_uuid),
-            "plant_name": self._get_first_farm_product_name(farm),
-        }
+        ai_payload, plan_error = self._build_ai_payload_with_selected_plans(
+            farm,
+            irrigation_plan_id=payload.get("irrigation_plan_id"),
+            fertilization_plan_id=payload.get("fertilization_plan_id"),
+        )
+        if plan_error is not None:
+            return plan_error
         adapter_response = external_api_request("ai", self.ai_path, method="POST", payload=ai_payload)
 
         if adapter_response.status_code >= 400:
@@ -273,10 +396,13 @@ class YieldPredictionView(CropSimulationBaseView):
         if error_response is not None:
             return error_response
 
-        ai_payload = {
-            "farm_uuid": str(farm.farm_uuid),
-            "plant_name": self._get_first_farm_product_name(farm),
-        }
+        ai_payload, plan_error = self._build_ai_payload_with_selected_plans(
+            farm,
+            irrigation_plan_id=payload.get("irrigation_plan_id"),
+            fertilization_plan_id=payload.get("fertilization_plan_id"),
+        )
+        if plan_error is not None:
+            return plan_error
         adapter_response = external_api_request("ai", self.ai_path, method="POST", payload=ai_payload)
 
         if adapter_response.status_code >= 400:
