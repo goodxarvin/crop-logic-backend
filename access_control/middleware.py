@@ -41,6 +41,7 @@ class RouteFeatureAccessMiddleware(MiddlewareMixin):
                     "products",
                     "sensors",
                     "sensors__sensor_catalog",
+                    "sensors__device_catalogs",
                 ).get(farm_uuid=farm_uuid, owner=user)
             except FarmHub.DoesNotExist:
                 return JsonResponse(

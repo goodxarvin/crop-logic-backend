@@ -1,4 +1,4 @@
-from .models import SensorCatalog
+from .models import DeviceCatalog
 
 
 SENSOR_CATALOG_ITEMS = [
@@ -10,6 +10,7 @@ SENSOR_CATALOG_ITEMS = [
             "It measures only soil moisture and provides analog and digital outputs. "
             "It does not report soil temperature, pH, or nutrients."
         ),
+        "device_communication_type": "output_only",
         "customizable_fields": [],
         "supported_power_sources": ["solar", "direct_power"],
         "returned_data_fields": ["soil_moisture", "analog_output", "digital_output"],
@@ -29,11 +30,12 @@ def seed_sensor_catalog():
     results = []
 
     for item in SENSOR_CATALOG_ITEMS:
-        sensor, created = SensorCatalog.objects.update_or_create(
+        sensor, created = DeviceCatalog.objects.update_or_create(
             code=item["code"],
             defaults={
                 "name": item["name"],
                 "description": item["description"],
+                "device_communication_type": item.get("device_communication_type", "output_only"),
                 "customizable_fields": item["customizable_fields"],
                 "supported_power_sources": item["supported_power_sources"],
                 "returned_data_fields": item["returned_data_fields"],
@@ -48,4 +50,3 @@ def seed_sensor_catalog():
             updated_count += 1
 
     return results, created_count, updated_count
-

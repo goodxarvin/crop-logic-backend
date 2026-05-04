@@ -7,7 +7,7 @@ from access_control.models import AccessFeature, AccessRule, FarmAccessProfile, 
 from access_control.services import build_farm_access_profile
 from access_control.views import FarmAccessProfileView
 from crop_zoning.models import CropArea
-from device_hub.models import SensorCatalog
+from device_hub.models import DeviceCatalog
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType, Product
 from farm_hub.serializers import FarmHubSerializer
@@ -49,7 +49,7 @@ class FarmListCreateViewTests(TestCase):
         self.farm_type, _ = FarmType.objects.get_or_create(name="زراعی")
         self.wheat, _ = Product.objects.get_or_create(farm_type=self.farm_type, name="گندم")
         self.plan = SubscriptionPlan.objects.create(code="gold", name="Gold")
-        self.weather_station, _ = SensorCatalog.objects.get_or_create(
+        self.weather_station, _ = DeviceCatalog.objects.get_or_create(
             code="sensor_7_soil_moisture_sensor_v1_2",
             name="Sensor 7 - Soil Moisture Sensor v1.2",
             defaults={"supported_power_sources": ["solar", "direct_power"]},
@@ -290,7 +290,7 @@ class FarmSeedTests(TestCase):
         self.assertEqual(farm.irrigation_method_id, 1)
         self.assertEqual(farm.irrigation_method_name, "آبیاری قطره ای")
         self.assertIsNotNone(farm.sensors.first().physical_device_uuid)
-        self.assertTrue(SensorCatalog.objects.filter(code="sensor_7_soil_moisture_sensor_v1_2").exists())
+        self.assertTrue(DeviceCatalog.objects.filter(code="sensor_7_soil_moisture_sensor_v1_2").exists())
 
     def test_seed_admin_farm_does_not_dispatch_twice_for_existing_seed(self):
         first_farm, first_created = seed_admin_farm()
@@ -369,7 +369,7 @@ class FarmAccessProfileTests(TestCase):
         self.plan = SubscriptionPlan.objects.create(code="starter", name="Starter")
         self.farm_type = FarmType.objects.create(name="گلخانه ای")
         self.product = Product.objects.create(farm_type=self.farm_type, name="خیار")
-        self.sensor_catalog = SensorCatalog.objects.create(code="climate_sensor", name="Climate Sensor")
+        self.sensor_catalog = DeviceCatalog.objects.create(code="climate_sensor", name="Climate Sensor")
         self.farm = FarmHub.objects.create(
             owner=self.user,
             farm_type=self.farm_type,

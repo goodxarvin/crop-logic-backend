@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from farm_hub.seeds import seed_admin_farm
 
-from .models import FarmSensor, SensorCatalog, SensorExternalRequestLog
+from .models import DeviceCatalog, FarmDevice, SensorExternalRequestLog
 
 
 SENSOR_7_IN_1_CATALOG_CODE = "sensor-7-in-1"
@@ -23,11 +23,12 @@ SENSOR_7_IN_1_LOG_SERIES = [
 
 
 def seed_sensor_7_in_1_catalog():
-    sensor_catalog, created = SensorCatalog.objects.update_or_create(
+    sensor_catalog, created = DeviceCatalog.objects.update_or_create(
         code=SENSOR_7_IN_1_CATALOG_CODE,
         defaults={
             "name": "Sensor 7 in 1 Soil Sensor",
             "description": "Demo 7 in 1 soil sensor for dashboard summary and chart endpoints.",
+            "device_communication_type": "output_only",
             "customizable_fields": [],
             "supported_power_sources": ["solar", "battery", "direct_power"],
             "returned_data_fields": ["soil_moisture", "soil_temperature", "soil_ph", "electrical_conductivity", "nitrogen", "phosphorus", "potassium"],
@@ -42,7 +43,7 @@ def seed_sensor_7_in_1_catalog():
 def seed_sensor_7_in_1_demo_data():
     farm, _ = seed_admin_farm()
     sensor_catalog, catalog_created = seed_sensor_7_in_1_catalog()
-    sensor, sensor_created = FarmSensor.objects.update_or_create(
+    sensor, sensor_created = FarmDevice.objects.update_or_create(
         farm=farm,
         physical_device_uuid=SENSOR_7_IN_1_DEVICE_UUID,
         defaults={"sensor_catalog": sensor_catalog, "name": "Sensor 7 in 1 Demo", "sensor_type": "soil_7_in_1", "is_active": True, "specifications": {"capabilities": sensor_catalog.returned_data_fields, "demo_seed": True}, "power_source": {"type": "solar"}},

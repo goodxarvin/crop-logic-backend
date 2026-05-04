@@ -70,7 +70,7 @@ class AccessRule(models.Model):
     subscription_plans = models.ManyToManyField("SubscriptionPlan", related_name="access_rules", blank=True)
     farm_types = models.ManyToManyField("farm_hub.FarmType", related_name="access_rules", blank=True)
     products = models.ManyToManyField("farm_hub.Product", related_name="access_rules", blank=True)
-    sensor_catalogs = models.ManyToManyField("device_hub.SensorCatalog", related_name="access_rules", blank=True)
+    sensor_catalogs = models.ManyToManyField("device_hub.DeviceCatalog", related_name="access_rules", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -4,7 +4,7 @@ from django.db import transaction
 
 from account.seeds import seed_admin_user
 from device_hub.catalog_seed import seed_sensor_catalog
-from device_hub.models import SensorCatalog
+from device_hub.models import DeviceCatalog
 
 from .catalog import CATALOG_SEED_DATA
 from .models import FarmHub, FarmType, Product
@@ -68,7 +68,7 @@ def _get_default_catalog():
 
 
 def _get_sensor_catalog_by_code(code):
-    return SensorCatalog.objects.filter(code=code).first()
+    return DeviceCatalog.objects.filter(code=code).first()
 
 
 @transaction.atomic

@@ -1,8 +1,7 @@
 from django.urls import path
 
-from .views import SensorCatalogListView
+from .views import DeviceCatalogListView
 
 urlpatterns = [
-    path("", SensorCatalogListView.as_view(), name="sensor-catalog-list"),
+    path("", DeviceCatalogListView.as_view(), name="sensor-catalog-list"),
 ]
-

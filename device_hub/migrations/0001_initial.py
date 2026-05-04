@@ -34,7 +34,7 @@ class Migration(migrations.Migration):
                     options={"db_table": "sensor_catalogs", "ordering": ["code"]},
                 ),
                 migrations.CreateModel(
-                    name="FarmSensor",
+                    name="FarmDevice",
                     fields=[
                         ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                         ("uuid", models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
                         ("created_at", models.DateTimeField(auto_now_add=True)),
                         ("updated_at", models.DateTimeField(auto_now=True)),
                         ("farm", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="sensors", to="farm_hub.farmhub")),
-                        ("sensor_catalog", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name="farm_sensors", to="device_hub.sensorcatalog")),
+                        ("sensor_catalog", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name="farm_devices", to="device_hub.sensorcatalog")),
                     ],
                     options={"db_table": "farm_sensors", "ordering": ["-created_at"]},
                 ),

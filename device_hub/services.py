@@ -11,7 +11,7 @@ from external_api_adapter.exceptions import ExternalAPIRequestError
 from notifications.services import create_notification_for_farm_uuid
 
 from .mock_data import ANOMALY_DETECTION_CARD, AVG_SOIL_MOISTURE, SENSOR_COMPARISON_CHART, SENSOR_RADAR_CHART, SENSOR_VALUES_LIST, SOIL_MOISTURE_HEATMAP
-from .models import FarmSensor, SensorExternalRequestLog
+from .models import FarmDevice, SensorExternalRequestLog
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def get_sensor_external_request_logs_for_farm(*, farm_uuid, physical_device_uuid
         if physical_device_uuid:
             queryset = queryset.filter(physical_device_uuid=physical_device_uuid)
         if sensor_type:
-            physical_device_uuids = FarmSensor.objects.filter(farm__farm_uuid=farm_uuid, sensor_type=sensor_type).values_list("physical_device_uuid", flat=True)
+            physical_device_uuids = FarmDevice.objects.filter(farm__farm_uuid=farm_uuid, sensor_type=sensor_type).values_list("physical_device_uuid", flat=True)
             queryset = queryset.filter(physical_device_uuid__in=physical_device_uuids)
         if date_from:
             queryset = queryset.filter(created_at__date__gte=date_from)
@@ -57,22 +57,22 @@ def get_sensor_external_request_logs_for_farm(*, farm_uuid, physical_device_uuid
         raise ValueError("Sensor external API tables are not migrated.") from exc
 
 
-def get_farm_sensor_map_for_logs(*, logs):
+def get_farm_device_map_for_logs(*, logs):
     try:
         logs = list(logs)
         if not logs:
             return {}
-        farm_sensor_queryset = FarmSensor.objects.select_related("farm", "sensor_catalog").filter(
+        farm_device_queryset = FarmDevice.objects.select_related("farm", "sensor_catalog").filter(
             farm__farm_uuid__in={log.farm_uuid for log in logs},
             physical_device_uuid__in={log.physical_device_uuid for log in logs},
         ).order_by("-created_at", "-id")
-        farm_sensor_map = {}
-        for farm_sensor in farm_sensor_queryset:
-            exact_key = (farm_sensor.farm.farm_uuid, farm_sensor.sensor_catalog.uuid if farm_sensor.sensor_catalog else None, farm_sensor.physical_device_uuid)
-            fallback_key = (farm_sensor.farm.farm_uuid, None, farm_sensor.physical_device_uuid)
-            farm_sensor_map.setdefault(exact_key, farm_sensor)
-            farm_sensor_map.setdefault(fallback_key, farm_sensor)
-        return farm_sensor_map
+        farm_device_map = {}
+        for farm_device in farm_device_queryset:
+            exact_key = (farm_device.farm.farm_uuid, farm_device.sensor_catalog.uuid if farm_device.sensor_catalog else None, farm_device.physical_device_uuid)
+            fallback_key = (farm_device.farm.farm_uuid, None, farm_device.physical_device_uuid)
+            farm_device_map.setdefault(exact_key, farm_device)
+            farm_device_map.setdefault(fallback_key, farm_device)
+        return farm_device_map
     except (ProgrammingError, OperationalError) as exc:
         raise ValueError("Sensor external API tables are not migrated.") from exc
 
@@ -86,7 +86,7 @@ def get_latest_sensor_external_request_log(*, farm_uuid, sensor_catalog_uuid, ph
 
 def create_sensor_external_notification(*, physical_device_uuid, payload=None):
     payload = payload or {}
-    sensor = FarmSensor.objects.select_related("farm", "farm__current_crop_area", "sensor_catalog").filter(physical_device_uuid=physical_device_uuid).first()
+    sensor = FarmDevice.objects.select_related("farm", "farm__current_crop_area", "sensor_catalog").filter(physical_device_uuid=physical_device_uuid).first()
     if sensor is None:
         raise ValueError("Physical device not found.")
     try:
@@ -110,7 +110,7 @@ def create_sensor_external_notification(*, physical_device_uuid, payload=None):
 
 def forward_sensor_payload_to_farm_data(*, physical_device_uuid, payload=None):
     payload = payload or {}
-    sensor = FarmSensor.objects.select_related("farm", "farm__current_crop_area", "sensor_catalog").filter(physical_device_uuid=physical_device_uuid).first()
+    sensor = FarmDevice.objects.select_related("farm", "farm__current_crop_area", "sensor_catalog").filter(physical_device_uuid=physical_device_uuid).first()
     if sensor is None:
         raise ValueError("Physical device not found.")
     farm_boundary = _get_farm_boundary(sensor=sensor)
@@ -273,23 +273,23 @@ def _get_sensor_context(farm=None):
     if not history:
         return None
     latest_log, latest_readings = history[0]
-    farm_sensor_map = get_farm_sensor_map_for_logs(logs=[latest_log])
-    farm_sensor = farm_sensor_map.get((latest_log.farm_uuid, latest_log.sensor_catalog_uuid, latest_log.physical_device_uuid)) or primary_sensor
-    return {"farm_sensor": farm_sensor, "latest_log": latest_log, "latest_readings": latest_readings, "previous_readings": history[1][1] if len(history) > 1 else {}, "history": history}
+    farm_device_map = get_farm_device_map_for_logs(logs=[latest_log])
+    farm_device = farm_device_map.get((latest_log.farm_uuid, latest_log.sensor_catalog_uuid, latest_log.physical_device_uuid)) or primary_sensor
+    return {"farm_device": farm_device, "latest_log": latest_log, "latest_readings": latest_readings, "previous_readings": history[1][1] if len(history) > 1 else {}, "history": history}
 
 
 def _build_sensor_meta(context, fallback_sensor):
     sensor = deepcopy(fallback_sensor)
     if not context:
         return sensor
-    farm_sensor = context.get("farm_sensor")
+    farm_device = context.get("farm_device")
     latest_log = context["latest_log"]
     sensor["physicalDeviceUuid"] = str(latest_log.physical_device_uuid)
     sensor["updatedAt"] = latest_log.created_at.isoformat()
-    if farm_sensor is not None:
-        sensor["name"] = farm_sensor.name or sensor["name"]
-        if farm_sensor.sensor_catalog is not None:
-            sensor["sensorCatalogCode"] = farm_sensor.sensor_catalog.code
+    if farm_device is not None:
+        sensor["name"] = farm_device.name or sensor["name"]
+        if farm_device.sensor_catalog is not None:
+            sensor["sensorCatalogCode"] = farm_device.sensor_catalog.code
     return sensor
 
 
@@ -434,9 +434,9 @@ def get_sensor_7_in_1_soil_moisture_heatmap_data(farm=None, context=None):
     if not chart_points:
         return data
     sensor_name = data["zones"][0]
-    farm_sensor = context.get("farm_sensor")
-    if farm_sensor is not None and farm_sensor.name:
-        sensor_name = farm_sensor.name
+    farm_device = context.get("farm_device")
+    if farm_device is not None and farm_device.name:
+        sensor_name = farm_device.name
     data["zones"] = [sensor_name]
     data["hours"] = [point["x"] for point in chart_points]
     data["series"] = [{"name": sensor_name, "data": chart_points}]
@@ -557,3 +557,496 @@ def get_sensor_radar_chart_data(*, farm, physical_device_uuid, range_value):
         current_data.append(round(current_value, 2))
         ideal_data.append(round(ideal_value, 2))
     return {"labels": labels, "series": [{"name": "وضعیت فعلی", "data": current_data}, {"name": "بازه ایده آل", "data": ideal_data}]}
+
+
+DEVICE_COMMAND_PAYLOAD_TYPES = {
+    "string": str,
+    "integer": int,
+    "number": (int, float),
+    "boolean": bool,
+    "object": dict,
+    "array": list,
+}
+DEFAULT_DEVICE_WIDGETS = [
+    "values_list",
+    "comparison_chart",
+    "radar_chart",
+    "latest_payload",
+    "anomaly_card",
+    "soil_moisture_heatmap",
+]
+
+
+def get_farm_device_by_physical_uuid(*, physical_device_uuid, owner=None):
+    queryset = FarmDevice.objects.select_related("farm", "sensor_catalog").filter(physical_device_uuid=physical_device_uuid)
+    if owner is not None:
+        queryset = queryset.filter(farm__owner=owner)
+    return queryset.first()
+
+
+def get_device_catalog_for_farm_device(farm_device, *, device_code=None):
+    if farm_device is None:
+        return None
+    if device_code:
+        return farm_device.get_device_catalog_by_code(device_code)
+    return farm_device.sensor_catalog if farm_device.sensor_catalog_id else (farm_device.get_device_catalogs()[0] if farm_device.get_device_catalogs() else None)
+
+
+def get_latest_device_log(farm_device, *, device_catalog=None):
+    if farm_device is None:
+        return None
+    return get_latest_sensor_external_request_log(
+        farm_uuid=farm_device.farm.farm_uuid,
+        sensor_catalog_uuid=device_catalog.uuid if device_catalog else (farm_device.sensor_catalog.uuid if farm_device.sensor_catalog else None),
+        physical_device_uuid=farm_device.physical_device_uuid,
+    )
+
+
+def get_device_logs(farm_device, *, range_value=None, date_from=None, date_to=None):
+    if farm_device is None:
+        return SensorExternalRequestLog.objects.none()
+    if range_value:
+        date_from = timezone.localdate() - timedelta(days=max(range_value - 1, 0))
+    return get_sensor_external_request_logs_for_farm(
+        farm_uuid=farm_device.farm.farm_uuid,
+        physical_device_uuid=farm_device.physical_device_uuid,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+def validate_output_device_catalog(*, farm_device, device_code):
+    device_catalog = get_device_catalog_for_farm_device(farm_device, device_code=device_code)
+    if device_catalog is None:
+        raise ValueError("Device code is not attached to this farm device.")
+    if device_catalog.device_communication_type == "input_only":
+        raise ValueError("Selected device code is input-only and cannot be used for output data endpoints.")
+    return device_catalog
+
+
+def _get_default_field_definition_map():
+    return {field["id"]: field for field in SENSOR_FIELDS}
+
+
+def _normalize_payload_keys(payload_keys):
+    if isinstance(payload_keys, str):
+        return [payload_keys]
+    if isinstance(payload_keys, (list, tuple)):
+        return [item for item in payload_keys if isinstance(item, str) and item]
+    return []
+
+
+def _get_device_field_definitions(device_catalog):
+    default_field_map = _get_default_field_definition_map()
+    if device_catalog is None:
+        return list(default_field_map.values())
+
+    payload_mapping = device_catalog.payload_mapping if isinstance(device_catalog.payload_mapping, dict) else {}
+    display_schema = device_catalog.display_schema if isinstance(device_catalog.display_schema, dict) else {}
+    display_fields = display_schema.get("fields", []) if isinstance(display_schema.get("fields", []), list) else []
+
+    ordered_ids = []
+    for item in display_fields:
+        if isinstance(item, dict) and item.get("id"):
+            ordered_ids.append(item["id"])
+    for item in device_catalog.returned_data_fields:
+        if isinstance(item, str) and item not in ordered_ids:
+            ordered_ids.append(item)
+    for item in payload_mapping.keys():
+        if item not in ordered_ids:
+            ordered_ids.append(item)
+    if not ordered_ids:
+        ordered_ids = list(default_field_map.keys())
+
+    display_field_map = {
+        item["id"]: item for item in display_fields if isinstance(item, dict) and item.get("id")
+    }
+    field_definitions = []
+    for field_id in ordered_ids:
+        default_field = default_field_map.get(field_id, {})
+        display_field = display_field_map.get(field_id, {})
+        payload_keys = _normalize_payload_keys(payload_mapping.get(field_id)) or list(default_field.get("payload_keys", [])) or [field_id]
+        field_definitions.append(
+            {
+                "id": field_id,
+                "label": display_field.get("label") or default_field.get("label") or field_id.replace("_", " ").title(),
+                "unit": display_field.get("unit") or default_field.get("unit") or "",
+                "payload_keys": payload_keys,
+                "ideal_min": display_field.get("ideal_min", default_field.get("ideal_min", 0.0)),
+                "ideal_max": display_field.get("ideal_max", default_field.get("ideal_max", 100.0)),
+                "radar_label": display_field.get("radar_label") or default_field.get("radar_label") or display_field.get("label") or default_field.get("label") or field_id,
+            }
+        )
+    return field_definitions
+
+
+def _extract_payload_with_field_definitions(payload, field_definitions):
+    if not isinstance(payload, dict):
+        return {}
+    if isinstance(payload.get("payload"), dict):
+        payload = payload["payload"]
+    expected_keys = {key for field in field_definitions for key in field.get("payload_keys", [])}
+    if isinstance(payload.get("data"), dict):
+        nested = payload["data"]
+        if not expected_keys or any(key in nested for key in expected_keys):
+            payload = nested
+    return payload
+
+
+def normalize_device_payload(device_catalog, payload):
+    field_definitions = _get_device_field_definitions(device_catalog)
+    payload = _extract_payload_with_field_definitions(payload, field_definitions)
+    normalized_payload = {}
+    for field in field_definitions:
+        for key in field["payload_keys"]:
+            if key in payload:
+                normalized_payload[field["id"]] = payload[key]
+                break
+    return normalized_payload
+
+
+def extract_device_readings(device_catalog, payload):
+    normalized_payload = normalize_device_payload(device_catalog, payload)
+    readings = {}
+    for key, value in normalized_payload.items():
+        numeric_value = _to_float(value)
+        if numeric_value is not None:
+            readings[key] = numeric_value
+    return readings
+
+
+def _get_device_supported_widgets(device_catalog):
+    if device_catalog is None:
+        return list(DEFAULT_DEVICE_WIDGETS)
+    widgets = device_catalog.supported_widgets if isinstance(device_catalog.supported_widgets, list) else []
+    if widgets:
+        return widgets
+    if device_catalog.device_communication_type == "input_only":
+        return []
+    return list(DEFAULT_DEVICE_WIDGETS)
+
+
+def _get_device_history_context(farm_device):
+    if farm_device is None:
+        return None
+    try:
+        logs_queryset = get_device_logs(farm_device)
+    except ValueError:
+        return None
+    history = []
+    device_catalog = get_device_catalog_for_farm_device(farm_device)
+    for log in logs_queryset[:MAX_HISTORY_ITEMS]:
+        readings = extract_device_readings(device_catalog, log.payload)
+        normalized_payload = normalize_device_payload(device_catalog, log.payload)
+        if readings or normalized_payload:
+            history.append((log, readings, normalized_payload))
+    if not history:
+        return {
+            "farm_device": farm_device,
+            "latest_log": None,
+            "latest_readings": {},
+            "latest_payload": {},
+            "previous_readings": {},
+            "history": [],
+        }
+    latest_log, latest_readings, latest_payload = history[0]
+    return {
+        "farm_device": farm_device,
+        "latest_log": latest_log,
+        "latest_readings": latest_readings,
+        "latest_payload": latest_payload,
+        "previous_readings": history[1][1] if len(history) > 1 else {},
+        "history": history,
+    }
+
+
+def build_device_meta(farm_device, context=None, *, device_catalog=None):
+    device_catalog = device_catalog or get_device_catalog_for_farm_device(farm_device)
+    latest_log = (context or {}).get("latest_log")
+    return {
+        "name": farm_device.name if farm_device else "",
+        "physicalDeviceUuid": str(farm_device.physical_device_uuid) if farm_device else None,
+        "sensorCatalogCode": device_catalog.code if device_catalog else "",
+        "updatedAt": latest_log.created_at.isoformat() if latest_log else None,
+    }
+
+
+def build_device_latest_payload(farm_device, *, device_code):
+    device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
+    latest_log = get_latest_device_log(farm_device, device_catalog=device_catalog)
+    if latest_log is None:
+        return {
+            "physical_device_uuid": farm_device.physical_device_uuid,
+            "device_code": device_code,
+            "device_catalog_code": device_catalog.code if device_catalog else None,
+            "raw_payload": {},
+            "normalized_payload": {},
+            "readings": {},
+            "created_at": None,
+        }
+    return {
+        "physical_device_uuid": farm_device.physical_device_uuid,
+        "device_code": device_code,
+        "device_catalog_code": device_catalog.code if device_catalog else None,
+        "raw_payload": latest_log.payload,
+        "normalized_payload": normalize_device_payload(device_catalog, latest_log.payload),
+        "readings": extract_device_readings(device_catalog, latest_log.payload),
+        "created_at": latest_log.created_at,
+    }
+
+
+def build_device_values_list(farm_device, range_value, *, device_code):
+    try:
+        logs_queryset = get_device_logs(farm_device)
+    except ValueError:
+        return {"sensors": []}
+    start_time = timezone.now() - VALUES_LIST_RANGES[range_value]
+    logs = list(logs_queryset.filter(created_at__gte=start_time).order_by("created_at", "id"))
+    if not logs:
+        latest_log = logs_queryset.order_by("-created_at", "-id").first()
+        if latest_log is None:
+            return {"sensors": []}
+        logs = [latest_log]
+    device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
+    earliest_payload = {}
+    latest_payload = {}
+    for log in logs:
+        normalized_payload = extract_device_readings(device_catalog, log.payload)
+        if not normalized_payload:
+            continue
+        if not earliest_payload:
+            earliest_payload = normalized_payload
+        latest_payload = normalized_payload
+    if not latest_payload:
+        return {"sensors": []}
+    sensors = []
+    for field in _get_device_field_definitions(device_catalog):
+        current_value = latest_payload.get(field["id"])
+        if current_value is None:
+            continue
+        previous_value = earliest_payload.get(field["id"], current_value)
+        delta = round(current_value - previous_value, 2)
+        sensors.append(
+            {
+                "title": field["label"],
+                "subtitle": _format_current_value_subtitle(field["label"], current_value, field["unit"]),
+                "trendNumber": abs(delta),
+                "trend": "positive" if delta >= 0 else "negative",
+                "unit": field["unit"],
+            }
+        )
+    return {"sensors": sensors}
+
+
+def build_device_summary_values_list(farm_device, context=None, *, device_catalog=None):
+    context = _get_device_history_context(farm_device) if context is None else context
+    device_catalog = device_catalog or get_device_catalog_for_farm_device(farm_device)
+    data = {"sensor": build_device_meta(farm_device, context), "sensors": []}
+    latest_readings = context.get("latest_readings", {}) if context else {}
+    previous_readings = context.get("previous_readings", {}) if context else {}
+    for field in _get_device_field_definitions(device_catalog):
+        value = latest_readings.get(field["id"])
+        if value is None:
+            continue
+        previous = previous_readings.get(field["id"])
+        change = 0.0 if previous is None else round(value - previous, 2)
+        data["sensors"].append(
+            {
+                "id": field["id"],
+                "title": _format_value(value, field["unit"]),
+                "subtitle": field["label"],
+                "trendNumber": abs(change),
+                "trend": "positive" if change >= 0 else "negative",
+                "unit": field["unit"],
+            }
+        )
+    return data
+
+
+def build_device_radar_chart(farm_device, range_value=None, *, device_code):
+    device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
+    context = _get_device_history_context(farm_device)
+    if not context or not context.get("latest_readings"):
+        return {"labels": [], "series": []}
+    labels, current_data, ideal_data = [], [], []
+    for field in _get_device_field_definitions(device_catalog):
+        current_value = context["latest_readings"].get(field["id"])
+        if current_value is None:
+            continue
+        labels.append(field["radar_label"])
+        current_data.append(round(current_value, 2))
+        midpoint = (field["ideal_min"] + field["ideal_max"]) / 2
+        ideal_data.append(round(midpoint, 2))
+    return {"labels": labels, "series": [{"name": "وضعیت فعلی", "data": current_data}, {"name": "بازه ایده آل", "data": ideal_data}]}
+
+
+def build_device_comparison_chart(farm_device, range_value, *, device_code):
+    days = COMPARISON_CHART_RANGES[range_value]
+    start_date = timezone.localdate() - timedelta(days=days - 1)
+    try:
+        logs_queryset = get_device_logs(farm_device, date_from=start_date)
+    except ValueError:
+        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+    device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
+    field_definitions = _get_device_field_definitions(device_catalog)
+    grouped_logs = {}
+    for log in reversed(list(logs_queryset[: days * 24])):
+        bucket_date = timezone.localtime(log.created_at).date()
+        grouped_logs[bucket_date] = extract_device_readings(device_catalog, log.payload)
+    if not grouped_logs:
+        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+    sorted_dates = sorted(grouped_logs.keys())
+    categories = [_format_comparison_category(bucket_date, range_value) for bucket_date in sorted_dates]
+    series = []
+    primary_data = []
+    for field in field_definitions:
+        data_points = []
+        for bucket_date in sorted_dates:
+            value = grouped_logs[bucket_date].get(field["id"])
+            if value is None:
+                data_points.append(0.0)
+            else:
+                data_points.append(round(value, 2))
+        if any(point != 0.0 for point in data_points):
+            series.append({"name": field["label"], "data": data_points})
+            if not primary_data:
+                primary_data = data_points
+    if not series or not primary_data:
+        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+    return {
+        "series": series,
+        "categories": categories,
+        "currentValue": round(primary_data[-1], 2),
+        "vsLastWeek": _format_percent_change(primary_data[-1], primary_data[0]),
+    }
+
+
+def build_device_anomaly_detection_card(farm_device, context=None, *, device_catalog=None):
+    context = _get_device_history_context(farm_device) if context is None else context
+    device_catalog = device_catalog or get_device_catalog_for_farm_device(farm_device)
+    anomalies = []
+    latest_readings = context.get("latest_readings", {}) if context else {}
+    for field in _get_device_field_definitions(device_catalog):
+        value = latest_readings.get(field["id"])
+        if value is None:
+            continue
+        anomaly = _build_anomaly_item(field, value)
+        if anomaly is not None:
+            anomalies.append(anomaly)
+    return {
+        "anomalies": anomalies or [
+            {
+                "sensor": farm_device.name if farm_device else "Device",
+                "value": "نرمال",
+                "expected": "تمام شاخص‌ها در بازه مجاز هستند",
+                "deviation": "0",
+                "severity": "success",
+            }
+        ]
+    }
+
+
+def build_device_soil_moisture_heatmap(farm_device, context=None, *, device_catalog=None):
+    data = deepcopy(SOIL_MOISTURE_HEATMAP)
+    context = _get_device_history_context(farm_device) if context is None else context
+    if not context or not context.get("history"):
+        return data
+    device_catalog = device_catalog or get_device_catalog_for_farm_device(farm_device)
+    field_definitions = _get_device_field_definitions(device_catalog)
+    primary_field = field_definitions[0] if field_definitions else None
+    if primary_field is None:
+        return data
+    chart_points = []
+    for log, readings, _normalized_payload in reversed(context["history"][:MAX_CHART_POINTS]):
+        value = readings.get(primary_field["id"])
+        if value is None:
+            continue
+        chart_points.append({"x": log.created_at.strftime("%H:%M"), "y": round(value, 2)})
+    if not chart_points:
+        return data
+    sensor_name = farm_device.name if farm_device and farm_device.name else data["zones"][0]
+    data["zones"] = [sensor_name]
+    data["hours"] = [point["x"] for point in chart_points]
+    data["series"] = [{"name": sensor_name, "data": chart_points}]
+    return data
+
+
+def build_device_avg_primary_metric(farm_device, context=None, *, device_catalog=None):
+    data = deepcopy(AVG_SOIL_MOISTURE)
+    context = _get_device_history_context(farm_device) if context is None else context
+    latest_readings = context.get("latest_readings", {}) if context else {}
+    device_catalog = device_catalog or get_device_catalog_for_farm_device(farm_device)
+    field_definitions = _get_device_field_definitions(device_catalog)
+    primary_field = field_definitions[0] if field_definitions else None
+    if primary_field is None:
+        return data
+    primary_value = latest_readings.get(primary_field["id"])
+    if primary_value is None:
+        return data
+    chip_text, chip_color, avatar_color = _calculate_status_chip(primary_value)
+    data["title"] = primary_field["label"]
+    data["stats"] = _format_value(primary_value, primary_field["unit"])
+    data["chipText"] = chip_text
+    data["chipColor"] = chip_color
+    data["avatarColor"] = avatar_color
+    return data
+
+
+def build_device_summary(farm_device, *, device_code):
+    context = _get_device_history_context(farm_device)
+    device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
+    summary = {"sensor": build_device_meta(farm_device, context, device_catalog=device_catalog), "supportedWidgets": _get_device_supported_widgets(device_catalog)}
+    if device_catalog and device_catalog.device_communication_type == "input_only":
+        summary["commands"] = device_catalog.commands_schema if isinstance(device_catalog.commands_schema, list) else []
+        return summary
+    summary["sensorValuesList"] = build_device_summary_values_list(farm_device, context=context, device_catalog=device_catalog)
+    if "comparison_chart" in summary["supportedWidgets"]:
+        summary["sensorComparisonChart"] = build_device_comparison_chart(farm_device, "7d", device_code=device_code)
+    if "radar_chart" in summary["supportedWidgets"]:
+        summary["sensorRadarChart"] = build_device_radar_chart(farm_device, device_code=device_code)
+    if "anomaly_card" in summary["supportedWidgets"]:
+        summary["anomalyDetectionCard"] = build_device_anomaly_detection_card(farm_device, context=context, device_catalog=device_catalog)
+    if "soil_moisture_heatmap" in summary["supportedWidgets"]:
+        summary["soilMoistureHeatmap"] = build_device_soil_moisture_heatmap(farm_device, context=context, device_catalog=device_catalog)
+    summary["avgSoilMoisture"] = build_device_avg_primary_metric(farm_device, context=context, device_catalog=device_catalog)
+    return summary
+
+
+def validate_device_command(farm_device, command, payload, *, device_code):
+    device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
+    commands_schema = device_catalog.commands_schema if device_catalog and isinstance(device_catalog.commands_schema, list) else []
+    if not commands_schema:
+        raise ValueError("This device does not support commands.")
+    matched_command = next(
+        (item for item in commands_schema if isinstance(item, dict) and item.get("command") == command),
+        None,
+    )
+    if matched_command is None:
+        raise ValueError("Command is not supported for this device.")
+    payload = payload or {}
+    if not isinstance(payload, dict):
+        raise ValueError("`payload` must be an object.")
+    payload_schema = matched_command.get("payload_schema", {})
+    if not isinstance(payload_schema, dict):
+        return matched_command
+    for key, expected_type in payload_schema.items():
+        if key not in payload:
+            raise ValueError(f"`{key}` is required for this command.")
+        expected_python_type = DEVICE_COMMAND_PAYLOAD_TYPES.get(expected_type)
+        if expected_python_type is None:
+            continue
+        if expected_type == "integer" and isinstance(payload[key], bool):
+            raise ValueError(f"`{key}` must be of type {expected_type}.")
+        if not isinstance(payload[key], expected_python_type):
+            raise ValueError(f"`{key}` must be of type {expected_type}.")
+    return matched_command
+
+
+def execute_device_command(*, farm_device, device_code, command, payload=None):
+    validate_device_command(farm_device, command, payload or {}, device_code=device_code)
+    return {
+        "physical_device_uuid": farm_device.physical_device_uuid,
+        "device_code": device_code,
+        "command": command,
+        "status": "queued",
+    }

@@ -7,4 +7,3 @@ urlpatterns = [
     path("radar-chart/", SensorRadarChartView.as_view(), name="sensor-radar-chart"),
     path("values-list/", SensorValuesListView.as_view(), name="sensor-values-list"),
 ]
-

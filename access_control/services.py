@@ -109,16 +109,17 @@ def build_farm_access_profile(farm):
         "products",
         "sensors",
         "sensors__sensor_catalog",
+        "sensors__device_catalogs",
     ).get(pk=farm.pk)
 
     subscription_plan = get_effective_subscription_plan(farm)
     product_ids = list(farm.products.values_list("id", flat=True))
-    sensor_catalog_ids = list(
-        farm.sensors.exclude(sensor_catalog__isnull=True).values_list("sensor_catalog_id", flat=True)
-    )
-    sensor_catalog_codes = set(
-        farm.sensors.exclude(sensor_catalog__isnull=True).values_list("sensor_catalog__code", flat=True)
-    )
+    sensor_catalog_ids = set()
+    sensor_catalog_codes = set()
+    for sensor in farm.sensors.all():
+        for catalog in sensor.get_device_catalogs():
+            sensor_catalog_ids.add(catalog.id)
+            sensor_catalog_codes.add(catalog.code)
 
     features = {
         feature.code: {

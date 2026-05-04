@@ -3,7 +3,7 @@ from access_control.models import SubscriptionPlan
 from access_control.serializers import SubscriptionPlanSerializer
 from access_control.catalog import GOLD_PLAN_CODE
 from access_control.services import get_effective_subscription_plan
-from device_hub.models import FarmSensor, SensorCatalog
+from device_hub.models import DeviceCatalog, FarmDevice
 
 from .models import FarmHub, FarmType, Product
 from .services import normalize_farm_boundary_input
@@ -37,15 +37,19 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
 
 
-class FarmSensorSerializer(serializers.ModelSerializer):
+class FarmDeviceSerializer(serializers.ModelSerializer):
     last_updated = serializers.DateTimeField(source="updated_at", read_only=True)
     sensor_catalog_uuid = serializers.UUIDField(source="sensor_catalog.uuid", read_only=True)
+    device_catalog_uuids = serializers.SerializerMethodField()
+    device_catalog_codes = serializers.SerializerMethodField()
 
     class Meta:
-        model = FarmSensor
+        model = FarmDevice
         fields = [
             "uuid",
             "sensor_catalog_uuid",
+            "device_catalog_uuids",
+            "device_catalog_codes",
             "physical_device_uuid",
             "name",
             "sensor_type",
@@ -56,13 +60,19 @@ class FarmSensorSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["uuid", "last_updated"]
 
+    def get_device_catalog_uuids(self, obj):
+        return [str(catalog.uuid) for catalog in obj.get_device_catalogs()]
+
+    def get_device_catalog_codes(self, obj):
+        return [catalog.code for catalog in obj.get_device_catalogs()]
+
 
 class FarmHubSerializer(serializers.ModelSerializer):
     last_updated = serializers.DateTimeField(source="updated_at", read_only=True)
     farm_type = FarmTypeSerializer(read_only=True)
     subscription_plan = serializers.SerializerMethodField()
     products = ProductSerializer(many=True, read_only=True)
-    sensors = FarmSensorSerializer(many=True, read_only=True)
+    sensors = FarmDeviceSerializer(many=True, read_only=True)
     area_uuid = serializers.UUIDField(source="current_crop_area.uuid", read_only=True)
 
     class Meta:
@@ -89,13 +99,20 @@ class FarmHubSerializer(serializers.ModelSerializer):
         return SubscriptionPlanSerializer(subscription_plan, context=self.context).data
 
 
-class FarmSensorWriteSerializer(serializers.ModelSerializer):
+class FarmDeviceWriteSerializer(serializers.ModelSerializer):
     sensor_catalog_uuid = serializers.UUIDField(write_only=True, required=False)
+    device_catalog_uuids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+        allow_empty=False,
+    )
 
     class Meta:
-        model = FarmSensor
+        model = FarmDevice
         fields = [
             "sensor_catalog_uuid",
+            "device_catalog_uuids",
             "physical_device_uuid",
             "name",
             "sensor_type",
@@ -106,13 +123,27 @@ class FarmSensorWriteSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         sensor_catalog_uuid = attrs.pop("sensor_catalog_uuid", None)
+        device_catalog_uuids = attrs.pop("device_catalog_uuids", None)
+        catalog_uuids = []
         if sensor_catalog_uuid is not None:
+            catalog_uuids.append(sensor_catalog_uuid)
+        if device_catalog_uuids:
+            catalog_uuids.extend(device_catalog_uuids)
+
+        if catalog_uuids:
             try:
-                sensor_catalog = SensorCatalog.objects.get(uuid=sensor_catalog_uuid)
-            except SensorCatalog.DoesNotExist as exc:
-                raise serializers.ValidationError({"sensor_catalog_uuid": ["Sensor catalog not found."]}) from exc
-            attrs["sensor_catalog"] = sensor_catalog
-            attrs.setdefault("name", sensor_catalog.name)
+                catalog_map = {
+                    catalog.uuid: catalog
+                    for catalog in DeviceCatalog.objects.filter(uuid__in=catalog_uuids)
+                }
+            except DeviceCatalog.DoesNotExist as exc:
+                raise serializers.ValidationError({"device_catalog_uuids": ["Device catalog not found."]}) from exc
+            if len(catalog_map) != len({uuid for uuid in catalog_uuids}):
+                raise serializers.ValidationError({"device_catalog_uuids": ["One or more device catalogs were not found."]})
+            device_catalogs = [catalog_map[uuid] for uuid in dict.fromkeys(catalog_uuids)]
+            attrs["sensor_catalog"] = device_catalogs[0]
+            attrs["device_catalogs"] = device_catalogs
+            attrs.setdefault("name", device_catalogs[0].name)
 
         return attrs
 
@@ -127,7 +158,7 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         write_only=True,
         allow_empty=False,
     )
-    sensors = FarmSensorWriteSerializer(many=True, required=False)
+    sensors = FarmDeviceWriteSerializer(many=True, required=False)
     sensor_key = serializers.CharField(write_only=True, required=False, allow_blank=True, default="sensor-7-1")
     sensor_payload = serializers.JSONField(write_only=True, required=False)
     irrigation_method_id = serializers.IntegerField(required=False, allow_null=True)
@@ -247,7 +278,13 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         if products:
             farm.products.set(products)
         if sensors_data:
-            FarmSensor.objects.bulk_create([FarmSensor(farm=farm, **sensor_data) for sensor_data in sensors_data])
+            created_devices = []
+            for sensor_data in sensors_data:
+                device_catalogs = sensor_data.pop("device_catalogs", [])
+                farm_device = FarmDevice.objects.create(farm=farm, **sensor_data)
+                if device_catalogs:
+                    farm_device.device_catalogs.set(device_catalogs)
+                created_devices.append(farm_device)
         return farm
 
     def update(self, instance, validated_data):
@@ -275,7 +312,11 @@ class FarmHubCreateSerializer(serializers.ModelSerializer):
         if sensors_data is not None:
             instance.sensors.all().delete()
             if sensors_data:
-                FarmSensor.objects.bulk_create([FarmSensor(farm=instance, **sensor_data) for sensor_data in sensors_data])
+                for sensor_data in sensors_data:
+                    device_catalogs = sensor_data.pop("device_catalogs", [])
+                    farm_device = FarmDevice.objects.create(farm=instance, **sensor_data)
+                    if device_catalogs:
+                        farm_device.device_catalogs.set(device_catalogs)
 
         return instance
 

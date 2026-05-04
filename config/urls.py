@@ -11,6 +11,7 @@ urlpatterns = [
     path("api/account/", include("account.urls")),
     path("api/farm-hub/", include("farm_hub.urls")),
     path("api/access-control/", include("access_control.urls")),
+    path("api/device-hub/", include("device_hub.urls")),
     path("api/sensor-catalog/", include("device_hub.sensor_catalog_urls")),
     path("api/farm-dashboard-config/", include("dashboard.urls_config")),
     path("api/farm-dashboard/", include("dashboard.urls")),

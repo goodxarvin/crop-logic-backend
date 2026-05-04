@@ -31,6 +31,7 @@ class FarmFeatureAuthorizationView(APIView):
                 "products",
                 "sensors",
                 "sensors__sensor_catalog",
+                "sensors__device_catalogs",
             ).get(
                 farm_uuid=farm_uuid,
                 owner=request.user,

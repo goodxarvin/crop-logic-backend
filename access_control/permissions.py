@@ -27,6 +27,7 @@ class FeatureAccessPermission(BasePermission):
                 "products",
                 "sensors",
                 "sensors__sensor_catalog",
+                "sensors__device_catalogs",
             ).get(farm_uuid=farm_uuid, owner=request.user)
         except FarmHub.DoesNotExist:
             self.message = f"Access to feature `{feature_code}` is denied."
