@@ -11,6 +11,8 @@ class PlantSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "description",
+            "metadata",
             "light",
             "watering",
             "soil",
@@ -22,6 +24,9 @@ class PlantSerializer(serializers.ModelSerializer):
             "harvest_time",
             "spacing",
             "fertilizer",
+            "health_profile",
+            "irrigation_profile",
+            "growth_profile",
             "created_at",
             "updated_at",
         ]

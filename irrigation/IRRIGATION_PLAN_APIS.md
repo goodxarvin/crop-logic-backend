@@ -42,7 +42,7 @@ GET /api/irrigation/plans/?farm_uuid=11111111-1111-1111-1111-111111111111&page=1
       "crop_id": "گندم",
       "plant_name": "گندم",
       "growth_stage": "flowering",
-      "is_active": true,
+      "is_active": false,
       "created_at": "2025-02-24T10:20:30Z"
     }
   ],
@@ -63,6 +63,7 @@ GET /api/irrigation/plans/?farm_uuid=11111111-1111-1111-1111-111111111111&page=1
 
 - فقط planهایی برگردانده می‌شوند که `is_deleted=False` باشند.
 - ترتیب لیست از جدید به قدیم است.
+- در هر مزرعه، در هر نوع plan فقط یک plan می‌تواند `is_active=true` باشد.
 
 ---
 
@@ -95,7 +96,7 @@ GET /api/irrigation/plans/6d6a1f0d-1a9b-4f2f-8fe1-2d73d9d2d9f1/
     "crop_id": "گندم",
     "plant_name": "گندم",
     "growth_stage": "flowering",
-    "is_active": true,
+    "is_active": false,
     "created_at": "2025-02-24T10:20:30Z",
     "updated_at": "2025-02-24T10:20:30Z",
     "plan_payload": {
@@ -195,7 +196,7 @@ Content-Type: application/json
   "msg": "success",
   "data": {
     "plan_uuid": "6d6a1f0d-1a9b-4f2f-8fe1-2d73d9d2d9f1",
-    "is_active": false
+    "is_active": true
   }
 }
 ```
@@ -223,6 +224,8 @@ Content-Type: application/json
 
 ## Summary
 
+- planهای جدید به‌صورت پیش‌فرض `inactive` ساخته می‌شوند.
+- در هر مزرعه فقط یک plan از این نوع می‌تواند `active` باشد.
 - `GET /api/irrigation/plans/` لیست برنامه‌ها
 - `GET /api/irrigation/plans/{plan_uuid}/` جزئیات برنامه
 - `DELETE /api/irrigation/plans/{plan_uuid}/` حذف نرم برنامه

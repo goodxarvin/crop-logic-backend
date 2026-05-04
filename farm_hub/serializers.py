@@ -3,10 +3,10 @@ from access_control.models import SubscriptionPlan
 from access_control.serializers import SubscriptionPlanSerializer
 from access_control.catalog import GOLD_PLAN_CODE
 from access_control.services import get_effective_subscription_plan
+from device_hub.models import FarmSensor, SensorCatalog
 
-from .models import FarmHub, FarmSensor, FarmType, Product
+from .models import FarmHub, FarmType, Product
 from .services import normalize_farm_boundary_input
-from sensor_catalog.models import SensorCatalog
 
 
 class FarmTypeSerializer(serializers.ModelSerializer):

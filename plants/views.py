@@ -8,7 +8,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from config.swagger import code_response, farm_uuid_query_param
 from farm_hub.models import FarmHub, Product
 from .serializers import PlantNameSerializer, PlantSerializer
-from .services import PlantSyncError, ensure_plant_defaults, sync_plants_from_ai
+from .services import PlantSyncError, ensure_plant_defaults, push_plants_to_ai
 
 
 class PlantBaseView(APIView):
@@ -17,7 +17,7 @@ class PlantBaseView(APIView):
     @staticmethod
     def _sync_plants_if_possible():
         try:
-            sync_plants_from_ai()
+            push_plants_to_ai()
         except PlantSyncError:
             return False
         return True
@@ -38,13 +38,12 @@ class PlantListView(PlantBaseView):
         responses={200: code_response("PlantListResponse", data=PlantSerializer(many=True))},
     )
     def get(self, request):
-        try:
-            sync_plants_from_ai()
-        except PlantSyncError as exc:
-            if not Product.objects.exists():
-                return Response({"code": 503, "msg": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
         products = ensure_plant_defaults(Product.objects.order_by("name"))
+        try:
+            push_plants_to_ai(products)
+        except PlantSyncError as exc:
+            if not products:
+                return Response({"code": 503, "msg": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         data = PlantSerializer(products, many=True).data
         return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
 

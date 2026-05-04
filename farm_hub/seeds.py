@@ -3,8 +3,8 @@ import uuid
 from django.db import transaction
 
 from account.seeds import seed_admin_user
-from sensor_catalog.management import seed_sensor_catalog
-from sensor_catalog.models import SensorCatalog
+from device_hub.catalog_seed import seed_sensor_catalog
+from device_hub.models import SensorCatalog
 
 from .catalog import CATALOG_SEED_DATA
 from .models import FarmHub, FarmType, Product

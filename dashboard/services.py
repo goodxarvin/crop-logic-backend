@@ -15,7 +15,7 @@ from farm_alerts.services import (
 from fertilization.services import get_fertilization_dashboard_recommendation
 from irrigation.services import get_irrigation_dashboard_recommendation
 from pest_detection.services import get_risk_summary_data
-from sensor_7_in_1.services import (
+from device_hub.services import (
     get_sensor_7_in_1_summary_data,
 )
 from yield_harvest.services import get_yield_harvest_summary_data

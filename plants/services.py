@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.conf import settings
 
 from external_api_adapter import request as external_api_request
 from external_api_adapter.exceptions import ExternalAPIRequestError
@@ -14,31 +15,11 @@ DEFAULT_GROWTH_STAGES = [
     "fruiting",
     "maturity",
 ]
-AI_PLANTS_PATH = "/api/plants/"
+AI_FARM_DATA_PLANT_SYNC_PATH = "/api/farm-data/plants/sync/"
 
 
 class PlantSyncError(Exception):
     pass
-
-
-def _extract_plant_items(adapter_data):
-    if isinstance(adapter_data, list):
-        return adapter_data
-    if not isinstance(adapter_data, dict):
-        return []
-
-    data = adapter_data.get("data")
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        result = data.get("result")
-        if isinstance(result, list):
-            return result
-
-    result = adapter_data.get("result")
-    if isinstance(result, list):
-        return result
-    return []
 
 
 def _clean_stage_name(value):
@@ -110,60 +91,62 @@ def ensure_plant_defaults(queryset=None):
     return products
 
 
-@transaction.atomic
-def sync_plants_from_ai():
+def serialize_products_for_ai(products=None):
+    products = list(products if products is not None else Product.objects.select_related("farm_type").all().order_by("name"))
+    ensure_plant_defaults(products)
+    payload = []
+    for product in products:
+        payload.append(
+            {
+                "id": product.id,
+                "name": product.name,
+                "slug": "",
+                "icon": product.icon,
+                "description": product.description,
+                "metadata": product.metadata if isinstance(product.metadata, dict) else {},
+                "light": product.light,
+                "watering": product.watering,
+                "soil": product.soil,
+                "temperature": product.temperature,
+                "growth_stage": product.growth_stage,
+                "growth_stages": product.growth_stages or [],
+                "planting_season": product.planting_season,
+                "harvest_time": product.harvest_time,
+                "spacing": product.spacing,
+                "fertilizer": product.fertilizer,
+                "health_profile": product.health_profile if isinstance(product.health_profile, dict) else {},
+                "irrigation_profile": product.irrigation_profile if isinstance(product.irrigation_profile, dict) else {},
+                "growth_profile": product.growth_profile if isinstance(product.growth_profile, dict) else {},
+                "is_active": True,
+                "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+                "farm_type": product.farm_type.name if product.farm_type_id else DEFAULT_FARM_TYPE_NAME,
+            }
+        )
+    return payload
+
+
+def push_plants_to_ai(products=None):
+    api_key = getattr(settings, "FARM_DATA_API_KEY", "")
+    if not api_key:
+        raise PlantSyncError("FARM_DATA_API_KEY is not configured.")
+
+    payload = serialize_products_for_ai(products)
     try:
-        adapter_response = external_api_request("ai", AI_PLANTS_PATH, method="GET")
+        adapter_response = external_api_request(
+            "ai",
+            AI_FARM_DATA_PLANT_SYNC_PATH,
+            method="POST",
+            payload=payload,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "X-API-Key": api_key,
+                "Authorization": f"Api-Key {api_key}",
+            },
+        )
     except ExternalAPIRequestError as exc:
         raise PlantSyncError(str(exc)) from exc
 
     if adapter_response.status_code >= 400:
         raise PlantSyncError(f"AI service returned status {adapter_response.status_code}.")
-
-    products = []
-    for item in _extract_plant_items(adapter_response.data):
-        if not isinstance(item, dict):
-            continue
-
-        name = str(item.get("name") or "").strip()
-        if not name:
-            continue
-
-        farm_type_name = str(item.get("farm_type") or DEFAULT_FARM_TYPE_NAME).strip() or DEFAULT_FARM_TYPE_NAME
-        farm_type, _ = FarmType.objects.get_or_create(name=farm_type_name)
-
-        growth_profile = item.get("growth_profile") if isinstance(item.get("growth_profile"), dict) else {}
-        growth_stages = item.get("growth_stages") if isinstance(item.get("growth_stages"), list) else []
-        normalized_growth_stages = []
-        for stage in growth_stages:
-            normalized = _clean_stage_name(stage)
-            if normalized:
-                normalized_growth_stages.append(normalized)
-
-        defaults = {
-            "description": str(item.get("description") or "").strip(),
-            "metadata": item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
-            "light": str(item.get("light") or "").strip(),
-            "watering": str(item.get("watering") or "").strip(),
-            "soil": str(item.get("soil") or "").strip(),
-            "temperature": str(item.get("temperature") or "").strip(),
-            "growth_stage": str(item.get("growth_stage") or "").strip(),
-            "growth_stages": normalized_growth_stages,
-            "planting_season": str(item.get("planting_season") or "").strip(),
-            "harvest_time": str(item.get("harvest_time") or "").strip(),
-            "spacing": str(item.get("spacing") or "").strip(),
-            "fertilizer": str(item.get("fertilizer") or "").strip(),
-            "icon": str(item.get("icon") or "").strip(),
-            "health_profile": item.get("health_profile") if isinstance(item.get("health_profile"), dict) else {},
-            "irrigation_profile": item.get("irrigation_profile") if isinstance(item.get("irrigation_profile"), dict) else {},
-            "growth_profile": growth_profile,
-        }
-        product, _ = Product.objects.update_or_create(
-            farm_type=farm_type,
-            name=name,
-            defaults=defaults,
-        )
-        products.append(product)
-
-    ensure_plant_defaults(products)
-    return products
+    return payload

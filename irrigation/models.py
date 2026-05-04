@@ -74,7 +74,7 @@ class IrrigationPlan(models.Model):
     plan_payload = models.JSONField(default=dict, blank=True)
     request_payload = models.JSONField(default=dict, blank=True)
     response_payload = models.JSONField(default=dict, blank=True)
-    is_active = models.BooleanField(default=True, db_index=True)
+    is_active = models.BooleanField(default=False, db_index=True)
     is_deleted = models.BooleanField(default=False, db_index=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

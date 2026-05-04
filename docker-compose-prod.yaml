@@ -1,6 +1,6 @@
 services:
   db:
-    image: docker.iranserver.com/mysql:8
+    image: mirror-docker.runflare.com/library/mysql:8
     container_name: croplogic-db
     environment:
       MYSQL_DATABASE: ${DB_NAME}
@@ -21,7 +21,7 @@ services:
       - crop_network
 
   redis:
-    image: docker.iranserver.com/redis
+    image: mirror-docker.runflare.com/library/redis:7-alpine
     container_name: backend-redis
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
     restart: unless-stopped
@@ -36,7 +36,7 @@ services:
       - crop_network
 
   accsess:
-    image: openpolicyagent/opa:0.67.1-static
+    image: mirror-docker.runflare.com/openpolicyagent/opa:0.67.1-static
     container_name: backend-accsess
     command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies/authz.rego"]
     volumes:
@@ -48,7 +48,15 @@ services:
 
   web:
     container_name: backend-web
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.Dev
+      args:
+        BASE_IMAGE: mirror-docker.runflare.com/library/python:3.10-slim-bookworm
+        APT_MIRROR: mirror-linux.runflare.com/debian
+        APT_SECURITY_MIRROR: mirror-linux.runflare.com/debian-security
+        PIP_INDEX_URL: https://mirror-pypi.runflare.com/simple
+        PIP_TRUSTED_HOST: mirror-pypi.runflare.com
     env_file:
       - .env
     environment:
@@ -76,7 +84,15 @@ services:
 
   celery:
     container_name: backend-celery
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.Dev
+      args:
+        BASE_IMAGE: mirror-docker.runflare.com/library/python:3.10-slim-bookworm
+        APT_MIRROR: mirror-linux.runflare.com/debian
+        APT_SECURITY_MIRROR: mirror-linux.runflare.com/debian-security
+        PIP_INDEX_URL: https://mirror-pypi.runflare.com/simple
+        PIP_TRUSTED_HOST: mirror-pypi.runflare.com
     command: ["celery", "-A", "config", "worker", "-l", "info"]
     env_file:
       - .env
@@ -104,7 +120,15 @@ services:
 
   celery-beat:
     container_name: backend-celery-beat
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.Dev
+      args:
+        BASE_IMAGE: mirror-docker.runflare.com/library/python:3.10-slim-bookworm
+        APT_MIRROR: mirror-linux.runflare.com/debian
+        APT_SECURITY_MIRROR: mirror-linux.runflare.com/debian-security
+        PIP_INDEX_URL: https://mirror-pypi.runflare.com/simple
+        PIP_TRUSTED_HOST: mirror-pypi.runflare.com
     command: ["celery", "-A", "config", "beat", "-l", "info"]
     env_file:
       - .env

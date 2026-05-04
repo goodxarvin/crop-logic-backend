@@ -7,7 +7,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("sensor_catalog", "0002_sensorcatalog_supported_power_sources"),
+        ("device_hub", "0001_initial"),
         ("farm_hub", "0002_seed_default_catalog"),
     ]
 
@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="farm_sensors",
-                to="sensor_catalog.sensorcatalog",
+                to="device_hub.sensorcatalog",
             ),
         ),
     ]

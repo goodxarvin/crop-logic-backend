@@ -6,6 +6,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
+from farmer_calendar.models import FarmerCalendarEvent
 
 from .models import IrrigationPlan, IrrigationRecommendationRequest
 from .views import (
@@ -312,7 +313,7 @@ class RecommendViewTests(TestCase):
         self.assertEqual(IrrigationPlan.objects.count(), 1)
         plan = IrrigationPlan.objects.get()
         self.assertEqual(plan.source, IrrigationPlan.SOURCE_RECOMMENDATION)
-        self.assertTrue(plan.is_active)
+        self.assertFalse(plan.is_active)
         self.assertFalse(plan.is_deleted)
         self.assertEqual(response.data["data"]["plan"]["durationMinutes"], 38)
         self.assertEqual(response.data["data"]["water_balance"]["active_kc"], 0.93)
@@ -570,7 +571,7 @@ class IrrigationPlanApiTests(TestCase):
     def test_plan_status_patch_updates_is_active(self):
         request = self.factory.patch(
             f"/api/irrigation/plans/{self.plan.uuid}/status/",
-            {"is_active": False},
+            {"is_active": True},
             format="json",
         )
         force_authenticate(request, user=self.user)
@@ -579,4 +580,71 @@ class IrrigationPlanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.plan.refresh_from_db()
-        self.assertFalse(self.plan.is_active)
+        self.assertTrue(self.plan.is_active)
+
+    def test_activating_one_plan_deactivates_other_active_plan(self):
+        other_plan = IrrigationPlan.objects.create(
+            farm=self.farm,
+            source=IrrigationPlan.SOURCE_FREE_TEXT,
+            title="برنامه دوم",
+            is_active=True,
+        )
+
+        request = self.factory.patch(
+            f"/api/irrigation/plans/{self.plan.uuid}/status/",
+            {"is_active": True},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = IrrigationPlanStatusView.as_view()(request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        other_plan.refresh_from_db()
+        self.assertTrue(self.plan.is_active)
+        self.assertFalse(other_plan.is_active)
+
+    def test_plan_status_patch_syncs_calendar_events(self):
+        self.plan.plan_payload = {
+            "plan": {"durationMinutes": 25, "bestTimeOfDay": "05:30 - 06:00"},
+            "water_balance": {
+                "daily": [
+                    {
+                        "forecast_date": "2025-02-12",
+                        "gross_irrigation_mm": 17,
+                        "irrigation_timing": "05:30 - 06:00",
+                    }
+                ]
+            },
+        }
+        self.plan.is_active = False
+        self.plan.save(update_fields=["plan_payload", "is_active", "updated_at"])
+
+        activate_request = self.factory.patch(
+            f"/api/irrigation/plans/{self.plan.uuid}/status/",
+            {"is_active": True},
+            format="json",
+        )
+        force_authenticate(activate_request, user=self.user)
+
+        activate_response = IrrigationPlanStatusView.as_view()(activate_request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(activate_response.status_code, 200)
+        events = FarmerCalendarEvent.objects.filter(farm=self.farm, extended_props__plan_uuid=str(self.plan.uuid))
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.first().extended_props["plan_type"], "irrigation")
+
+        deactivate_request = self.factory.patch(
+            f"/api/irrigation/plans/{self.plan.uuid}/status/",
+            {"is_active": False},
+            format="json",
+        )
+        force_authenticate(deactivate_request, user=self.user)
+
+        deactivate_response = IrrigationPlanStatusView.as_view()(deactivate_request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(deactivate_response.status_code, 200)
+        self.assertFalse(
+            FarmerCalendarEvent.objects.filter(farm=self.farm, extended_props__plan_uuid=str(self.plan.uuid)).exists()
+        )

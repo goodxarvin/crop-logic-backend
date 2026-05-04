@@ -56,9 +56,9 @@ class PlantApiTests(TestCase):
         self.assertIn("flowering", response.data["data"][0]["growth_stages"])
         mock_external_api_request.assert_called_once_with("ai", "/api/plants/", method="GET")
 
-    @patch("plants.views.sync_plants_from_ai")
-    def test_names_endpoint_fills_default_icon_and_growth_stages(self, mock_sync_plants_from_ai):
-        mock_sync_plants_from_ai.return_value = []
+    @patch("plants.views.push_plants_to_ai")
+    def test_names_endpoint_fills_default_icon_and_growth_stages(self, mock_push_plants_to_ai):
+        mock_push_plants_to_ai.return_value = []
         product = Product.objects.create(
             farm_type=self.farm_type,
             name="Pepper",
@@ -79,9 +79,9 @@ class PlantApiTests(TestCase):
         self.assertEqual(product.icon, "leaf")
         self.assertEqual(product.growth_stages, ["initial", "vegetative", "flowering", "fruiting", "maturity"])
 
-    @patch("plants.views.sync_plants_from_ai")
-    def test_selected_endpoint_returns_farmer_products(self, mock_sync_plants_from_ai):
-        mock_sync_plants_from_ai.return_value = []
+    @patch("plants.views.push_plants_to_ai")
+    def test_selected_endpoint_returns_farmer_products(self, mock_push_plants_to_ai):
+        mock_push_plants_to_ai.return_value = []
         tomato = Product.objects.create(farm_type=self.farm_type, name="Tomato", icon="leaf", growth_stages=["vegetative"])
         pepper = Product.objects.create(farm_type=self.farm_type, name="Pepper", icon="leaf", growth_stages=["flowering"])
         farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="farm-a")

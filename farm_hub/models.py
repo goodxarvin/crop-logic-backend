@@ -2,7 +2,6 @@ import uuid as uuid_lib
 
 from django.conf import settings
 from django.db import models
-from sensor_catalog.models import SensorCatalog
 
 
 class FarmType(models.Model):
@@ -123,33 +122,3 @@ class FarmHub(models.Model):
     def __str__(self):
         return f"{self.name} ({self.farm_uuid})"
 
-
-class FarmSensor(models.Model):
-    uuid = models.UUIDField(default=uuid_lib.uuid4, unique=True, editable=False, db_index=True)
-    farm = models.ForeignKey(
-        FarmHub,
-        on_delete=models.CASCADE,
-        related_name="sensors",
-    )
-    sensor_catalog = models.ForeignKey(
-        SensorCatalog,
-        on_delete=models.PROTECT,
-        related_name="farm_sensors",
-        null=True,
-        blank=True,
-    )
-    physical_device_uuid = models.UUIDField(default=uuid_lib.uuid4, unique=True, db_index=True)
-    name = models.CharField(max_length=255)
-    sensor_type = models.CharField(max_length=255, blank=True, default="")
-    is_active = models.BooleanField(default=True)
-    specifications = models.JSONField(default=dict, blank=True)
-    power_source = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = "farm_sensors"
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"{self.name} ({self.uuid})"

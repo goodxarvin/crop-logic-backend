@@ -15,6 +15,7 @@ from drf_spectacular.utils import extend_schema
 from config.swagger import code_response, status_response
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
+from farmer_calendar import PLAN_TYPE_IRRIGATION, delete_plan_events, sync_plan_events
 from water.serializers import WaterStressIndexSerializer
 from water.views import WaterStressIndexView
 from .mock_data import CONFIG_RESPONSE_DATA
@@ -171,7 +172,7 @@ class RecommendView(FarmAccessMixin, APIView):
         return " - ".join(parts) if parts else "برنامه آبیاری"
 
     def _create_plan_from_recommendation(self, recommendation, recommendation_data):
-        IrrigationPlan.objects.create(
+        plan = IrrigationPlan.objects.create(
             farm=recommendation.farm,
             source=IrrigationPlan.SOURCE_RECOMMENDATION,
             recommendation=recommendation,
@@ -182,6 +183,7 @@ class RecommendView(FarmAccessMixin, APIView):
             request_payload=recommendation.request_payload,
             response_payload=recommendation.response_payload,
         )
+        sync_plan_events(plan, PLAN_TYPE_IRRIGATION)
 
     @staticmethod
     def _enrich_ai_payload(payload, farm):
@@ -451,7 +453,7 @@ class PlanFromTextView(FarmAccessMixin, APIView):
 
         final_plan = self._extract_final_plan(response_data)
         if final_plan and farm_uuid:
-            IrrigationPlan.objects.create(
+            plan = IrrigationPlan.objects.create(
                 farm=farm,
                 source=IrrigationPlan.SOURCE_FREE_TEXT,
                 title=self._build_free_text_plan_title(final_plan),
@@ -466,6 +468,7 @@ class PlanFromTextView(FarmAccessMixin, APIView):
                 request_payload=payload,
                 response_payload=response_data,
             )
+            sync_plan_events(plan, PLAN_TYPE_IRRIGATION)
 
         return Response(
             {"code": 200, "msg": response_data.get("msg", "موفق"), "data": response_data.get("data", response_data)},
@@ -533,6 +536,7 @@ class IrrigationPlanDetailView(APIView):
             return Response({"code": 404, "msg": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
 
         plan.soft_delete()
+        delete_plan_events(farm=plan.farm, plan_type=PLAN_TYPE_IRRIGATION, plan_uuid=plan.uuid)
         return Response({"code": 200, "msg": "success", "data": {"plan_uuid": str(plan.uuid), "is_deleted": True}}, status=status.HTTP_200_OK)
 
 
@@ -554,8 +558,20 @@ class IrrigationPlanStatusView(APIView):
         if plan is None:
             return Response({"code": 404, "msg": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        plan.is_active = serializer.validated_data["is_active"]
+        new_is_active = serializer.validated_data["is_active"]
+        if new_is_active:
+            IrrigationPlan.objects.filter(
+                farm=plan.farm,
+                is_deleted=False,
+                is_active=True,
+            ).exclude(pk=plan.pk).update(is_active=False)
+
+        plan.is_active = new_is_active
         plan.save(update_fields=["is_active", "updated_at"])
+        if plan.is_active:
+            sync_plan_events(plan, PLAN_TYPE_IRRIGATION)
+        else:
+            delete_plan_events(farm=plan.farm, plan_type=PLAN_TYPE_IRRIGATION, plan_uuid=plan.uuid)
         return Response(
             {"code": 200, "msg": "success", "data": {"plan_uuid": str(plan.uuid), "is_active": plan.is_active}},
             status=status.HTTP_200_OK,

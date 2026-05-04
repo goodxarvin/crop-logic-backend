@@ -11,6 +11,7 @@ from crop_zoning.services import (
 )
 from external_api_adapter import request as external_api_request
 from external_api_adapter.exceptions import ExternalAPIRequestError
+from plants.services import push_plants_to_ai
 
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ def sync_farm_data(
     plant_ids=None,
     irrigation_method_id=None,
 ):
+    push_plants_to_ai()
     request_payload = {
         "farm_uuid": str(farm.farm_uuid),
         "farm_boundary": _extract_boundary_geometry(area_feature, farm=farm),

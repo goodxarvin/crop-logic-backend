@@ -11,7 +11,7 @@ urlpatterns = [
     path("api/account/", include("account.urls")),
     path("api/farm-hub/", include("farm_hub.urls")),
     path("api/access-control/", include("access_control.urls")),
-    path("api/sensor-catalog/", include("sensor_catalog.urls")),
+    path("api/sensor-catalog/", include("device_hub.sensor_catalog_urls")),
     path("api/farm-dashboard-config/", include("dashboard.urls_config")),
     path("api/farm-dashboard/", include("dashboard.urls")),
     path("api/crop-health/", include("crop_health.urls")),
@@ -23,8 +23,8 @@ urlpatterns = [
 
     path("api/pest-detection/", include("pest_detection.urls")),
     path("api/pest-disease/", include("pest_detection.pest_disease_urls")),
-    path("api/sensor-7-in-1/", include("sensor_7_in_1.urls")),
-    path("api/sensors/", include("sensor_7_in_1.comparison_urls")),
+    path("api/sensor-7-in-1/", include("device_hub.sensor_7_in_1_urls")),
+    path("api/sensors/", include("device_hub.comparison_urls")),
     path("api/irrigation/", include("irrigation.urls")),
 
     path("api/weather/", include("water.weather_urls")),
@@ -39,5 +39,5 @@ urlpatterns = [
     path("api/events/", include("farmer_calendar.urls")),
     path("api/farmer-todos/", include("farmer_todos.urls")),
 
-    path("api/sensor-external-api/", include("sensor_external_api.urls")),
+    path("api/sensor-external-api/", include("device_hub.sensor_external_api_urls")),
 ]

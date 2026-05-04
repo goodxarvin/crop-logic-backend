@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
+from farmer_calendar.models import FarmerCalendarEvent
 from .models import FertilizationPlan, FertilizationRecommendationRequest
 from .views import (
     FertilizationPlanDetailView,
@@ -159,7 +160,7 @@ class FertilizationRecommendViewTests(TestCase):
         self.assertEqual(saved_request.growth_stage, "vegetative")
         self.assertEqual(saved_plan.source, FertilizationPlan.SOURCE_RECOMMENDATION)
         self.assertEqual(saved_plan.recommendation_id, saved_request.id)
-        self.assertTrue(saved_plan.is_active)
+        self.assertFalse(saved_plan.is_active)
         self.assertFalse(saved_plan.is_deleted)
         self.assertEqual(saved_plan.plan_payload["primary_recommendation"]["fertilizer_code"], "npk-202020")
         self.assertEqual(
@@ -280,7 +281,7 @@ class FertilizationRecommendViewTests(TestCase):
         self.assertEqual(plan.title, "برنامه کوددهی گندم")
         self.assertEqual(plan.crop_id, "گندم")
         self.assertEqual(plan.growth_stage, "flowering")
-        self.assertTrue(plan.is_active)
+        self.assertFalse(plan.is_active)
         self.assertFalse(plan.is_deleted)
 
     def test_recommendation_list_returns_paginated_summary_items(self):
@@ -473,7 +474,7 @@ class FertilizationPlanApiTests(TestCase):
     def test_plan_status_patch_updates_is_active(self):
         request = self.factory.patch(
             f"/api/fertilization/plans/{self.plan.uuid}/status/",
-            {"is_active": False},
+            {"is_active": True},
             format="json",
         )
         force_authenticate(request, user=self.user)
@@ -482,4 +483,71 @@ class FertilizationPlanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.plan.refresh_from_db()
-        self.assertFalse(self.plan.is_active)
+        self.assertTrue(self.plan.is_active)
+
+    def test_activating_one_plan_deactivates_other_active_plan(self):
+        other_plan = FertilizationPlan.objects.create(
+            farm=self.farm,
+            source=FertilizationPlan.SOURCE_FREE_TEXT,
+            title="برنامه دوم",
+            is_active=True,
+        )
+
+        request = self.factory.patch(
+            f"/api/fertilization/plans/{self.plan.uuid}/status/",
+            {"is_active": True},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = FertilizationPlanStatusView.as_view()(request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        other_plan.refresh_from_db()
+        self.assertTrue(self.plan.is_active)
+        self.assertFalse(other_plan.is_active)
+
+    def test_plan_status_patch_syncs_calendar_events(self):
+        self.plan.plan_payload = {
+            "primary_recommendation": {
+                "fertilizer_code": "npk-202020",
+                "fertilizer_name": "NPK 20-20-20",
+                "application_interval": {"value": 14, "unit": "day", "label": "هر 14 روز"},
+            },
+            "application_guide": {
+                "steps": [
+                    {"step_number": 1, "title": "مرحله اول", "description": "در آب حل شود", "date": "2025-02-14"}
+                ]
+            },
+        }
+        self.plan.is_active = False
+        self.plan.save(update_fields=["plan_payload", "is_active", "updated_at"])
+
+        activate_request = self.factory.patch(
+            f"/api/fertilization/plans/{self.plan.uuid}/status/",
+            {"is_active": True},
+            format="json",
+        )
+        force_authenticate(activate_request, user=self.user)
+
+        activate_response = FertilizationPlanStatusView.as_view()(activate_request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(activate_response.status_code, 200)
+        events = FarmerCalendarEvent.objects.filter(farm=self.farm, extended_props__plan_uuid=str(self.plan.uuid))
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.first().extended_props["plan_type"], "fertilization")
+
+        deactivate_request = self.factory.patch(
+            f"/api/fertilization/plans/{self.plan.uuid}/status/",
+            {"is_active": False},
+            format="json",
+        )
+        force_authenticate(deactivate_request, user=self.user)
+
+        deactivate_response = FertilizationPlanStatusView.as_view()(deactivate_request, plan_uuid=self.plan.uuid)
+
+        self.assertEqual(deactivate_response.status_code, 200)
+        self.assertFalse(
+            FarmerCalendarEvent.objects.filter(farm=self.farm, extended_props__plan_uuid=str(self.plan.uuid)).exists()
+        )

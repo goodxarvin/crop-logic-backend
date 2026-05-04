@@ -7,12 +7,12 @@ from access_control.models import AccessFeature, AccessRule, FarmAccessProfile, 
 from access_control.services import build_farm_access_profile
 from access_control.views import FarmAccessProfileView
 from crop_zoning.models import CropArea
+from device_hub.models import SensorCatalog
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType, Product
 from farm_hub.serializers import FarmHubSerializer
 from farm_hub.seeds import seed_admin_farm
 from farm_hub.views import FarmDetailView, FarmListCreateView, FarmTypeListView, FarmTypeProductsView
-from sensor_catalog.models import SensorCatalog
 
 
 AREA_GEOJSON = {

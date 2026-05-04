@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("farm_hub", "0006_seed_expanded_product_catalog"),
-        ("sensor_catalog", "0003_sensorcatalog_code"),
+        ("device_hub", "0001_initial"),
     ]
 
     operations = [
@@ -61,7 +61,7 @@ class Migration(migrations.Migration):
                 ("farm_types", models.ManyToManyField(blank=True, related_name="access_rules", to="farm_hub.farmtype")),
                 ("features", models.ManyToManyField(blank=True, related_name="rules", to="access_control.accessfeature")),
                 ("products", models.ManyToManyField(blank=True, related_name="access_rules", to="farm_hub.product")),
-                ("sensor_catalogs", models.ManyToManyField(blank=True, related_name="access_rules", to="sensor_catalog.sensorcatalog")),
+                ("sensor_catalogs", models.ManyToManyField(blank=True, related_name="access_rules", to="device_hub.sensorcatalog")),
                 ("subscription_plans", models.ManyToManyField(blank=True, related_name="access_rules", to="access_control.subscriptionplan")),
             ],
             options={"db_table": "access_rules", "ordering": ["priority", "name"]},
