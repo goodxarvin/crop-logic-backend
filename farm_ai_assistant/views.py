@@ -18,7 +18,7 @@ from config.swagger import status_response
 from external_api_adapter import request as external_api_request
 from external_api_adapter.exceptions import ExternalAPIRequestError
 from farm_hub.models import FarmHub
-from .mock_data import CONTEXT_RESPONSE_DATA
+from .defaults import CONTEXT_RESPONSE_TEMPLATE
 from .models import Conversation, Message
 from .serializers import (
     ChatPostSerializer,
@@ -66,7 +66,7 @@ class ContextView(FarmAccessMixin, APIView):
     )
     def get(self, request):
         farm = self._get_optional_farm(request, request.query_params.get("farm_uuid"))
-        data = deepcopy(CONTEXT_RESPONSE_DATA)
+        data = deepcopy(CONTEXT_RESPONSE_TEMPLATE)
         data["farm_uuid"] = self._farm_uuid_or_none(farm)
         return Response(
             {"status": "success", "data": data},

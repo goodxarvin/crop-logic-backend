@@ -11,8 +11,8 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema
 
 from config.swagger import code_response
 from farm_hub.models import FarmHub
+from .defaults import get_default_dashboard_config
 from .services import get_farm_dashboard_cards
-from .mock_data import DEFAULT_CONFIG
 from .models import FarmDashboardConfig
 from .serializers import FarmDashboardConfigPatchSerializer, FarmDashboardConfigSerializer
 
@@ -29,12 +29,13 @@ class FarmAccessMixin:
 
     @staticmethod
     def _get_or_create_dashboard_config(farm):
+        default_config = get_default_dashboard_config()
         config, _created = FarmDashboardConfig.objects.get_or_create(
             farm=farm,
             defaults={
-                "disabled_card_ids": DEFAULT_CONFIG["disabled_card_ids"],
-                "row_order": DEFAULT_CONFIG["row_order"],
-                "enable_drag_reorder": DEFAULT_CONFIG["enable_drag_reorder"],
+                "disabled_card_ids": default_config["disabled_card_ids"],
+                "row_order": default_config["row_order"],
+                "enable_drag_reorder": default_config["enable_drag_reorder"],
             },
         )
         return config

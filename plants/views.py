@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
+from config.integration_contract import build_integration_meta
 from config.swagger import code_response, farm_uuid_query_param
 from farm_hub.models import FarmHub, Product
 from .serializers import PlantNameSerializer, PlantSerializer
@@ -15,12 +16,12 @@ class PlantBaseView(APIView):
     permission_classes = [IsAuthenticated]
 
     @staticmethod
-    def _sync_plants_if_possible():
+    def _attempt_ai_catalog_sync():
         try:
             push_plants_to_ai()
         except PlantSyncError:
-            return False
-        return True
+            return False, "failed"
+        return True, "synced"
 
     @staticmethod
     def _get_farm(request, farm_uuid):
@@ -39,13 +40,34 @@ class PlantListView(PlantBaseView):
     )
     def get(self, request):
         products = ensure_plant_defaults(Product.objects.order_by("name"))
+        sync_attempted = True
+        sync_status = "synced"
         try:
             push_plants_to_ai(products)
         except PlantSyncError as exc:
+            sync_status = "failed"
             if not products:
                 return Response({"code": 503, "msg": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         data = PlantSerializer(products, many=True).data
-        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": data,
+                "meta": build_integration_meta(
+                    flow_type="backend_owned_data_with_ai_enrichment",
+                    source_type="db",
+                    source_service="backend_plants",
+                    ownership="backend",
+                    live=False,
+                    cached=False,
+                    sync_attempted=sync_attempted,
+                    sync_status=sync_status,
+                    notes=["Backend plant catalog is canonical; AI receives sync snapshots only."],
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class PlantDetailView(PlantBaseView):
@@ -74,10 +96,27 @@ class PlantNameListView(PlantBaseView):
         responses={200: code_response("PlantNameListResponse", data=PlantNameSerializer(many=True))},
     )
     def get(self, request):
-        self._sync_plants_if_possible()
+        sync_attempted, sync_status = self._attempt_ai_catalog_sync()
         products = ensure_plant_defaults(Product.objects.order_by("name"))
         data = PlantNameSerializer(products, many=True).data
-        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": data,
+                "meta": build_integration_meta(
+                    flow_type="backend_owned_data",
+                    source_type="db",
+                    source_service="backend_plants",
+                    ownership="backend",
+                    live=False,
+                    cached=False,
+                    sync_attempted=sync_attempted,
+                    sync_status=sync_status,
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class SelectedPlantListView(PlantBaseView):
@@ -87,9 +126,26 @@ class SelectedPlantListView(PlantBaseView):
         responses={200: code_response("SelectedPlantListResponse", data=PlantNameSerializer(many=True))},
     )
     def get(self, request):
-        self._sync_plants_if_possible()
+        sync_attempted, sync_status = self._attempt_ai_catalog_sync()
         farm = self._get_farm(request, request.query_params.get("farm_uuid"))
         ensure_plant_defaults(farm.products.all())
         products = farm.products.order_by("name")
         data = PlantNameSerializer(products, many=True).data
-        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": data,
+                "meta": build_integration_meta(
+                    flow_type="backend_owned_data",
+                    source_type="db",
+                    source_service="backend_plants",
+                    ownership="backend",
+                    live=False,
+                    cached=False,
+                    sync_attempted=sync_attempted,
+                    sync_status=sync_status,
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )

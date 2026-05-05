@@ -4,6 +4,7 @@ from unittest.mock import patch
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from account.views import ProfileView
+from config.observability import METRICS
 
 from .middleware import RouteFeatureAccessMiddleware
 from .services import batch_authorize_features, build_authorization_input
@@ -19,6 +20,9 @@ TEST_CACHES = {
 
 @override_settings(CACHES=TEST_CACHES, ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT=300)
 class AccessControlServiceTests(SimpleTestCase):
+    def tearDown(self):
+        METRICS.clear()
+
     def test_batch_authorize_features_uses_cache_for_same_route(self):
         farm = SimpleNamespace(farm_uuid="farm-uuid")
         user = SimpleNamespace(id=7)
@@ -94,6 +98,26 @@ class AccessControlServiceTests(SimpleTestCase):
                 "feature3": False,
             },
         )
+
+    @patch("access_control.services.requests.post")
+    @override_settings(ACCESS_CONTROL_AUTHZ_ENABLED=True, ACCESS_CONTROL_AUTHZ_BASE_URL="https://opa.example", ACCESS_CONTROL_AUTHZ_BATCH_PATH="/v1/data/authz", ACCESS_CONTROL_AUTHZ_TIMEOUT=1)
+    def test_request_opa_batch_authorization_records_invalid_json_metric(self, mock_post):
+        response = mock_post.return_value
+        response.raise_for_status.return_value = None
+        response.json.side_effect = ValueError("bad json")
+        farm = SimpleNamespace(farm_uuid="farm-uuid")
+        user = SimpleNamespace(id=7, username="u", email="", phone_number="", is_staff=False, is_superuser=False)
+
+        with self.assertRaises(Exception):
+            batch_authorize_features(
+                farm=farm,
+                user=user,
+                features=["farm_dashboard"],
+                action="view",
+                route="/api/farm-dashboard/",
+            )
+
+        self.assertEqual(METRICS["access_control.opa.invalid_json"], 1)
 
 
 class RouteFeatureAccessMiddlewareTests(SimpleTestCase):

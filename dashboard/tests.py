@@ -7,7 +7,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from access_control.models import AccessFeature, AccessRule
 from farm_hub.models import FarmHub, FarmType
 
-from .mock_data import DEFAULT_CONFIG
+from .defaults import DEFAULT_CONFIG
 from .models import FarmDashboardConfig
 from .views import FarmDashboardCardsView, FarmDashboardConfigView
 

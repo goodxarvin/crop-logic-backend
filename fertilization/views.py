@@ -18,7 +18,7 @@ from farm_hub.models import FarmHub
 from farmer_calendar import PLAN_TYPE_FERTILIZATION, delete_plan_events, sync_plan_events
 from .models import FertilizationPlan, FertilizationRecommendationRequest
 from .services import build_active_plan_context
-from .mock_data import CONFIG_RESPONSE_DATA
+from .defaults import CONFIG_RESPONSE_TEMPLATE
 from .serializers import (
     FreeTextPlanParserRequestSerializer,
     FreeTextPlanParserResponseDataSerializer,
@@ -81,7 +81,7 @@ class ConfigView(FarmAccessMixin, APIView):
     )
     def get(self, request):
         farm = self._get_farm(request, request.query_params.get("farm_uuid"))
-        data = dict(CONFIG_RESPONSE_DATA)
+        data = dict(CONFIG_RESPONSE_TEMPLATE)
         data["farm_uuid"] = str(farm.farm_uuid)
         return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
 

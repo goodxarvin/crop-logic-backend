@@ -89,6 +89,9 @@ class FarmAlertsTrackerViewTests(TestCase):
         self.assertEqual(response.data["data"]["status_level"], "warning")
         self.assertEqual(len(response.data["data"]["notifications"]), 1)
         self.assertEqual(response.data["data"]["notifications"][0]["endpoint"], "tracker")
+        self.assertEqual(response.data["meta"]["flow_type"], "cached_snapshot")
+        self.assertTrue(response.data["meta"]["cached"])
+        self.assertEqual(response.data["meta"]["ownership"], "backend")
 
     def test_tracker_limits_cached_notifications_to_ten(self):
         for index in range(12):

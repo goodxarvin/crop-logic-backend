@@ -1,12 +1,30 @@
 from copy import deepcopy
+import logging
 
-from .mock_data import IRRIGATION_DASHBOARD_RECOMMENDATION, RECOMMEND_RESPONSE_DATA, WATER_NEED_PREDICTION
+from config.failure_contract import StructuredServiceError
+
+from .defaults import IRRIGATION_DASHBOARD_TEMPLATE
 from .models import IrrigationPlan, IrrigationRecommendationRequest
+
+logger = logging.getLogger(__name__)
+
+
+class IrrigationDataUnavailableError(StructuredServiceError):
+    def __init__(self, *, error_code: str, message: str, details: dict | None = None):
+        super().__init__(
+            error_code=error_code,
+            message=message,
+            source="db",
+            details=details,
+        )
 
 
 def _extract_result(response_payload):
     if not isinstance(response_payload, dict):
-        return {}
+        raise IrrigationDataUnavailableError(
+            error_code="invalid_payload",
+            message="Irrigation recommendation payload must be a JSON object.",
+        )
 
     data = response_payload.get("data")
     if isinstance(data, dict):
@@ -22,24 +40,47 @@ def _extract_result(response_payload):
     if any(key in response_payload for key in ("plan", "water_balance", "timeline", "sections")):
         return response_payload
 
-    return {}
+    return None
 
 
 def _get_latest_result(farm):
     if farm is None:
-        return {}
+        raise IrrigationDataUnavailableError(
+            error_code="missing_farm",
+            message="Farm instance is required for irrigation result lookup.",
+        )
 
     for request in IrrigationRecommendationRequest.objects.filter(farm=farm).order_by("-created_at", "-id"):
-        result = _extract_result(request.response_payload)
+        try:
+            result = _extract_result(request.response_payload)
+        except IrrigationDataUnavailableError as exc:
+            logger.error(
+                "Invalid irrigation response payload for farm_id=%s request_id=%s: %s",
+                getattr(farm, "id", None),
+                request.id,
+                exc,
+            )
+            raise IrrigationDataUnavailableError(
+                error_code=exc.contract.error_code,
+                message=f"Invalid irrigation recommendation payload for request_id={request.id}.",
+                details={"farm_id": getattr(farm, "id", None), "request_id": request.id},
+            ) from exc
         if result:
             return result
 
-    return {}
+    raise IrrigationDataUnavailableError(
+        error_code="no_data",
+        message=f"No irrigation recommendation result found for farm_id={getattr(farm, 'id', None)}.",
+        details={"farm_id": getattr(farm, "id", None)},
+    )
 
 
 def get_active_plan_payload(farm):
     if farm is None:
-        return {}
+        raise IrrigationDataUnavailableError(
+            error_code="missing_farm",
+            message="Farm instance is required for active irrigation plan lookup.",
+        )
 
     plan = (
         IrrigationPlan.objects.filter(farm=farm, is_active=True, is_deleted=False)
@@ -47,15 +88,17 @@ def get_active_plan_payload(farm):
         .first()
     )
     if plan is None or not isinstance(plan.plan_payload, dict):
-        return {}
+        raise IrrigationDataUnavailableError(
+            error_code="no_active_plan",
+            message=f"No active irrigation plan payload found for farm_id={getattr(farm, 'id', None)}.",
+            details={"farm_id": getattr(farm, "id", None)},
+        )
 
     return deepcopy(plan.plan_payload)
 
 
 def build_active_plan_context(farm):
     plan_payload = get_active_plan_payload(farm)
-    if not plan_payload:
-        return {}
 
     context = {"plan_payload": plan_payload}
 
@@ -200,24 +243,37 @@ def _normalize_sections(raw_sections):
 
 def build_recommendation_response(adapter_payload):
     result = _extract_result(adapter_payload)
-    fallback_plan = RECOMMEND_RESPONSE_DATA.get("plan", {})
+    if not isinstance(result, dict):
+        raise IrrigationDataUnavailableError(
+            error_code="no_result",
+            message="Irrigation recommendation payload did not include a result object.",
+        )
+    if not isinstance(result.get("plan"), dict):
+        raise IrrigationDataUnavailableError(
+            error_code="invalid_payload",
+            message="Irrigation recommendation payload is missing a valid `plan` object.",
+        )
 
-    return {
-        "plan": _normalize_plan(result.get("plan") or fallback_plan),
+    response = {
+        "plan": _normalize_plan(result.get("plan")),
         "water_balance": _normalize_water_balance(result.get("water_balance")),
         "timeline": _normalize_timeline(result.get("timeline")),
         "sections": _normalize_sections(result.get("sections")),
     }
+    return response
 
 
 def get_water_need_prediction_data(farm=None):
-    default_data = deepcopy(WATER_NEED_PREDICTION)
     result = _get_latest_result(farm)
     water_balance = result.get("water_balance", {})
     daily = water_balance.get("daily", [])
 
     if not daily:
-        return default_data
+        raise IrrigationDataUnavailableError(
+            error_code="empty_daily_data",
+            message=f"Water need prediction data is missing daily entries for farm_id={getattr(farm, 'id', None)}.",
+            details={"farm_id": getattr(farm, "id", None)},
+        )
 
     categories = [item.get("forecast_date") or f"روز {index + 1}" for index, item in enumerate(daily)]
     series_data = [float(item.get("gross_irrigation_mm") or 0) for item in daily]
@@ -231,9 +287,19 @@ def get_water_need_prediction_data(farm=None):
 
 
 def get_irrigation_dashboard_recommendation(farm=None):
-    default_item = deepcopy(IRRIGATION_DASHBOARD_RECOMMENDATION)
-    result = _get_latest_result(farm)
-    plan = result.get("plan") or RECOMMEND_RESPONSE_DATA.get("plan", {})
+    default_item = deepcopy(IRRIGATION_DASHBOARD_TEMPLATE)
+    try:
+        result = _get_latest_result(farm)
+    except IrrigationDataUnavailableError as exc:
+        logger.info(
+            "Irrigation dashboard recommendation unavailable for farm_id=%s: %s",
+            getattr(farm, "id", None),
+            exc,
+        )
+        return default_item
+    plan = result.get("plan")
+    if not isinstance(plan, dict):
+        return default_item
 
     best_time = plan.get("bestTimeOfDay") or "05:00 - 07:00"
     frequency = plan.get("frequencyPerWeek")
@@ -252,5 +318,8 @@ def get_irrigation_dashboard_recommendation(farm=None):
     default_item["title"] = f"آبیاری: {best_time}"
     if subtitle_parts:
         default_item["subtitle"] = ". ".join(subtitle_parts)
+    default_item["status"] = "success"
+    default_item["source"] = "db"
+    default_item["warnings"] = []
 
     return default_item

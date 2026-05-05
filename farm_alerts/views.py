@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from config.integration_contract import build_integration_meta
 from config.swagger import code_response
 from farm_hub.models import FarmHub
 
@@ -61,4 +62,22 @@ class AlertTrackerView(FarmAlertsBaseView):
             response_data,
         )
         serializer = AlertTrackerAIResponseSerializer(instance=response_data)
-        return Response({"code": 200, "msg": "success", "data": serializer.data}, status=status.HTTP_200_OK)
+        snapshot = getattr(farm, "alert_tracker_snapshot", None)
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": serializer.data,
+                "meta": build_integration_meta(
+                    flow_type="cached_snapshot",
+                    source_type="cached_snapshot",
+                    source_service="backend_farm_alerts_snapshot",
+                    ownership="backend",
+                    live=False,
+                    cached=True,
+                    snapshot_at=getattr(snapshot, "updated_at", None),
+                    notes=["Returns persisted tracker snapshot, not live AI inference."],
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )

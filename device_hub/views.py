@@ -13,7 +13,7 @@ from soil.serializers import SoilComparisonChartSerializer, SoilRadarChartSerial
 from .authentication import SensorExternalAPIKeyAuthentication
 from .sensor_serializers import DeviceSummarySerializer, Sensor7In1SummarySerializer, SensorComparisonChartQuerySerializer, SensorComparisonChartResponseSerializer, SensorRadarChartQuerySerializer, SensorRadarChartResponseSerializer, SensorValuesListQuerySerializer, SensorValuesListResponseSerializer
 from .serializers import DeviceCatalogSerializer, DeviceCodeQuerySerializer, DeviceCommandRequestSerializer, DeviceCommandResponseSerializer, DeviceDetailSerializer, DeviceLatestPayloadSerializer, DeviceRangeQuerySerializer, SensorExternalRequestLogQuerySerializer, SensorExternalRequestLogSerializer, SensorExternalRequestSerializer
-from .services import FarmDataForwardError, build_device_comparison_chart, build_device_latest_payload, build_device_radar_chart, build_device_summary, build_device_values_list, create_sensor_external_notification, execute_device_command, forward_sensor_payload_to_farm_data, get_farm_device_by_physical_uuid, get_farm_device_map_for_logs, get_primary_soil_sensor, get_sensor_7_in_1_comparison_chart_data, get_sensor_7_in_1_radar_chart_data, get_sensor_7_in_1_summary_data, get_sensor_comparison_chart_data, get_sensor_external_request_logs_for_farm, get_sensor_radar_chart_data, get_sensor_values_list_data, validate_output_device_catalog
+from .services import DeviceDataUnavailableError, FarmDataForwardError, build_device_comparison_chart, build_device_latest_payload, build_device_radar_chart, build_device_summary, build_device_values_list, create_sensor_external_notification, execute_device_command, forward_sensor_payload_to_farm_data, get_farm_device_by_physical_uuid, get_farm_device_map_for_logs, get_primary_soil_sensor, get_sensor_7_in_1_comparison_chart_data, get_sensor_7_in_1_radar_chart_data, get_sensor_7_in_1_summary_data, get_sensor_comparison_chart_data, get_sensor_external_request_logs_for_farm, get_sensor_radar_chart_data, get_sensor_values_list_data, validate_output_device_catalog
 
 
 class DeviceCatalogListView(APIView):
@@ -114,6 +114,12 @@ class DeviceRadarChartView(DeviceBaseView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+class SensorExternalRequestLogPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 class DeviceLogListView(DeviceBaseView):
     pagination_class = SensorExternalRequestLogPagination
 
@@ -194,21 +200,33 @@ class Sensor7In1SummaryView(APIView):
     @extend_schema(tags=["Sensor 7 in 1"], parameters=[farm_uuid_query_param(required=True, description="UUID of the farm for sensor 7 in 1 summary.")], responses={200: code_response("Sensor7In1SummaryResponse", data=Sensor7In1SummarySerializer())})
     def get(self, request):
         farm = self._get_farm(request)
-        return Response({"code": 200, "msg": "OK", "data": get_sensor_7_in_1_summary_data(farm)}, status=status.HTTP_200_OK)
+        try:
+            data = get_sensor_7_in_1_summary_data(farm)
+        except DeviceDataUnavailableError as exc:
+            raise serializers.ValidationError({"farm_uuid": [str(exc)]}) from exc
+        return Response({"code": 200, "msg": "OK", "data": data}, status=status.HTTP_200_OK)
 
 
 class Sensor7In1RadarChartView(Sensor7In1SummaryView):
     @extend_schema(tags=["Sensor 7 in 1"], parameters=[farm_uuid_query_param(required=True, description="UUID of the farm for sensor 7 in 1 radar chart.")], responses={200: code_response("Sensor7In1RadarChartResponse", data=SoilRadarChartSerializer())})
     def get(self, request):
         farm = self._get_farm(request)
-        return Response({"code": 200, "msg": "OK", "data": get_sensor_7_in_1_radar_chart_data(farm)}, status=status.HTTP_200_OK)
+        try:
+            data = get_sensor_7_in_1_radar_chart_data(farm)
+        except DeviceDataUnavailableError as exc:
+            raise serializers.ValidationError({"farm_uuid": [str(exc)]}) from exc
+        return Response({"code": 200, "msg": "OK", "data": data}, status=status.HTTP_200_OK)
 
 
 class Sensor7In1ComparisonChartView(Sensor7In1SummaryView):
     @extend_schema(tags=["Sensor 7 in 1"], parameters=[farm_uuid_query_param(required=True, description="UUID of the farm for sensor 7 in 1 comparison chart.")], responses={200: code_response("Sensor7In1ComparisonChartResponse", data=SoilComparisonChartSerializer())})
     def get(self, request):
         farm = self._get_farm(request)
-        return Response({"code": 200, "msg": "OK", "data": get_sensor_7_in_1_comparison_chart_data(farm)}, status=status.HTTP_200_OK)
+        try:
+            data = get_sensor_7_in_1_comparison_chart_data(farm)
+        except DeviceDataUnavailableError as exc:
+            raise serializers.ValidationError({"farm_uuid": [str(exc)]}) from exc
+        return Response({"code": 200, "msg": "OK", "data": data}, status=status.HTTP_200_OK)
 
 
 class SensorComparisonChartView(Sensor7In1SummaryView):
@@ -218,7 +236,11 @@ class SensorComparisonChartView(Sensor7In1SummaryView):
         serializer.is_valid(raise_exception=True)
         farm = self._get_farm(request)
         sensor = self._get_primary_sensor(farm=farm)
-        return Response(get_sensor_comparison_chart_data(farm=farm, physical_device_uuid=sensor.physical_device_uuid, range_value=serializer.validated_data["range"]), status=status.HTTP_200_OK)
+        try:
+            data = get_sensor_comparison_chart_data(farm=farm, physical_device_uuid=sensor.physical_device_uuid, range_value=serializer.validated_data["range"])
+        except DeviceDataUnavailableError as exc:
+            raise serializers.ValidationError({"farm_uuid": [str(exc)]}) from exc
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class SensorValuesListView(Sensor7In1SummaryView):
@@ -228,7 +250,11 @@ class SensorValuesListView(Sensor7In1SummaryView):
         serializer.is_valid(raise_exception=True)
         farm = self._get_farm(request)
         sensor = self._get_primary_sensor(farm=farm)
-        return Response(get_sensor_values_list_data(farm=farm, physical_device_uuid=sensor.physical_device_uuid, range_value=serializer.validated_data["range"]), status=status.HTTP_200_OK)
+        try:
+            data = get_sensor_values_list_data(farm=farm, physical_device_uuid=sensor.physical_device_uuid, range_value=serializer.validated_data["range"])
+        except DeviceDataUnavailableError as exc:
+            raise serializers.ValidationError({"farm_uuid": [str(exc)]}) from exc
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class SensorRadarChartView(Sensor7In1SummaryView):
@@ -238,13 +264,11 @@ class SensorRadarChartView(Sensor7In1SummaryView):
         serializer.is_valid(raise_exception=True)
         farm = self._get_farm(request)
         sensor = self._get_primary_sensor(farm=farm)
-        return Response(get_sensor_radar_chart_data(farm=farm, physical_device_uuid=sensor.physical_device_uuid, range_value=serializer.validated_data["range"]), status=status.HTTP_200_OK)
-
-
-class SensorExternalRequestLogPagination(PageNumberPagination):
-    page_size = 20
-    page_size_query_param = "page_size"
-    max_page_size = 100
+        try:
+            data = get_sensor_radar_chart_data(farm=farm, physical_device_uuid=sensor.physical_device_uuid, range_value=serializer.validated_data["range"])
+        except DeviceDataUnavailableError as exc:
+            raise serializers.ValidationError({"farm_uuid": [str(exc)]}) from exc
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class SensorExternalAPIView(APIView):

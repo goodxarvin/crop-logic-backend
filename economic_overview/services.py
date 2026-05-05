@@ -1,11 +1,11 @@
 from copy import deepcopy
 
-from .mock_data import ECONOMIC_OVERVIEW
+from .defaults import EMPTY_ECONOMIC_OVERVIEW
 from .models import EconomicOverviewLog
 
 
 def get_economic_overview_data(farm=None):
-    data = deepcopy(ECONOMIC_OVERVIEW)
+    data = deepcopy(EMPTY_ECONOMIC_OVERVIEW)
 
     if farm is None:
         return data
@@ -14,6 +14,9 @@ def get_economic_overview_data(farm=None):
     if log is None:
         return data
 
+    data["status"] = "success"
+    data["source"] = "db"
+    data["warnings"] = []
     if log.economic_data:
         data["economicData"] = deepcopy(log.economic_data)
     if log.chart_series:

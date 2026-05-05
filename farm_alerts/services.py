@@ -10,12 +10,7 @@ from farm_hub.models import FarmHub
 from notifications.models import FarmNotification
 from notifications.services import create_notification_for_farm_uuid, get_recent_notifications_for_farm
 
-from .mock_data import (
-    ANOMALY_DETECTION_CARD,
-    ARM_ALERTS_TRACKER,
-    FARM_ALERTS_TIMELINE,
-    RECOMMENDATIONS_LIST,
-)
+from .defaults import EMPTY_ALERT_TIMELINE, EMPTY_ALERT_TRACKER, EMPTY_ANOMALY_CARD, EMPTY_RECOMMENDATIONS
 from .models import AnomalyDetection, FarmAlert, FarmAlertTrackerSnapshot, Recommendation
 
 
@@ -383,11 +378,11 @@ def sync_all_farm_alert_trackers():
     return {"processed": len(results), "results": results}
 def get_alert_tracker_data(farm=None):
     if farm is None:
-        return deepcopy(ARM_ALERTS_TRACKER)
+        return deepcopy(EMPTY_ALERT_TRACKER)
 
     alerts = list(FarmAlert.objects.filter(farm=farm, is_active=True)[:20])
     if not alerts:
-        return deepcopy(ARM_ALERTS_TRACKER)
+        return deepcopy(EMPTY_ALERT_TRACKER)
 
     counts = Counter(alert.title for alert in alerts)
     alert_stats = []
@@ -406,16 +401,19 @@ def get_alert_tracker_data(farm=None):
         "totalAlerts": len(alerts),
         "radialBarValue": min(len(alerts) * 10, 100),
         "alertStats": alert_stats,
+        "status": "success",
+        "source": "db",
+        "warnings": [],
     }
 
 
 def get_alert_timeline_data(farm=None):
     if farm is None:
-        return deepcopy(FARM_ALERTS_TIMELINE)
+        return deepcopy(EMPTY_ALERT_TIMELINE)
 
     alerts = list(FarmAlert.objects.filter(farm=farm)[:10])
     if not alerts:
-        return deepcopy(FARM_ALERTS_TIMELINE)
+        return deepcopy(EMPTY_ALERT_TIMELINE)
 
     return {
         "alerts": [
@@ -426,17 +424,20 @@ def get_alert_timeline_data(farm=None):
                 "color": alert.color,
             }
             for alert in alerts
-        ]
+        ],
+        "status": "success",
+        "source": "db",
+        "warnings": [],
     }
 
 
 def get_anomaly_detection_data(farm=None):
     if farm is None:
-        return deepcopy(ANOMALY_DETECTION_CARD)
+        return deepcopy(EMPTY_ANOMALY_CARD)
 
     anomalies = list(AnomalyDetection.objects.filter(farm=farm)[:10])
     if not anomalies:
-        return deepcopy(ANOMALY_DETECTION_CARD)
+        return deepcopy(EMPTY_ANOMALY_CARD)
 
     return {
         "anomalies": [
@@ -448,17 +449,20 @@ def get_anomaly_detection_data(farm=None):
                 "severity": anomaly.severity,
             }
             for anomaly in anomalies
-        ]
+        ],
+        "status": "success",
+        "source": "db",
+        "warnings": [],
     }
 
 
 def get_recommendations_list_data(farm=None):
     if farm is None:
-        return deepcopy(RECOMMENDATIONS_LIST)
+        return deepcopy(EMPTY_RECOMMENDATIONS)
 
     recommendations = list(Recommendation.objects.filter(farm=farm)[:10])
     if not recommendations:
-        return deepcopy(RECOMMENDATIONS_LIST)
+        return deepcopy(EMPTY_RECOMMENDATIONS)
 
     return {
         "recommendations": [
@@ -469,5 +473,8 @@ def get_recommendations_list_data(farm=None):
                 "avatarColor": recommendation.avatar_color or "info",
             }
             for recommendation in recommendations
-        ]
+        ],
+        "status": "success",
+        "source": "db",
+        "warnings": [],
     }

@@ -12,13 +12,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
+from config.integration_contract import build_integration_meta
 from config.swagger import code_response, status_response
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
 from farmer_calendar import PLAN_TYPE_IRRIGATION, delete_plan_events, sync_plan_events
 from water.serializers import WaterStressIndexSerializer
 from water.views import WaterStressIndexView
-from .mock_data import CONFIG_RESPONSE_DATA
+from .defaults import CONFIG_RESPONSE_TEMPLATE
 from .models import IrrigationPlan, IrrigationRecommendationRequest
 from .serializers import (
     FreeTextPlanParserRequestSerializer,
@@ -36,6 +37,7 @@ from .serializers import (
 )
 from .services import build_recommendation_response
 from .services import build_active_plan_context
+from .services import IrrigationDataUnavailableError
 
 
 logger = logging.getLogger(__name__)
@@ -86,7 +88,7 @@ class ConfigView(FarmAccessMixin, APIView):
     )
     def get(self, request):
         farm = self._get_farm(request, request.query_params.get("farm_uuid"))
-        data = dict(CONFIG_RESPONSE_DATA)
+        data = dict(CONFIG_RESPONSE_TEMPLATE)
         data["farm_uuid"] = str(farm.farm_uuid)
         return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
 
@@ -128,7 +130,19 @@ class IrrigationMethodListView(APIView):
             )
 
         return Response(
-            {"code": 200, "msg": "success", "data": self._extract_methods(adapter_response.data)},
+            {
+                "code": 200,
+                "msg": "success",
+                "data": self._extract_methods(adapter_response.data),
+                "meta": build_integration_meta(
+                    flow_type="direct_proxy",
+                    source_type="provider",
+                    source_service="ai_irrigation",
+                    ownership="ai",
+                    live=True,
+                    cached=False,
+                ),
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -157,7 +171,19 @@ class IrrigationMethodListView(APIView):
             payload = response_data.get("data", response_data)
 
         return Response(
-            {"code": adapter_response.status_code, "msg": "success", "data": payload},
+            {
+                "code": adapter_response.status_code,
+                "msg": "success",
+                "data": payload,
+                "meta": build_integration_meta(
+                    flow_type="direct_proxy",
+                    source_type="provider",
+                    source_service="ai_irrigation",
+                    ownership="ai",
+                    live=True,
+                    cached=False,
+                ),
+            },
             status=adapter_response.status_code,
         )
 
@@ -188,7 +214,10 @@ class RecommendView(FarmAccessMixin, APIView):
     @staticmethod
     def _enrich_ai_payload(payload, farm):
         enriched_payload = payload.copy()
-        active_plan_context = build_active_plan_context(farm)
+        try:
+            active_plan_context = build_active_plan_context(farm)
+        except IrrigationDataUnavailableError:
+            active_plan_context = None
         if active_plan_context:
             enriched_payload["active_irrigation_plan"] = active_plan_context
         return enriched_payload
@@ -224,16 +253,6 @@ class RecommendView(FarmAccessMixin, APIView):
         )
 
         response_data = adapter_response.data if isinstance(adapter_response.data, dict) else {}
-        recommendation_data = build_recommendation_response(response_data)
-
-        logger.warning(
-            "Irrigation recommendation response parsed: farm_uuid=%s status_code=%s response_keys=%s sections_count=%s",
-            str(farm.farm_uuid),
-            adapter_response.status_code,
-            sorted(response_data.keys()) if isinstance(response_data, dict) else None,
-            len(recommendation_data["sections"]),
-        )
-
         recommendation = IrrigationRecommendationRequest.objects.create(
             farm=farm,
             crop_id=payload.get("plant_name", ""),
@@ -256,6 +275,23 @@ class RecommendView(FarmAccessMixin, APIView):
                 },
                 status=adapter_response.status_code,
             )
+        try:
+            recommendation_data = build_recommendation_response(response_data)
+        except IrrigationDataUnavailableError as exc:
+            recommendation.status = IrrigationRecommendationRequest.STATUS_ERROR
+            recommendation.save(update_fields=["status"])
+            return Response(
+                {"code": 502, "msg": "error", "data": {"detail": str(exc)}},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        logger.warning(
+            "Irrigation recommendation response parsed: farm_uuid=%s status_code=%s response_keys=%s sections_count=%s",
+            str(farm.farm_uuid),
+            adapter_response.status_code,
+            sorted(response_data.keys()) if isinstance(response_data, dict) else None,
+            len(recommendation_data["sections"]),
+        )
 
         self._create_plan_from_recommendation(recommendation, recommendation_data)
 
@@ -272,6 +308,14 @@ class RecommendView(FarmAccessMixin, APIView):
                 "code": 200,
                 "msg": "success",
                 "data": recommendation_data,
+                "meta": build_integration_meta(
+                    flow_type="backend_owned_data_with_ai_enrichment",
+                    source_type="provider",
+                    source_service="ai_irrigation",
+                    ownership="backend",
+                    live=True,
+                    cached=False,
+                ),
             },
             status=status.HTTP_200_OK,
         )
@@ -329,7 +373,13 @@ class RecommendationDetailView(FarmAccessMixin, APIView):
         if recommendation is None:
             return Response({"code": 404, "msg": "Recommendation not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        data = build_recommendation_response(recommendation.response_payload)
+        try:
+            data = build_recommendation_response(recommendation.response_payload)
+        except IrrigationDataUnavailableError as exc:
+            return Response(
+                {"code": 502, "msg": "error", "data": {"detail": str(exc)}},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         request_payload = recommendation.request_payload if isinstance(recommendation.request_payload, dict) else {}
         data["recommendation_uuid"] = str(recommendation.uuid)
         data["crop_id"] = recommendation.crop_id
@@ -338,7 +388,22 @@ class RecommendationDetailView(FarmAccessMixin, APIView):
         data["irrigation_method_name"] = str(request_payload.get("irrigation_method_name") or "")
         data["status"] = recommendation.status
         data["status_label"] = recommendation.get_status_display()
-        return Response({"code": 200, "msg": "success", "data": data}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": data,
+                "meta": build_integration_meta(
+                    flow_type="backend_owned_data_with_ai_enrichment",
+                    source_type="db",
+                    source_service="backend_irrigation",
+                    ownership="backend",
+                    live=False,
+                    cached=False,
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class WaterStressView(APIView):
@@ -392,7 +457,19 @@ class WaterStressView(APIView):
 
         stress_payload = WaterStressIndexView.extract_stress_payload(adapter_response.data, farm.farm_uuid)
         return Response(
-            {"code": 200, "msg": "success", "data": stress_payload},
+            {
+                "code": 200,
+                "msg": "success",
+                "data": stress_payload,
+                "meta": build_integration_meta(
+                    flow_type="direct_proxy",
+                    source_type="provider",
+                    source_service="ai_irrigation_water_stress",
+                    ownership="ai",
+                    live=True,
+                    cached=False,
+                ),
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -471,7 +548,19 @@ class PlanFromTextView(FarmAccessMixin, APIView):
             sync_plan_events(plan, PLAN_TYPE_IRRIGATION)
 
         return Response(
-            {"code": 200, "msg": response_data.get("msg", "موفق"), "data": response_data.get("data", response_data)},
+            {
+                "code": 200,
+                "msg": response_data.get("msg", "موفق"),
+                "data": response_data.get("data", response_data),
+                "meta": build_integration_meta(
+                    flow_type="direct_proxy",
+                    source_type="provider",
+                    source_service="ai_irrigation_plan_parser",
+                    ownership="backend" if final_plan and farm_uuid else "ai",
+                    live=True,
+                    cached=False,
+                ),
+            },
             status=status.HTTP_200_OK,
         )
 

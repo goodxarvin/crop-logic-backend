@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .mock_data import VALID_CARD_IDS, VALID_ROW_IDS
+from .defaults import VALID_CARD_IDS, VALID_ROW_IDS
 
 
 class FarmDashboardConfigSerializer(serializers.Serializer):

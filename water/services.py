@@ -2,26 +2,29 @@ from copy import deepcopy
 
 from irrigation.models import IrrigationRecommendationRequest
 
-from .mock_data import FARM_WEATHER_CARD, WATER_NEED_PREDICTION, WATER_STRESS_INDEX
+from .defaults import EMPTY_FARM_WEATHER_CARD, EMPTY_WATER_NEED_PREDICTION, EMPTY_WATER_STRESS_INDEX
 from .models import WeatherForecastLog
 
 
 def get_farm_weather_card_data(farm=None):
     if farm is None:
-        return deepcopy(FARM_WEATHER_CARD)
+        return deepcopy(EMPTY_FARM_WEATHER_CARD)
 
     log = WeatherForecastLog.objects.filter(farm=farm).first()
     if log is None:
-        return deepcopy(FARM_WEATHER_CARD)
+        return deepcopy(EMPTY_FARM_WEATHER_CARD)
 
     return {
-        "condition": log.condition or FARM_WEATHER_CARD["condition"],
-        "temperature": log.temperature if log.temperature is not None else FARM_WEATHER_CARD["temperature"],
-        "unit": log.unit or FARM_WEATHER_CARD["unit"],
-        "humidity": log.humidity if log.humidity is not None else FARM_WEATHER_CARD["humidity"],
-        "windSpeed": log.wind_speed if log.wind_speed is not None else FARM_WEATHER_CARD["windSpeed"],
-        "windUnit": log.wind_unit or FARM_WEATHER_CARD["windUnit"],
-        "chartData": deepcopy(log.chart_data or FARM_WEATHER_CARD["chartData"]),
+        "condition": log.condition or None,
+        "temperature": log.temperature if log.temperature is not None else None,
+        "unit": log.unit or EMPTY_FARM_WEATHER_CARD["unit"],
+        "humidity": log.humidity if log.humidity is not None else None,
+        "windSpeed": log.wind_speed if log.wind_speed is not None else None,
+        "windUnit": log.wind_unit or EMPTY_FARM_WEATHER_CARD["windUnit"],
+        "chartData": deepcopy(log.chart_data or EMPTY_FARM_WEATHER_CARD["chartData"]),
+        "status": "success",
+        "source": "db",
+        "warnings": [],
     }
 
 
@@ -53,7 +56,7 @@ def _get_latest_irrigation_result(farm):
 
 
 def get_water_need_prediction_data(farm=None):
-    default_data = deepcopy(WATER_NEED_PREDICTION)
+    default_data = deepcopy(EMPTY_WATER_NEED_PREDICTION)
     result = _get_latest_irrigation_result(farm)
     water_balance = result.get("water_balance", {})
     daily = water_balance.get("daily", [])
@@ -69,11 +72,14 @@ def get_water_need_prediction_data(farm=None):
         "unit": "mm",
         "categories": categories,
         "series": [{"name": "نیاز آبی", "data": series_data}],
+        "status": "success",
+        "source": "db",
+        "warnings": [],
     }
 
 
 def get_water_stress_index_data(farm=None):
-    data = deepcopy(WATER_STRESS_INDEX)
+    data = deepcopy(EMPTY_WATER_STRESS_INDEX)
     result = _get_latest_irrigation_result(farm)
     moisture_level = (result.get("plan") or {}).get("moistureLevel")
 
@@ -95,6 +101,9 @@ def get_water_stress_index_data(farm=None):
         data["avatarColor"] = "error"
 
     data["stats"] = f"{stress_value}%"
+    data["status"] = "success"
+    data["source"] = "db"
+    data["warnings"] = []
     return data
 
 

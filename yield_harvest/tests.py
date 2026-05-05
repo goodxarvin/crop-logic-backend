@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
+from config.observability import METRICS
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType, Product
 from fertilization.models import FertilizationPlan
@@ -41,6 +42,9 @@ class CropSimulationViewTests(TestCase):
         self.product = Product.objects.create(farm_type=self.farm_type, name="گوجه‌فرنگی")
         self.farm.products.add(self.product)
         self.api_client.force_authenticate(user=self.user)
+
+    def tearDown(self):
+        METRICS.clear()
 
     @patch("yield_harvest.views.external_api_request")
     def test_growth_queues_simulation_task(self, mock_external_api_request):
@@ -663,6 +667,60 @@ class CropSimulationViewTests(TestCase):
         sent_query = mock_external_api_request.call_args.kwargs["query"]
         self.assertEqual(sent_query["irrigation_plan"]["id"], irrigation_plan.id)
         self.assertEqual(sent_query["fertilization_plan"]["id"], fertilization_plan.id)
+
+    @patch("yield_harvest.views.external_api_request")
+    def test_yield_harvest_summary_records_empty_result_metric(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(status_code=200, data={"data": {"result": {}}})
+
+        response = self.api_client.get(f"/api/yield-harvest/yield-harvest-summary/?farm_uuid={self.farm.farm_uuid}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(METRICS["yield_harvest.ai.empty_result|operation=yield_harvest_summary"], 1)
+
+    @patch("yield_harvest.views.external_api_request")
+    def test_yield_harvest_summary_persists_seeded_log_from_realistic_ai_contract(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={
+                "data": {
+                    "result": {
+                        "farm_uuid": str(self.farm.farm_uuid),
+                        "yield_prediction": {"predicted_yield_tons": 5.1, "unit": "tons"},
+                        "harvest_prediction_card": {
+                            "harvest_date": "2026-09-28",
+                            "days_until": 152,
+                            "optimalWindowStart": "2026-09-25",
+                            "optimalWindowEnd": "2026-10-01",
+                        },
+                        "yield_prediction_chart": {"series": [{"name": "yield", "data": []}]},
+                    }
+                }
+            },
+        )
+
+        response = self.api_client.get(f"/api/yield-harvest/yield-harvest-summary/?farm_uuid={self.farm.farm_uuid}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(self.farm.yield_harvest_prediction_logs.exists())
+        log = self.farm.yield_harvest_prediction_logs.latest("id")
+        self.assertEqual(log.yield_stats, "5.1")
+        self.assertEqual(str(log.harvest_date), "2026-09-28")
+
+    @patch("yield_harvest.views.external_api_request")
+    def test_yield_prediction_provider_unavailable_returns_explicit_failure(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=503,
+            data={"message": "provider unavailable"},
+        )
+
+        response = self.api_client.post(
+            "/api/yield-harvest/yield-prediction/",
+            {"farm_uuid": str(self.farm.farm_uuid)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["data"]["message"], "provider unavailable")
 
     def test_crop_simulation_rejects_foreign_farm_uuid(self):
         request = self.factory.post(

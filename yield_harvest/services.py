@@ -1,15 +1,11 @@
 from copy import deepcopy
 
-from .mock_data import HARVEST_PREDICTION_CARD, YIELD_PREDICTION_CARD, YIELD_PREDICTION_CHART
+from .defaults import EMPTY_YIELD_HARVEST_SUMMARY
 from .models import YieldHarvestPredictionLog
 
 
 def get_yield_harvest_summary_data(farm=None):
-    data = {
-        "yield_prediction_card": deepcopy(YIELD_PREDICTION_CARD),
-        "yield_prediction_chart": deepcopy(YIELD_PREDICTION_CHART),
-        "harvest_prediction_card": deepcopy(HARVEST_PREDICTION_CARD),
-    }
+    data = deepcopy(EMPTY_YIELD_HARVEST_SUMMARY)
 
     if farm is None:
         return data
@@ -17,6 +13,13 @@ def get_yield_harvest_summary_data(farm=None):
     log = YieldHarvestPredictionLog.objects.filter(farm=farm).first()
     if log is None:
         return data
+
+    data["yield_prediction_card"]["status"] = "success"
+    data["yield_prediction_card"]["source"] = "db"
+    data["yield_prediction_chart"]["status"] = "success"
+    data["yield_prediction_chart"]["source"] = "db"
+    data["harvest_prediction_card"]["status"] = "success"
+    data["harvest_prediction_card"]["source"] = "db"
 
     if log.yield_stats:
         data["yield_prediction_card"]["stats"] = log.yield_stats

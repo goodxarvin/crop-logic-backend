@@ -6,18 +6,30 @@ from django.conf import settings
 from django.db import OperationalError, ProgrammingError, transaction
 from django.utils import timezone
 
+from config.failure_contract import StructuredServiceError
 from external_api_adapter import request as external_api_request
 from external_api_adapter.exceptions import ExternalAPIRequestError
 from notifications.services import create_notification_for_farm_uuid
 
-from .mock_data import ANOMALY_DETECTION_CARD, AVG_SOIL_MOISTURE, SENSOR_COMPARISON_CHART, SENSOR_RADAR_CHART, SENSOR_VALUES_LIST, SOIL_MOISTURE_HEATMAP
 from .models import FarmDevice, SensorExternalRequestLog
+from .templates import AVG_SOIL_MOISTURE_TEMPLATE, SENSOR_META_TEMPLATE, SOIL_MOISTURE_HEATMAP_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
 
 class FarmDataForwardError(Exception):
     pass
+
+
+class DeviceDataUnavailableError(StructuredServiceError):
+    def __init__(self, *, error_code: str, message: str, details: dict | None = None, retriable: bool = False):
+        super().__init__(
+            error_code=error_code,
+            message=message,
+            source="db",
+            details=details,
+            retriable=retriable,
+        )
 
 SENSOR_FIELDS = [
     {"id": "soil_moisture", "label": "رطوبت خاک", "unit": "%", "payload_keys": ("soil_moisture", "soilMoisture", "moisture"), "ideal_min": 45.0, "ideal_max": 65.0, "radar_label": "رطوبت"},
@@ -257,21 +269,37 @@ def get_primary_soil_sensor(*, farm):
 
 def _get_sensor_context(farm=None):
     if farm is None:
-        return None
+        raise DeviceDataUnavailableError(
+            error_code="missing_farm",
+            message="Farm instance is required for sensor context lookup.",
+        )
     primary_sensor = get_primary_soil_sensor(farm=farm)
     if primary_sensor is None:
-        return None
+        raise DeviceDataUnavailableError(
+            error_code="sensor_not_found",
+            message=f"No primary soil sensor found for farm_uuid={farm.farm_uuid}.",
+            details={"farm_uuid": str(farm.farm_uuid)},
+        )
     try:
         logs_queryset = get_sensor_external_request_logs_for_farm(farm_uuid=farm.farm_uuid, physical_device_uuid=primary_sensor.physical_device_uuid)
-    except ValueError:
-        return None
+    except ValueError as exc:
+        raise DeviceDataUnavailableError(
+            error_code="history_unavailable",
+            message=f"Sensor history lookup failed for farm_uuid={farm.farm_uuid}.",
+            details={"farm_uuid": str(farm.farm_uuid)},
+            retriable=True,
+        ) from exc
     history = []
     for log in logs_queryset[:MAX_HISTORY_ITEMS]:
         readings = _extract_readings(log.payload)
         if readings:
             history.append((log, readings))
     if not history:
-        return None
+        raise DeviceDataUnavailableError(
+            error_code="no_sensor_readings",
+            message=f"No sensor readings found for farm_uuid={farm.farm_uuid}.",
+            details={"farm_uuid": str(farm.farm_uuid)},
+        )
     latest_log, latest_readings = history[0]
     farm_device_map = get_farm_device_map_for_logs(logs=[latest_log])
     farm_device = farm_device_map.get((latest_log.farm_uuid, latest_log.sensor_catalog_uuid, latest_log.physical_device_uuid)) or primary_sensor
@@ -304,40 +332,46 @@ def _calculate_status_chip(value):
 
 
 def get_sensor_7_in_1_values_list_data(farm=None, context=None):
-    data = deepcopy(SENSOR_VALUES_LIST)
     context = _get_sensor_context(farm) if context is None else context
-    data["sensor"] = _build_sensor_meta(context, data["sensor"])
-    if not context:
-        return data
+    data = {
+        "sensor": _build_sensor_meta(context, SENSOR_META_TEMPLATE),
+        "sensors": [],
+    }
     latest_readings = context["latest_readings"]
     previous_readings = context["previous_readings"]
-    sensors = []
     for field in SENSOR_FIELDS:
         value = latest_readings.get(field["id"])
         if value is None:
             continue
         previous = previous_readings.get(field["id"])
         change = 0.0 if previous is None else round(value - previous, 2)
-        sensors.append({"id": field["id"], "title": _format_value(value, field["unit"]), "subtitle": field["label"], "trendNumber": abs(change), "trend": "positive" if change >= 0 else "negative", "unit": field["unit"]})
-    if sensors:
-        data["sensors"] = sensors
+        data["sensors"].append({"id": field["id"], "title": _format_value(value, field["unit"]), "subtitle": field["label"], "trendNumber": abs(change), "trend": "positive" if change >= 0 else "negative", "unit": field["unit"]})
+    if not data["sensors"]:
+        raise DeviceDataUnavailableError(
+            error_code="no_numeric_readings",
+            message=f"Latest sensor payload has no usable numeric values for farm_uuid={farm.farm_uuid if farm else None}.",
+        )
     return data
 
 
 def get_sensor_7_in_1_avg_soil_moisture_data(farm=None, context=None):
-    data = deepcopy(AVG_SOIL_MOISTURE)
     context = _get_sensor_context(farm) if context is None else context
-    if not context:
-        return data
     moisture = context["latest_readings"].get("soil_moisture")
     if moisture is None:
-        return data
+        raise DeviceDataUnavailableError(
+            error_code="missing_soil_moisture",
+            message=f"Latest sensor payload is missing soil_moisture for farm_uuid={farm.farm_uuid if farm else None}.",
+        )
     chip_text, chip_color, avatar_color = _calculate_status_chip(moisture)
-    data["stats"] = _format_value(moisture, "%")
-    data["chipText"] = chip_text
-    data["chipColor"] = chip_color
-    data["avatarColor"] = avatar_color
-    return data
+    return {
+        **deepcopy(AVG_SOIL_MOISTURE_TEMPLATE),
+        "stats": _format_value(moisture, "%"),
+        "chipText": chip_text,
+        "chipColor": chip_color,
+        "avatarColor": avatar_color,
+        "status": "success",
+        "source": "db",
+    }
 
 
 def _score_field(value, field):
@@ -353,10 +387,7 @@ def _score_field(value, field):
 
 
 def get_sensor_7_in_1_radar_chart_data(farm=None, context=None):
-    data = deepcopy(SENSOR_RADAR_CHART)
     context = _get_sensor_context(farm) if context is None else context
-    if not context:
-        return data
     latest_readings = context["latest_readings"]
     scores, labels = [], []
     for field in SENSOR_FIELDS:
@@ -365,32 +396,42 @@ def get_sensor_7_in_1_radar_chart_data(farm=None, context=None):
             continue
         labels.append(field["radar_label"])
         scores.append(_score_field(value, field))
-    if labels:
-        data["labels"] = labels
-        data["series"] = [{"name": "اکنون", "data": scores}, {"name": "هدف", "data": [100.0] * len(labels)}]
-    return data
+    if not labels:
+        raise DeviceDataUnavailableError(
+            error_code="no_radar_data",
+            message=f"No usable sensor readings found for radar chart farm_uuid={farm.farm_uuid if farm else None}.",
+        )
+    return {
+        "labels": labels,
+        "series": [{"name": "اکنون", "data": scores}, {"name": "هدف", "data": [100.0] * len(labels)}],
+        "status": "success",
+        "source": "db",
+    }
 
 
 def get_sensor_7_in_1_comparison_chart_data(farm=None, context=None):
-    data = deepcopy(SENSOR_COMPARISON_CHART)
     context = _get_sensor_context(farm) if context is None else context
-    if not context:
-        return data
     history = list(reversed(context["history"][:MAX_CHART_POINTS]))
     moisture_points = [(log.created_at.strftime("%m/%d %H:%M"), readings.get("soil_moisture")) for log, readings in history if readings.get("soil_moisture") is not None]
     if not moisture_points:
-        return data
+        raise DeviceDataUnavailableError(
+            error_code="no_comparison_data",
+            message=f"No soil moisture history found for comparison chart farm_uuid={farm.farm_uuid if farm else None}.",
+        )
     categories = [item[0] for item in moisture_points]
     values = [round(item[1], 2) for item in moisture_points]
     current_value = values[-1]
     baseline_value = values[0] if len(values) > 1 else 55.0
     percent_change = ((current_value - baseline_value) / baseline_value) * 100 if baseline_value else 0.0
-    data["currentValue"] = round(current_value, 2)
-    data["vsLastWeekValue"] = round(percent_change, 2)
-    data["vsLastWeek"] = f"{percent_change:+.1f}%"
-    data["categories"] = categories
-    data["series"] = [{"name": "رطوبت خاک", "data": values}, {"name": "بازه هدف", "data": [55.0] * len(values)}]
-    return data
+    return {
+        "currentValue": round(current_value, 2),
+        "vsLastWeekValue": round(percent_change, 2),
+        "vsLastWeek": f"{percent_change:+.1f}%",
+        "categories": categories,
+        "series": [{"name": "رطوبت خاک", "data": values}, {"name": "بازه هدف", "data": [55.0] * len(values)}],
+        "status": "success",
+        "source": "db",
+    }
 
 
 def _build_anomaly_item(field, value):
@@ -408,10 +449,7 @@ def _build_anomaly_item(field, value):
 
 
 def get_sensor_7_in_1_anomaly_detection_card_data(farm=None, context=None):
-    data = deepcopy(ANOMALY_DETECTION_CARD)
     context = _get_sensor_context(farm) if context is None else context
-    if not context:
-        return data
     anomalies = []
     for field in SENSOR_FIELDS:
         value = context["latest_readings"].get(field["id"])
@@ -420,27 +458,38 @@ def get_sensor_7_in_1_anomaly_detection_card_data(farm=None, context=None):
         anomaly = _build_anomaly_item(field, value)
         if anomaly is not None:
             anomalies.append(anomaly)
-    data["anomalies"] = anomalies or [{"sensor": "سنسور 7 در 1 خاک", "value": "نرمال", "expected": "تمام شاخص‌ها در بازه مجاز هستند", "deviation": "0", "severity": "success"}]
-    return data
+    return {
+        "anomalies": anomalies,
+        "status": "success",
+        "source": "db",
+        "warnings": [] if anomalies else ["No anomalies detected from the latest sensor readings."],
+    }
 
 
 def get_sensor_7_in_1_soil_moisture_heatmap_data(farm=None, context=None):
-    data = deepcopy(SOIL_MOISTURE_HEATMAP)
     context = _get_sensor_context(farm) if context is None else context
-    if not context:
-        return data
     history = list(reversed(context["history"][:MAX_CHART_POINTS]))
     chart_points = [{"x": log.created_at.strftime("%H:%M"), "y": round(readings.get("soil_moisture"), 2)} for log, readings in history if readings.get("soil_moisture") is not None]
     if not chart_points:
-        return data
-    sensor_name = data["zones"][0]
+        raise DeviceDataUnavailableError(
+            error_code="no_heatmap_data",
+            message=f"No soil moisture history found for heatmap farm_uuid={farm.farm_uuid if farm else None}.",
+        )
+    sensor_name = (
+        SOIL_MOISTURE_HEATMAP_TEMPLATE["zones"][0]
+        if SOIL_MOISTURE_HEATMAP_TEMPLATE["zones"]
+        else "سنسور خاک"
+    )
     farm_device = context.get("farm_device")
     if farm_device is not None and farm_device.name:
         sensor_name = farm_device.name
-    data["zones"] = [sensor_name]
-    data["hours"] = [point["x"] for point in chart_points]
-    data["series"] = [{"name": sensor_name, "data": chart_points}]
-    return data
+    return {
+        "zones": [sensor_name],
+        "hours": [point["x"] for point in chart_points],
+        "series": [{"name": sensor_name, "data": chart_points}],
+        "status": "success",
+        "source": "db",
+    }
 
 
 def get_sensor_7_in_1_summary_data(farm=None):
@@ -473,8 +522,10 @@ def get_sensor_comparison_chart_data(*, farm, physical_device_uuid, range_value)
     start_date = timezone.localdate() - timedelta(days=days - 1)
     try:
         logs_queryset = get_sensor_external_request_logs_for_farm(farm_uuid=farm.farm_uuid, physical_device_uuid=physical_device_uuid, date_from=start_date)
-    except ValueError:
-        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+    except ValueError as exc:
+        raise DeviceDataUnavailableError(
+            f"Sensor comparison chart data is unavailable for farm_uuid={farm.farm_uuid} device={physical_device_uuid}."
+        ) from exc
     grouped_logs = {}
     for log in reversed(list(logs_queryset[: days * 24])):
         bucket_date = timezone.localtime(log.created_at).date()
@@ -482,7 +533,9 @@ def get_sensor_comparison_chart_data(*, farm, physical_device_uuid, range_value)
         if numeric_payload:
             grouped_logs[bucket_date] = numeric_payload
     if not grouped_logs:
-        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+        raise DeviceDataUnavailableError(
+            f"No sensor history found for comparison chart farm_uuid={farm.farm_uuid} device={physical_device_uuid}."
+        )
     sorted_dates = sorted(grouped_logs.keys())
     categories = [_format_comparison_category(bucket_date, range_value) for bucket_date in sorted_dates]
     series_map = {}
@@ -500,13 +553,17 @@ def get_sensor_values_list_data(*, farm, physical_device_uuid, range_value):
     start_time = timezone.now() - VALUES_LIST_RANGES[range_value]
     try:
         logs_queryset = get_sensor_external_request_logs_for_farm(farm_uuid=farm.farm_uuid, physical_device_uuid=physical_device_uuid)
-    except ValueError:
-        return {"sensors": []}
+    except ValueError as exc:
+        raise DeviceDataUnavailableError(
+            f"Sensor values list data is unavailable for farm_uuid={farm.farm_uuid} device={physical_device_uuid}."
+        ) from exc
     logs = list(logs_queryset.filter(created_at__gte=start_time).order_by("created_at", "id"))
     if not logs:
         latest_log = logs_queryset.order_by("-created_at", "-id").first()
         if latest_log is None:
-            return {"sensors": []}
+            raise DeviceDataUnavailableError(
+                f"No sensor logs found for values list farm_uuid={farm.farm_uuid} device={physical_device_uuid}."
+            )
         logs = [latest_log]
     earliest_payload, latest_payload = {}, {}
     for log in logs:
@@ -517,7 +574,9 @@ def get_sensor_values_list_data(*, farm, physical_device_uuid, range_value):
             earliest_payload = numeric_payload
         latest_payload = numeric_payload
     if not latest_payload:
-        return {"sensors": []}
+        raise DeviceDataUnavailableError(
+            f"Latest sensor payload has no numeric values for farm_uuid={farm.farm_uuid} device={physical_device_uuid}."
+        )
     sensors = []
     for field_name, title, unit in VALUES_LIST_FIELDS:
         current_value = latest_payload.get(field_name)
@@ -533,13 +592,17 @@ def get_sensor_radar_chart_data(*, farm, physical_device_uuid, range_value):
     start_time = timezone.now() - RADAR_CHART_RANGES[range_value]
     try:
         logs_queryset = get_sensor_external_request_logs_for_farm(farm_uuid=farm.farm_uuid, physical_device_uuid=physical_device_uuid)
-    except ValueError:
-        return {"labels": [], "series": []}
+    except ValueError as exc:
+        raise DeviceDataUnavailableError(
+            f"Sensor radar chart data is unavailable for farm_uuid={farm.farm_uuid} device={physical_device_uuid}."
+        ) from exc
     logs = list(logs_queryset.filter(created_at__gte=start_time).order_by("created_at", "id"))
     if not logs:
         latest_log = logs_queryset.order_by("-created_at", "-id").first()
         if latest_log is None:
-            return {"labels": [], "series": []}
+            raise DeviceDataUnavailableError(
+                f"No sensor logs found for radar chart farm_uuid={farm.farm_uuid} device={physical_device_uuid}."
+            )
         logs = [latest_log]
     latest_payload = {}
     for log in logs:
@@ -547,7 +610,9 @@ def get_sensor_radar_chart_data(*, farm, physical_device_uuid, range_value):
         if numeric_payload:
             latest_payload = numeric_payload
     if not latest_payload:
-        return {"labels": [], "series": []}
+        raise DeviceDataUnavailableError(
+            f"Latest sensor payload has no numeric values for radar chart farm_uuid={farm.farm_uuid} device={physical_device_uuid}."
+        )
     labels, current_data, ideal_data = [], [], []
     for field_name, label, ideal_value in RADAR_CHART_FIELDS:
         current_value = latest_payload.get(field_name)
@@ -728,11 +793,24 @@ def _get_device_supported_widgets(device_catalog):
 
 def _get_device_history_context(farm_device):
     if farm_device is None:
-        return None
+        raise DeviceDataUnavailableError(
+            error_code="device_not_found",
+            message="Farm device instance is required for history lookup.",
+        )
     try:
         logs_queryset = get_device_logs(farm_device)
-    except ValueError:
-        return None
+    except ValueError as exc:
+        logger.error(
+            "Device history lookup failed for farm_device_id=%s: %s",
+            getattr(farm_device, "id", None),
+            exc,
+        )
+        raise DeviceDataUnavailableError(
+            error_code="history_unavailable",
+            message=f"Device history lookup failed for farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+            retriable=True,
+        ) from exc
     history = []
     device_catalog = get_device_catalog_for_farm_device(farm_device)
     for log in logs_queryset[:MAX_HISTORY_ITEMS]:
@@ -741,14 +819,11 @@ def _get_device_history_context(farm_device):
         if readings or normalized_payload:
             history.append((log, readings, normalized_payload))
     if not history:
-        return {
-            "farm_device": farm_device,
-            "latest_log": None,
-            "latest_readings": {},
-            "latest_payload": {},
-            "previous_readings": {},
-            "history": [],
-        }
+        raise DeviceDataUnavailableError(
+            error_code="no_device_history",
+            message=f"No device history found for farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+        )
     latest_log, latest_readings, latest_payload = history[0]
     return {
         "farm_device": farm_device,
@@ -775,15 +850,11 @@ def build_device_latest_payload(farm_device, *, device_code):
     device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
     latest_log = get_latest_device_log(farm_device, device_catalog=device_catalog)
     if latest_log is None:
-        return {
-            "physical_device_uuid": farm_device.physical_device_uuid,
-            "device_code": device_code,
-            "device_catalog_code": device_catalog.code if device_catalog else None,
-            "raw_payload": {},
-            "normalized_payload": {},
-            "readings": {},
-            "created_at": None,
-        }
+        raise DeviceDataUnavailableError(
+            error_code="no_device_payload",
+            message=f"No device payload log found for farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+        )
     return {
         "physical_device_uuid": farm_device.physical_device_uuid,
         "device_code": device_code,
@@ -798,14 +869,23 @@ def build_device_latest_payload(farm_device, *, device_code):
 def build_device_values_list(farm_device, range_value, *, device_code):
     try:
         logs_queryset = get_device_logs(farm_device)
-    except ValueError:
-        return {"sensors": []}
+    except ValueError as exc:
+        raise DeviceDataUnavailableError(
+            error_code="history_unavailable",
+            message=f"Device values list data is unavailable for farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+            retriable=True,
+        ) from exc
     start_time = timezone.now() - VALUES_LIST_RANGES[range_value]
     logs = list(logs_queryset.filter(created_at__gte=start_time).order_by("created_at", "id"))
     if not logs:
         latest_log = logs_queryset.order_by("-created_at", "-id").first()
         if latest_log is None:
-            return {"sensors": []}
+            raise DeviceDataUnavailableError(
+                error_code="no_device_history",
+                message=f"No device logs found for values list farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+                details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+            )
         logs = [latest_log]
     device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
     earliest_payload = {}
@@ -818,7 +898,11 @@ def build_device_values_list(farm_device, range_value, *, device_code):
             earliest_payload = normalized_payload
         latest_payload = normalized_payload
     if not latest_payload:
-        return {"sensors": []}
+        raise DeviceDataUnavailableError(
+            error_code="no_numeric_readings",
+            message=f"Latest device payload has no numeric values for farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+        )
     sensors = []
     for field in _get_device_field_definitions(device_catalog):
         current_value = latest_payload.get(field["id"])
@@ -835,7 +919,13 @@ def build_device_values_list(farm_device, range_value, *, device_code):
                 "unit": field["unit"],
             }
         )
-    return {"sensors": sensors}
+    if not sensors:
+        raise DeviceDataUnavailableError(
+            error_code="no_numeric_readings",
+            message=f"No device values could be derived for farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+        )
+    return {"sensors": sensors, "status": "success", "source": "db"}
 
 
 def build_device_summary_values_list(farm_device, context=None, *, device_catalog=None):
@@ -860,6 +950,12 @@ def build_device_summary_values_list(farm_device, context=None, *, device_catalo
                 "unit": field["unit"],
             }
         )
+    if not data["sensors"]:
+        raise DeviceDataUnavailableError(
+            error_code="no_numeric_readings",
+            message=f"No summary values available for farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+        )
     return data
 
 
@@ -867,7 +963,11 @@ def build_device_radar_chart(farm_device, range_value=None, *, device_code):
     device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
     context = _get_device_history_context(farm_device)
     if not context or not context.get("latest_readings"):
-        return {"labels": [], "series": []}
+        raise DeviceDataUnavailableError(
+            error_code="no_radar_data",
+            message=f"Device radar chart data is unavailable for farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+        )
     labels, current_data, ideal_data = [], [], []
     for field in _get_device_field_definitions(device_catalog):
         current_value = context["latest_readings"].get(field["id"])
@@ -877,7 +977,13 @@ def build_device_radar_chart(farm_device, range_value=None, *, device_code):
         current_data.append(round(current_value, 2))
         midpoint = (field["ideal_min"] + field["ideal_max"]) / 2
         ideal_data.append(round(midpoint, 2))
-    return {"labels": labels, "series": [{"name": "وضعیت فعلی", "data": current_data}, {"name": "بازه ایده آل", "data": ideal_data}]}
+    if not labels:
+        raise DeviceDataUnavailableError(
+            error_code="no_radar_data",
+            message=f"No usable readings found for radar chart farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+        )
+    return {"labels": labels, "series": [{"name": "وضعیت فعلی", "data": current_data}, {"name": "بازه ایده آل", "data": ideal_data}], "status": "success", "source": "db"}
 
 
 def build_device_comparison_chart(farm_device, range_value, *, device_code):
@@ -885,8 +991,13 @@ def build_device_comparison_chart(farm_device, range_value, *, device_code):
     start_date = timezone.localdate() - timedelta(days=days - 1)
     try:
         logs_queryset = get_device_logs(farm_device, date_from=start_date)
-    except ValueError:
-        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+    except ValueError as exc:
+        raise DeviceDataUnavailableError(
+            error_code="history_unavailable",
+            message=f"Device comparison chart data is unavailable for farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+            retriable=True,
+        ) from exc
     device_catalog = validate_output_device_catalog(farm_device=farm_device, device_code=device_code)
     field_definitions = _get_device_field_definitions(device_catalog)
     grouped_logs = {}
@@ -894,7 +1005,11 @@ def build_device_comparison_chart(farm_device, range_value, *, device_code):
         bucket_date = timezone.localtime(log.created_at).date()
         grouped_logs[bucket_date] = extract_device_readings(device_catalog, log.payload)
     if not grouped_logs:
-        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+        raise DeviceDataUnavailableError(
+            error_code="no_device_history",
+            message=f"No device history found for comparison chart farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+        )
     sorted_dates = sorted(grouped_logs.keys())
     categories = [_format_comparison_category(bucket_date, range_value) for bucket_date in sorted_dates]
     series = []
@@ -912,12 +1027,18 @@ def build_device_comparison_chart(farm_device, range_value, *, device_code):
             if not primary_data:
                 primary_data = data_points
     if not series or not primary_data:
-        return {"series": [], "categories": [], "currentValue": 0.0, "vsLastWeek": "+0.0%"}
+        raise DeviceDataUnavailableError(
+            error_code="no_comparison_data",
+            message=f"Device comparison chart has no usable numeric series for farm_device_id={getattr(farm_device, 'id', None)} device_code={device_code}.",
+            details={"farm_device_id": getattr(farm_device, "id", None), "device_code": device_code},
+        )
     return {
         "series": series,
         "categories": categories,
         "currentValue": round(primary_data[-1], 2),
         "vsLastWeek": _format_percent_change(primary_data[-1], primary_data[0]),
+        "status": "success",
+        "source": "db",
     }
 
 
@@ -933,29 +1054,37 @@ def build_device_anomaly_detection_card(farm_device, context=None, *, device_cat
         anomaly = _build_anomaly_item(field, value)
         if anomaly is not None:
             anomalies.append(anomaly)
+    if not latest_readings:
+        raise DeviceDataUnavailableError(
+            error_code="no_numeric_readings",
+            message=f"No latest readings available for anomaly detection farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+        )
     return {
-        "anomalies": anomalies or [
-            {
-                "sensor": farm_device.name if farm_device else "Device",
-                "value": "نرمال",
-                "expected": "تمام شاخص‌ها در بازه مجاز هستند",
-                "deviation": "0",
-                "severity": "success",
-            }
-        ]
+        "anomalies": anomalies,
+        "status": "success",
+        "source": "db",
+        "warnings": [] if anomalies else ["No anomalies detected from the latest device readings."],
     }
 
 
 def build_device_soil_moisture_heatmap(farm_device, context=None, *, device_catalog=None):
-    data = deepcopy(SOIL_MOISTURE_HEATMAP)
     context = _get_device_history_context(farm_device) if context is None else context
     if not context or not context.get("history"):
-        return data
+        raise DeviceDataUnavailableError(
+            error_code="no_heatmap_data",
+            message=f"Device heatmap data is unavailable for farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+        )
     device_catalog = device_catalog or get_device_catalog_for_farm_device(farm_device)
     field_definitions = _get_device_field_definitions(device_catalog)
     primary_field = field_definitions[0] if field_definitions else None
     if primary_field is None:
-        return data
+        raise DeviceDataUnavailableError(
+            error_code="invalid_schema",
+            message=f"Device field schema is missing for heatmap farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+        )
     chart_points = []
     for log, readings, _normalized_payload in reversed(context["history"][:MAX_CHART_POINTS]):
         value = readings.get(primary_field["id"])
@@ -963,33 +1092,51 @@ def build_device_soil_moisture_heatmap(farm_device, context=None, *, device_cata
             continue
         chart_points.append({"x": log.created_at.strftime("%H:%M"), "y": round(value, 2)})
     if not chart_points:
-        return data
-    sensor_name = farm_device.name if farm_device and farm_device.name else data["zones"][0]
-    data["zones"] = [sensor_name]
-    data["hours"] = [point["x"] for point in chart_points]
-    data["series"] = [{"name": sensor_name, "data": chart_points}]
-    return data
+        raise DeviceDataUnavailableError(
+            error_code="no_heatmap_data",
+            message=f"Device heatmap has no usable numeric series for farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+        )
+    sensor_name = farm_device.name if farm_device and farm_device.name else SOIL_MOISTURE_HEATMAP["zones"][0]
+    return {
+        "zones": [sensor_name],
+        "hours": [point["x"] for point in chart_points],
+        "series": [{"name": sensor_name, "data": chart_points}],
+        "status": "success",
+        "source": "db",
+    }
 
 
 def build_device_avg_primary_metric(farm_device, context=None, *, device_catalog=None):
-    data = deepcopy(AVG_SOIL_MOISTURE)
     context = _get_device_history_context(farm_device) if context is None else context
     latest_readings = context.get("latest_readings", {}) if context else {}
     device_catalog = device_catalog or get_device_catalog_for_farm_device(farm_device)
     field_definitions = _get_device_field_definitions(device_catalog)
     primary_field = field_definitions[0] if field_definitions else None
     if primary_field is None:
-        return data
+        raise DeviceDataUnavailableError(
+            error_code="invalid_schema",
+            message=f"Device field schema is missing for farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+        )
     primary_value = latest_readings.get(primary_field["id"])
     if primary_value is None:
-        return data
+        raise DeviceDataUnavailableError(
+            error_code="missing_primary_metric",
+            message=f"Primary metric is missing for farm_device_id={getattr(farm_device, 'id', None)}.",
+            details={"farm_device_id": getattr(farm_device, "id", None)},
+        )
     chip_text, chip_color, avatar_color = _calculate_status_chip(primary_value)
-    data["title"] = primary_field["label"]
-    data["stats"] = _format_value(primary_value, primary_field["unit"])
-    data["chipText"] = chip_text
-    data["chipColor"] = chip_color
-    data["avatarColor"] = avatar_color
-    return data
+    return {
+        **deepcopy(AVG_SOIL_MOISTURE),
+        "title": primary_field["label"],
+        "stats": _format_value(primary_value, primary_field["unit"]),
+        "chipText": chip_text,
+        "chipColor": chip_color,
+        "avatarColor": avatar_color,
+        "status": "success",
+        "source": "db",
+    }
 
 
 def build_device_summary(farm_device, *, device_code):

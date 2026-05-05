@@ -1,11 +1,15 @@
 """Yield & Harvest Prediction and Crop Simulation API views."""
 
+import logging
+import time
+
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
+from config.observability import classify_exception, log_event, observe_operation, record_metric
 from config.swagger import code_response, farm_uuid_query_param
 from external_api_adapter import request as external_api_request
 from farm_hub.models import FarmHub
@@ -22,6 +26,8 @@ from .serializers import (
     YieldHarvestSummarySerializer,
     YieldPredictionSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class YieldHarvestSummaryView(APIView):
@@ -110,16 +116,31 @@ class YieldHarvestSummaryView(APIView):
             return plan_error
         query.update(ai_payload)
 
-        adapter_response = external_api_request(
-            "ai",
-            "/api/crop-simulation/yield-harvest-summary/",
-            method="GET",
-            query=query,
-        )
+        with observe_operation(source="backend.yield_harvest", provider="ai", operation="yield_harvest_summary"):
+            started_at = time.monotonic()
+            adapter_response = external_api_request(
+                "ai",
+                "/api/crop-simulation/yield-harvest-summary/",
+                method="GET",
+                query=query,
+            )
         if adapter_response.status_code >= 400:
+            record_metric("yield_harvest.ai.failure", status_code=adapter_response.status_code, operation="yield_harvest_summary")
             return CropSimulationBaseView._error_response(adapter_response)
 
         summary = CropSimulationBaseView._extract_result(adapter_response.data)
+        if not summary:
+            record_metric("yield_harvest.ai.empty_result", operation="yield_harvest_summary")
+            log_event(
+                level=logging.WARNING,
+                message="yield harvest summary returned empty result",
+                source="backend.yield_harvest",
+                provider="ai",
+                operation="yield_harvest_summary",
+                result_status="empty",
+                duration_ms=(time.monotonic() - started_at) * 1000,
+                farm_uuid=str(farm.farm_uuid),
+            )
 
         self._persist_log(farm.farm_uuid, summary)
 
@@ -134,8 +155,21 @@ class YieldHarvestSummaryView(APIView):
         if farm_uuid:
             try:
                 farm = FarmHub.objects.get(farm_uuid=farm_uuid)
-            except (FarmHub.DoesNotExist, Exception):
-                pass
+            except FarmHub.DoesNotExist:
+                logger.warning("yield_harvest log persistence skipped because farm was not found farm_uuid=%s", farm_uuid)
+            except Exception as exc:
+                failure = classify_exception(exc)
+                log_event(
+                    level=logging.ERROR,
+                    message="yield_harvest log persistence failed",
+                    source="backend.yield_harvest",
+                    provider="db",
+                    operation="persist_log",
+                    result_status="error",
+                    error_code=failure.error_code,
+                    farm_uuid=str(farm_uuid),
+                )
+                return
 
         yield_card = summary.get("yield_prediction") or summary.get("yield_prediction_card") or {}
         harvest_card = summary.get("harvest_prediction_card", {})
@@ -178,6 +212,7 @@ class CropSimulationBaseView(APIView):
     @staticmethod
     def _extract_result(adapter_data):
         if not isinstance(adapter_data, dict):
+            record_metric("yield_harvest.ai.invalid_payload", operation="extract_result")
             return {}
 
         data = adapter_data.get("data")
@@ -198,6 +233,16 @@ class CropSimulationBaseView(APIView):
             adapter_response.data
             if isinstance(adapter_response.data, dict)
             else {"message": str(adapter_response.data)}
+        )
+        log_event(
+            level=logging.ERROR,
+            message="yield_harvest upstream request failed",
+            source="backend.yield_harvest",
+            provider="ai",
+            operation="external_api",
+            result_status="error",
+            error_code="provider_error",
+            status_code=adapter_response.status_code,
         )
         return Response(
             {"code": adapter_response.status_code, "msg": "error", "data": response_data},

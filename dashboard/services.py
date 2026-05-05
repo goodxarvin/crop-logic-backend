@@ -20,7 +20,7 @@ from device_hub.services import (
 )
 from yield_harvest.services import get_yield_harvest_summary_data
 
-from .mock_data import ALL_CARDS
+from .templates import get_all_card_templates
 
 
 def _update_kpi(card_lookup, card_data):
@@ -83,33 +83,41 @@ def _build_recommendations_list(farm, fallback_data, harvest_card):
 
 
 def get_farm_dashboard_cards(farm):
-    cards = deepcopy(ALL_CARDS)
+    cards = get_all_card_templates()
 
-    weather_card = get_farm_weather_card_data(farm)
+    water_cards = {
+        "farmWeatherCard": get_farm_weather_card_data(farm),
+        "waterNeedPrediction": get_water_need_prediction_data(farm),
+        "waterStressIndex": get_water_stress_index_data(farm),
+    }
     crop_health_summary = get_crop_health_summary_data(farm)
     risk_summary = get_risk_summary_data(farm)
     yield_summary = get_yield_harvest_summary_data(farm)
-    water_stress_index = get_water_stress_index_data(farm)
     sensor_summary = get_sensor_7_in_1_summary_data(farm)
+    alert_cards = {
+        "farmAlertsTracker": get_alert_tracker_data(farm),
+        "farmAlertsTimeline": get_alert_timeline_data(farm),
+    }
+    economic_overview = get_economic_overview_data(farm)
     avg_soil_moisture = sensor_summary["avgSoilMoisture"]
 
-    cards["farmWeatherCard"] = weather_card
-    cards["farmAlertsTracker"] = get_alert_tracker_data(farm)
-    cards["farmAlertsTimeline"] = get_alert_timeline_data(farm)
+    cards["farmWeatherCard"] = water_cards["farmWeatherCard"]
+    cards["farmAlertsTracker"] = alert_cards["farmAlertsTracker"]
+    cards["farmAlertsTimeline"] = alert_cards["farmAlertsTimeline"]
     cards["sensorValuesList"] = sensor_summary["sensorValuesList"]
     cards["anomalyDetectionCard"] = sensor_summary["anomalyDetectionCard"]
-    cards["waterNeedPrediction"] = get_water_need_prediction_data(farm)
+    cards["waterNeedPrediction"] = water_cards["waterNeedPrediction"]
     cards["harvestPredictionCard"] = yield_summary["harvest_prediction_card"]
     cards["yieldPredictionChart"] = yield_summary["yield_prediction_chart"]
     cards["sensorRadarChart"] = sensor_summary["sensorRadarChart"]
     cards["sensorComparisonChart"] = sensor_summary["sensorComparisonChart"]
     cards["soilMoistureHeatmap"] = sensor_summary["soilMoistureHeatmap"]
     cards["ndviHealthCard"] = crop_health_summary["ndviHealthCard"]
-    cards["economicOverview"] = get_economic_overview_data(farm)
+    cards["economicOverview"] = economic_overview
     cards["farmOverviewKpis"] = _build_overview_kpis(
         cards["farmOverviewKpis"],
         crop_health_summary,
-        water_stress_index,
+        water_cards["waterStressIndex"],
         avg_soil_moisture,
         risk_summary,
         yield_summary,

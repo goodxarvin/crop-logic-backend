@@ -1,5 +1,7 @@
 import hashlib
 import json
+import logging
+import time
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urljoin
@@ -10,9 +12,13 @@ from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.http import QueryDict
 from farm_hub.models import FarmHub
+from config.observability import classify_exception, log_event, observe_operation, record_metric
 
 from .catalog import GOLD_PLAN_CODE
 from .models import AccessFeature, AccessRule, FarmAccessProfile, SubscriptionPlan
+
+
+logger = logging.getLogger(__name__)
 
 
 class AccessControlError(Exception):
@@ -268,20 +274,54 @@ def request_opa_batch_authorization(farm, user, features, action, route=None):
 
     payload = {"input": build_authorization_input(farm, user, features, action, route=route)}
 
-    try:
-        response = requests.post(
-            _opa_url(settings.ACCESS_CONTROL_AUTHZ_BATCH_PATH),
-            json=payload,
-            timeout=settings.ACCESS_CONTROL_AUTHZ_TIMEOUT,
-        )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise AccessControlServiceUnavailable("OPA authorization service is unavailable.") from exc
+    with observe_operation(source="backend.access_control", provider="opa", operation="batch_authorization"):
+        started_at = time.monotonic()
+        try:
+            response = requests.post(
+                _opa_url(settings.ACCESS_CONTROL_AUTHZ_BATCH_PATH),
+                json=payload,
+                timeout=settings.ACCESS_CONTROL_AUTHZ_TIMEOUT,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            failure = classify_exception(exc)
+            log_event(
+                level=logging.ERROR,
+                message="opa batch authorization request failed",
+                source="backend.access_control",
+                provider="opa",
+                operation="batch_authorization",
+                result_status="error",
+                duration_ms=(time.monotonic() - started_at) * 1000,
+                error_code=failure.error_code,
+                route=route,
+                feature_count=len(features),
+            )
+            record_metric("access_control.opa.failure", error_code=failure.error_code)
+            raise AccessControlServiceUnavailable("OPA authorization service is unavailable.") from exc
 
-    try:
-        return response.json().get("result", {})
-    except ValueError as exc:
-        raise AccessControlServiceUnavailable("OPA authorization service returned invalid JSON.") from exc
+        try:
+            result = response.json().get("result", {})
+        except ValueError as exc:
+            log_event(
+                level=logging.ERROR,
+                message="opa batch authorization returned invalid json",
+                source="backend.access_control",
+                provider="opa",
+                operation="batch_authorization",
+                result_status="error",
+                duration_ms=(time.monotonic() - started_at) * 1000,
+                error_code="parse_error",
+                route=route,
+                feature_count=len(features),
+                status_code=response.status_code,
+            )
+            record_metric("access_control.opa.invalid_json")
+            raise AccessControlServiceUnavailable("OPA authorization service returned invalid JSON.") from exc
+        if not result:
+            record_metric("access_control.opa.empty_result")
+            logger.warning("OPA returned empty authorization result for route=%s", route)
+        return result
 
 
 def normalize_opa_batch_result(data, features):
@@ -319,7 +359,18 @@ def batch_authorize_features(farm, user, features, action, route=None):
 
     try:
         cached_result = cache.get(cache_key)
-    except Exception:
+    except Exception as exc:
+        failure = classify_exception(exc)
+        log_event(
+            level=logging.WARNING,
+            message="authorization cache read failed",
+            source="backend.access_control",
+            provider="cache",
+            operation="batch_authorize_features",
+            result_status="error",
+            error_code=failure.error_code,
+            route=route,
+        )
         cached_result = None
 
     if isinstance(cached_result, dict):
@@ -330,8 +381,18 @@ def batch_authorize_features(farm, user, features, action, route=None):
 
     try:
         cache.set(cache_key, decisions, timeout=_get_authz_cache_timeout())
-    except Exception:
-        pass
+    except Exception as exc:
+        failure = classify_exception(exc)
+        log_event(
+            level=logging.WARNING,
+            message="authorization cache write failed",
+            source="backend.access_control",
+            provider="cache",
+            operation="batch_authorize_features",
+            result_status="error",
+            error_code=failure.error_code,
+            route=route,
+        )
 
     return decisions
 

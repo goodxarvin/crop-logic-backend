@@ -13,7 +13,7 @@ from farm_hub.models import FarmHub
 
 from external_api_adapter.adapter import request as external_request
 
-from .mock_data import AREA_RESPONSE_DATA, PRODUCTS_RESPONSE_DATA
+from .defaults import DEFAULT_AREA_FEATURE, DEFAULT_PRODUCTS_PAYLOAD
 from .models import (
     CropArea,
     CropProduct,
@@ -27,7 +27,7 @@ from .models import (
 )
 
 EARTH_RADIUS_METERS = 6378137.0
-PRODUCT_DEFAULTS = PRODUCTS_RESPONSE_DATA["products"]
+PRODUCT_DEFAULTS = DEFAULT_PRODUCTS_PAYLOAD["products"]
 DEFAULT_CELL_SIDE_KM = 0.15
 DEFAULT_ZONE_PAGE_SIZE = 10
 RULE_BASED_ALGORITHM = "rule_based_v1"
@@ -132,7 +132,7 @@ def get_zone_page_request_params(query_params):
 
 
 def get_default_area_feature():
-    return deepcopy(AREA_RESPONSE_DATA["area"])
+    return deepcopy(DEFAULT_AREA_FEATURE["area"])
 
 
 def normalize_area_feature(area_feature):

@@ -79,3 +79,19 @@ class EconomyOverviewViewTests(TestCase):
 
         with self.assertRaises(Resolver404):
             resolve("/api/economic-overview/summary/")
+
+    @patch("economic_overview.views.external_api_request")
+    def test_overview_returns_structured_502_for_invalid_upstream_payload(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": []},
+        )
+
+        request = self.factory.post("/api/economy/overview/", {"farm_uuid": str(self.farm.farm_uuid)}, format="json")
+        force_authenticate(request, user=self.user)
+
+        response = EconomyOverviewView.as_view()(request)
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.data["data"]["error_code"], "invalid_payload")
+        self.assertEqual(response.data["data"]["source"], "ai_provider")

@@ -9,6 +9,7 @@ from farm_hub.models import FarmHub, FarmType
 from farmer_calendar.models import FarmerCalendarEvent
 
 from .models import IrrigationPlan, IrrigationRecommendationRequest
+from .services import IrrigationDataUnavailableError, build_recommendation_response
 from .views import (
     IrrigationMethodListView,
     IrrigationPlanDetailView,
@@ -20,6 +21,37 @@ from .views import (
     RecommendationListView,
     WaterStressView,
 )
+
+
+class IrrigationServiceFailureTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="irrigation-service-user",
+            password="secret123",
+            email="irrigation-service@example.com",
+            phone_number="09120000009",
+        )
+        self.farm_type = FarmType.objects.create(name="زراعی")
+        self.farm = FarmHub.objects.create(owner=self.user, farm_type=self.farm_type, name="Service Farm")
+
+    def test_get_water_need_prediction_raises_structured_error_for_missing_daily_entries(self):
+        IrrigationRecommendationRequest.objects.create(
+            farm=self.farm,
+            response_payload={"data": {"result": {"plan": {"bestTimeOfDay": "05:00"}}}},
+        )
+
+        from .services import get_water_need_prediction_data
+
+        with self.assertRaises(IrrigationDataUnavailableError) as exc_info:
+            get_water_need_prediction_data(self.farm)
+
+        self.assertEqual(exc_info.exception.contract.error_code, "empty_daily_data")
+
+    def test_build_recommendation_response_rejects_non_object_payload(self):
+        with self.assertRaises(IrrigationDataUnavailableError) as exc_info:
+            build_recommendation_response(["not-a-dict"])
+
+        self.assertEqual(exc_info.exception.contract.error_code, "invalid_payload")
 
 
 class WaterStressViewTests(TestCase):
@@ -72,6 +104,8 @@ class WaterStressViewTests(TestCase):
         self.assertEqual(response.data["data"]["waterStressIndex"], 12)
         self.assertEqual(response.data["data"]["level"], "پایین")
         self.assertEqual(response.data["data"]["sourceMetric"], {"soilMoisture": 24})
+        self.assertEqual(response.data["meta"]["flow_type"], "direct_proxy")
+        self.assertEqual(response.data["meta"]["source_service"], "ai_irrigation_water_stress")
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/irrigation/water-stress/",
@@ -92,6 +126,27 @@ class WaterStressViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data["code"], 404)
         self.assertEqual(response.data["data"]["farm_uuid"][0], "Farm not found.")
+
+    @patch("irrigation.views.external_api_request")
+    def test_post_returns_upstream_failure_without_masking_as_empty(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=503,
+            data={"message": "AI unavailable", "status": "error"},
+        )
+
+        request = self.factory.post(
+            "/api/irrigation/water-stress/",
+            {"farm_uuid": str(self.farm.farm_uuid)},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = WaterStressView.as_view()(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["data"]["message"], "AI unavailable")
+        self.assertNotEqual(response.data.get("data"), [])
+        self.assertNotEqual(response.data.get("data"), {})
 
 
 class IrrigationPlanFromTextViewTests(TestCase):
@@ -136,6 +191,8 @@ class IrrigationPlanFromTextViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["status"], "completed")
+        self.assertEqual(response.data["meta"]["flow_type"], "direct_proxy")
+        self.assertEqual(response.data["meta"]["ownership"], "backend")
         self.assertEqual(IrrigationPlan.objects.count(), 1)
         plan = IrrigationPlan.objects.get()
         self.assertEqual(plan.source, IrrigationPlan.SOURCE_FREE_TEXT)
@@ -184,6 +241,8 @@ class IrrigationMethodListViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["code"], 200)
         self.assertEqual(response.data["data"][0]["name"], "Drip")
+        self.assertEqual(response.data["meta"]["flow_type"], "direct_proxy")
+        self.assertTrue(response.data["meta"]["live"])
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/irrigation/",
@@ -208,6 +267,7 @@ class IrrigationMethodListViewTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["data"]["name"], "Drip")
+        self.assertEqual(response.data["meta"]["source_service"], "ai_irrigation")
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/irrigation/",
@@ -319,6 +379,30 @@ class RecommendViewTests(TestCase):
         self.assertEqual(response.data["data"]["water_balance"]["active_kc"], 0.93)
         self.assertEqual(response.data["data"]["timeline"][0]["step_number"], 1)
         self.assertEqual(response.data["data"]["sections"][0]["type"], "warning")
+
+    @patch("irrigation.views.external_api_request")
+    def test_recommend_view_persists_real_response_and_never_returns_fake_success_on_invalid_payload(self, mock_external_api_request):
+        mock_external_api_request.return_value = AdapterResponse(
+            status_code=200,
+            data={"data": {"result": {"plan": {"bestTimeOfDay": "05:00"}}}},
+        )
+
+        request = self.factory.post(
+            "/api/irrigation/recommend/",
+            {
+                "farm_uuid": str(self.farm.farm_uuid),
+                "plant_name": "گوجه فرنگی",
+                "growth_stage": "گلدهی",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = RecommendView.as_view()(request)
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(IrrigationRecommendationRequest.objects.count(), 1)
+        self.assertEqual(IrrigationRecommendationRequest.objects.get().status, IrrigationRecommendationRequest.STATUS_ERROR)
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/irrigation/recommend/",

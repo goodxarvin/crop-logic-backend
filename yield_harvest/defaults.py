@@ -1,0 +1,31 @@
+EMPTY_YIELD_HARVEST_SUMMARY = {
+    "yield_prediction_card": {
+        "id": "yield_prediction",
+        "title": "پیش‌بینی عملکرد",
+        "subtitle": "این فصل",
+        "stats": None,
+        "avatarColor": "secondary",
+        "avatarIcon": "tabler-chart-bar",
+        "chipText": "بدون داده",
+        "chipColor": "secondary",
+        "status": "empty",
+        "source": "db",
+    },
+    "yield_prediction_chart": {
+        "categories": [],
+        "series": [],
+        "summary": [],
+        "status": "empty",
+        "source": "db",
+    },
+    "harvest_prediction_card": {
+        "date": None,
+        "dateFormatted": None,
+        "daysUntil": None,
+        "description": "داده پیش‌بینی برداشت هنوز ثبت نشده است.",
+        "optimalWindowStart": None,
+        "optimalWindowEnd": None,
+        "status": "empty",
+        "source": "db",
+    },
+}

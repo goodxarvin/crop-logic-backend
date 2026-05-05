@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from .mock_data import FERTILIZATION_DASHBOARD_RECOMMENDATION, RECOMMEND_RESPONSE_DATA
+from .defaults import FERTILIZATION_DASHBOARD_TEMPLATE
 from .models import FertilizationPlan, FertilizationRecommendationRequest
 
 
@@ -77,9 +77,11 @@ def build_active_plan_context(farm):
 
 
 def get_fertilization_dashboard_recommendation(farm=None):
-    default_item = deepcopy(FERTILIZATION_DASHBOARD_RECOMMENDATION)
+    default_item = deepcopy(FERTILIZATION_DASHBOARD_TEMPLATE)
     result = _get_latest_result(farm)
-    plan = result.get("plan") or RECOMMEND_RESPONSE_DATA.get("plan", {})
+    plan = result.get("plan") or {}
+    if not isinstance(plan, dict) or not plan:
+        return default_item
 
     npk_ratio = plan.get("npkRatio") or "20-20-20 (NPK)"
     amount = plan.get("amountPerHectare")
@@ -91,5 +93,8 @@ def get_fertilization_dashboard_recommendation(farm=None):
     default_item["title"] = f"کود: {npk_ratio}"
     if subtitle_parts:
         default_item["subtitle"] = "، ".join(subtitle_parts)
+    default_item["status"] = "success"
+    default_item["source"] = "db"
+    default_item["warnings"] = []
 
     return default_item
