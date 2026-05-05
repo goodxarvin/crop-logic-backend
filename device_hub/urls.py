@@ -1,9 +1,10 @@
 from django.urls import path
 
-from .views import DeviceCatalogListView, DeviceCommandView, DeviceComparisonChartView, DeviceDetailView, DeviceLatestPayloadView, DeviceLogListView, DeviceRadarChartView, DeviceSummaryView, DeviceValuesListView, Sensor7In1SummaryView, SensorExternalAPIView, SensorExternalRequestLogListAPIView
+from .views import DeviceCatalogListView, DeviceCodeListView, DeviceCommandView, DeviceComparisonChartView, DeviceDetailView, DeviceLatestPayloadView, DeviceLogListView, DeviceRadarChartView, DeviceSummaryView, DeviceValuesListView, Sensor7In1SummaryView, SensorExternalAPIView, SensorExternalRequestLogListAPIView
 
 urlpatterns = [
     path("catalog/", DeviceCatalogListView.as_view(), name="device-catalog-list"),
+    path("devices/<uuid:physical_device_uuid>/device-codes/", DeviceCodeListView.as_view(), name="device-code-list"),
     path("devices/<uuid:physical_device_uuid>/", DeviceDetailView.as_view(), name="device-detail"),
     path("devices/<uuid:physical_device_uuid>/latest/", DeviceLatestPayloadView.as_view(), name="device-latest-payload"),
     path("devices/<uuid:physical_device_uuid>/summary/", DeviceSummaryView.as_view(), name="device-summary"),

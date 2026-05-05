@@ -155,6 +155,11 @@ class DeviceCommandResponseSerializer(serializers.Serializer):
     status = serializers.CharField()
 
 
+class DeviceCodeListResponseSerializer(serializers.Serializer):
+    physical_device_uuid = serializers.UUIDField()
+    device_codes = serializers.ListField(child=serializers.CharField())
+
+
 class SensorExternalRequestLogSerializer(serializers.ModelSerializer):
     farm_device = serializers.SerializerMethodField()
     sensor_catalog = serializers.SerializerMethodField()

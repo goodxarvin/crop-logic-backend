@@ -1097,7 +1097,7 @@ def build_device_soil_moisture_heatmap(farm_device, context=None, *, device_cata
             message=f"Device heatmap has no usable numeric series for farm_device_id={getattr(farm_device, 'id', None)}.",
             details={"farm_device_id": getattr(farm_device, "id", None)},
         )
-    sensor_name = farm_device.name if farm_device and farm_device.name else SOIL_MOISTURE_HEATMAP["zones"][0]
+    sensor_name = farm_device.name if farm_device and farm_device.name else "Sensor"
     return {
         "zones": [sensor_name],
         "hours": [point["x"] for point in chart_points],
@@ -1128,7 +1128,7 @@ def build_device_avg_primary_metric(farm_device, context=None, *, device_catalog
         )
     chip_text, chip_color, avatar_color = _calculate_status_chip(primary_value)
     return {
-        **deepcopy(AVG_SOIL_MOISTURE),
+        **deepcopy(AVG_SOIL_MOISTURE_TEMPLATE),
         "title": primary_field["label"],
         "stats": _format_value(primary_value, primary_field["unit"]),
         "chipText": chip_text,

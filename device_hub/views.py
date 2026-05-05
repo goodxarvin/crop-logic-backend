@@ -12,7 +12,7 @@ from soil.serializers import SoilComparisonChartSerializer, SoilRadarChartSerial
 
 from .authentication import SensorExternalAPIKeyAuthentication
 from .sensor_serializers import DeviceSummarySerializer, Sensor7In1SummarySerializer, SensorComparisonChartQuerySerializer, SensorComparisonChartResponseSerializer, SensorRadarChartQuerySerializer, SensorRadarChartResponseSerializer, SensorValuesListQuerySerializer, SensorValuesListResponseSerializer
-from .serializers import DeviceCatalogSerializer, DeviceCodeQuerySerializer, DeviceCommandRequestSerializer, DeviceCommandResponseSerializer, DeviceDetailSerializer, DeviceLatestPayloadSerializer, DeviceRangeQuerySerializer, SensorExternalRequestLogQuerySerializer, SensorExternalRequestLogSerializer, SensorExternalRequestSerializer
+from .serializers import DeviceCatalogSerializer, DeviceCodeListResponseSerializer, DeviceCodeQuerySerializer, DeviceCommandRequestSerializer, DeviceCommandResponseSerializer, DeviceDetailSerializer, DeviceLatestPayloadSerializer, DeviceRangeQuerySerializer, SensorExternalRequestLogQuerySerializer, SensorExternalRequestLogSerializer, SensorExternalRequestSerializer
 from .services import DeviceDataUnavailableError, FarmDataForwardError, build_device_comparison_chart, build_device_latest_payload, build_device_radar_chart, build_device_summary, build_device_values_list, create_sensor_external_notification, execute_device_command, forward_sensor_payload_to_farm_data, get_farm_device_by_physical_uuid, get_farm_device_map_for_logs, get_primary_soil_sensor, get_sensor_7_in_1_comparison_chart_data, get_sensor_7_in_1_radar_chart_data, get_sensor_7_in_1_summary_data, get_sensor_comparison_chart_data, get_sensor_external_request_logs_for_farm, get_sensor_radar_chart_data, get_sensor_values_list_data, validate_output_device_catalog
 
 
@@ -49,6 +49,24 @@ class DeviceDetailView(DeviceBaseView):
         latest_payload = build_device_latest_payload(farm_device, device_code=device_code)
         serializer = DeviceDetailSerializer(farm_device, context={"latest_log": type("LatestLog", (), {"created_at": latest_payload["created_at"]})() if latest_payload["created_at"] else None})
         return Response({"code": 200, "msg": "success", "data": serializer.data}, status=status.HTTP_200_OK)
+
+
+class DeviceCodeListView(DeviceBaseView):
+    @extend_schema(tags=["Device Hub"], responses={200: code_response("DeviceCodeListResponse", data=DeviceCodeListResponseSerializer())})
+    def get(self, request, physical_device_uuid):
+        farm_device = self.get_farm_device(request, physical_device_uuid)
+        device_codes = [catalog.code for catalog in farm_device.get_device_catalogs() if getattr(catalog, "code", "")]
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": {
+                    "physical_device_uuid": farm_device.physical_device_uuid,
+                    "device_codes": device_codes,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class DeviceLatestPayloadView(DeviceBaseView):

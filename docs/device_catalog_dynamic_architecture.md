@@ -80,6 +80,153 @@
 
 ## APIهای پیشنهادی
 
+## راهنمای `device_code`
+
+در این معماری باید بین این سه مفهوم تفاوت روشن باشد:
+
+- `physical_device_uuid`: شناسه خودِ دستگاه ثبت‌شده روی مزرعه
+- `device_catalog.uuid`: شناسه رکورد catalog
+- `device_code`: مقدار متنی فیلد `DeviceCatalog.code` مثل `soil_sensor_v2` یا `irrigation_valve_v1`
+
+### `device_code` را از کجا می‌گیریم؟
+
+دو راه اصلی برای پیدا کردن `device_code`های یک دستگاه وجود دارد:
+
+#### 1) از جزئیات device
+
+در پاسخ این endpoint:
+
+```http
+GET /api/device-hub/devices/{physical_device_uuid}/?device_code=<device_code>
+```
+
+فیلدهای زیر برمی‌گردند:
+
+- `data.device_catalog.code`
+- `data.device_catalogs[].code`
+
+یعنی frontend می‌تواند codeهای attachشده به device را از همین پاسخ بخواند.
+
+#### 2) از endpoint اختصاصی لیست codeها
+
+```http
+GET /api/device-hub/devices/{physical_device_uuid}/device-codes/
+```
+
+پاسخ نمونه:
+
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "physical_device_uuid": "device-uuid",
+    "device_codes": ["soil_sensor_v2", "air_sensor_v1"]
+  }
+}
+```
+
+این endpoint برای وقتی مناسب است که frontend فقط می‌خواهد بداند این device به چه `device_code`هایی وصل است.
+
+### `device_code` را کجا باید ارسال کنیم؟
+
+`device_code` همیشه لازم نیست. بسته به endpoint یکی از این حالت‌ها را دارد:
+
+#### الف) در query string
+
+برای endpointهایی که خروجی آن‌ها باید بر اساس یکی از catalogهای attachشده انتخاب شود:
+
+```http
+GET /api/device-hub/devices/{physical_device_uuid}/?device_code=soil_sensor_v2
+GET /api/device-hub/devices/{physical_device_uuid}/latest/?device_code=soil_sensor_v2
+GET /api/device-hub/devices/{physical_device_uuid}/summary/?device_code=soil_sensor_v2
+GET /api/device-hub/devices/{physical_device_uuid}/values-list/?device_code=soil_sensor_v2&range=7d
+GET /api/device-hub/devices/{physical_device_uuid}/comparison-chart/?device_code=soil_sensor_v2&range=7d
+GET /api/device-hub/devices/{physical_device_uuid}/radar-chart/?device_code=soil_sensor_v2&range=7d
+GET /api/device-hub/devices/{physical_device_uuid}/logs/?device_code=soil_sensor_v2&page=1&page_size=20
+```
+
+#### ب) در body درخواست
+
+برای endpoint command:
+
+```http
+POST /api/device-hub/devices/{physical_device_uuid}/commands/
+```
+
+نمونه body:
+
+```json
+{
+  "device_code": "irrigation_valve_v1",
+  "command": "open",
+  "payload": {
+    "duration_seconds": 120
+  }
+}
+```
+
+#### ج) endpointهایی که اصلاً `device_code` نمی‌خواهند
+
+این endpoint فقط با `physical_device_uuid` کار می‌کند:
+
+```http
+GET /api/device-hub/devices/{physical_device_uuid}/device-codes/
+```
+
+و endpointهای catalog-level هم معمولاً `device_code` لازم ندارند:
+
+```http
+GET /api/device-hub/catalog/
+```
+
+### چه زمانی `device_code` اجباری است؟
+
+وقتی یک `FarmDevice` ممکن است به چند catalog وصل باشد، backend بدون `device_code` نمی‌تواند بفهمد باید:
+
+- mapping کدام catalog را اعمال کند
+- widgetهای کدام catalog را برگرداند
+- لاگ را بر اساس کدام catalog فیلتر کند
+- command را برای کدام نوع device validate کند
+
+پس در endpointهای data/summary/chart/logs/commands باید `device_code` صریح ارسال شود.
+
+### `device_code` دقیقاً باید چه مقداری باشد؟
+
+باید مقدار فیلد `DeviceCatalog.code` ارسال شود، نه:
+
+- `name`
+- `uuid`
+- `physical_device_uuid`
+
+مثال درست:
+
+```text
+soil_sensor_v2
+air_sensor_v1
+irrigation_valve_v1
+```
+
+مثال اشتباه:
+
+```text
+Soil Sensor V2
+11111111-1111-1111-1111-111111111111
+22222222-2222-2222-2222-222222222222
+```
+
+### اگر `device_code` اشتباه باشد چه می‌شود؟
+
+اگر `device_code` به آن device attach نشده باشد، backend باید validation error برگرداند. معمولاً چیزی شبیه این:
+
+```json
+{
+  "device_code": [
+    "Device code is not attached to this farm device."
+  ]
+}
+```
+
 ### 1) لیست دیوایس‌ها
 
 ```http
@@ -98,8 +245,13 @@ GET /api/device-hub/catalog/
 ### 2) جزئیات یک دیوایس ثبت‌شده روی مزرعه
 
 ```http
-GET /api/device-hub/devices/{physical_device_uuid}/
+GET /api/device-hub/devices/{physical_device_uuid}/?device_code=soil_sensor_v1
 ```
+
+نکته:
+
+- در این endpoint، `device_code` باید در query string ارسال شود.
+- اگر device فقط یک catalog داشته باشد، از نظر معماری باز هم بهتر است frontend آن را صریح بفرستد.
 
 پاسخ نمونه:
 
@@ -129,7 +281,7 @@ GET /api/device-hub/devices/{physical_device_uuid}/
 ### 3) آخرین داده‌ی یک device
 
 ```http
-GET /api/device-hub/devices/{physical_device_uuid}/latest/
+GET /api/device-hub/devices/{physical_device_uuid}/latest/?device_code=soil_sensor_v1
 ```
 
 کاربرد:
@@ -143,7 +295,7 @@ GET /api/device-hub/devices/{physical_device_uuid}/latest/
 ### 4) summary داینامیک برای یک device
 
 ```http
-GET /api/device-hub/devices/{physical_device_uuid}/summary/
+GET /api/device-hub/devices/{physical_device_uuid}/summary/?device_code=soil_sensor_v1
 ```
 
 کاربرد:
@@ -156,7 +308,7 @@ GET /api/device-hub/devices/{physical_device_uuid}/summary/
 ### 5) نمودار مقایسه‌ای داینامیک
 
 ```http
-GET /api/device-hub/devices/{physical_device_uuid}/comparison-chart/?range=7d
+GET /api/device-hub/devices/{physical_device_uuid}/comparison-chart/?device_code=soil_sensor_v1&range=7d
 ```
 
 ---
@@ -164,7 +316,7 @@ GET /api/device-hub/devices/{physical_device_uuid}/comparison-chart/?range=7d
 ### 6) نمودار رادار داینامیک
 
 ```http
-GET /api/device-hub/devices/{physical_device_uuid}/radar-chart/?range=7d
+GET /api/device-hub/devices/{physical_device_uuid}/radar-chart/?device_code=soil_sensor_v1&range=7d
 ```
 
 ---
@@ -172,7 +324,7 @@ GET /api/device-hub/devices/{physical_device_uuid}/radar-chart/?range=7d
 ### 7) values list داینامیک
 
 ```http
-GET /api/device-hub/devices/{physical_device_uuid}/values-list/?range=7d
+GET /api/device-hub/devices/{physical_device_uuid}/values-list/?device_code=soil_sensor_v1&range=7d
 ```
 
 ---
@@ -180,7 +332,7 @@ GET /api/device-hub/devices/{physical_device_uuid}/values-list/?range=7d
 ### 8) دریافت history خام
 
 ```http
-GET /api/device-hub/devices/{physical_device_uuid}/logs/?page=1&page_size=20
+GET /api/device-hub/devices/{physical_device_uuid}/logs/?device_code=soil_sensor_v1&page=1&page_size=20
 ```
 
 این endpoint برای debug و audit خیلی مهم است.
@@ -320,6 +472,7 @@ payload نمونه:
 
 ```json
 {
+  "device_code": "irrigation_valve_v1",
   "command": "turn_on",
   "payload": {
     "duration_seconds": 120
@@ -450,6 +603,7 @@ serializerها مخصوص 7-in-1 هستند.
 ```python
 urlpatterns = [
     path("catalog/", DeviceCatalogListView.as_view(), name="device-catalog-list"),
+    path("devices/<uuid:physical_device_uuid>/device-codes/", DeviceCodeListView.as_view(), name="device-code-list"),
     path("devices/<uuid:physical_device_uuid>/", DeviceDetailView.as_view(), name="device-detail"),
     path("devices/<uuid:physical_device_uuid>/latest/", DeviceLatestPayloadView.as_view(), name="device-latest-payload"),
     path("devices/<uuid:physical_device_uuid>/summary/", DeviceSummaryView.as_view(), name="device-summary"),

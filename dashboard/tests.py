@@ -153,6 +153,12 @@ class FarmDashboardCardsViewTests(DashboardBaseTestCase):
         self.assertIn("economicOverview", response.data["data"])
         self.assertEqual(response.data["data"]["farmOverviewKpis"]["kpis"][0]["id"], "farm_health_score")
         self.assertEqual(response.data["data"]["farmOverviewKpis"]["kpis"][2]["id"], "avg_soil_moisture")
+        kpi_ids = [item["id"] for item in response.data["data"]["farmOverviewKpis"]["kpis"]]
+        self.assertIn("disease_risk", kpi_ids)
+        self.assertIn("pest_risk", kpi_ids)
+        self.assertIn("yield_prediction", kpi_ids)
+        self.assertIn("quality_score", kpi_ids)
+        self.assertIn("days_until_harvest", kpi_ids)
 
     def test_get_requires_farm_uuid(self):
         request = self.factory.get("/api/farm-dashboard/")

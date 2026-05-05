@@ -6,7 +6,7 @@ from farm_hub.models import FarmHub, FarmType
 
 from .models import DeviceCatalog, SensorExternalRequestLog
 from .services import DeviceDataUnavailableError, build_device_anomaly_detection_card
-from .views import DeviceCommandView, DeviceDetailView, DeviceLatestPayloadView, DeviceSummaryView
+from .views import DeviceCodeListView, DeviceCommandView, DeviceDetailView, DeviceLatestPayloadView, DeviceSummaryView
 
 
 class DeviceHubGenericViewsTests(TestCase):
@@ -65,6 +65,36 @@ class DeviceHubGenericViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["physical_device_uuid"], str(self.device.physical_device_uuid))
         self.assertEqual(response.data["data"]["device_catalog"]["code"], self.catalog.code)
+
+    def test_device_code_list_view_returns_attached_device_codes(self):
+        secondary_catalog = DeviceCatalog.objects.create(
+            code="air_sensor_v1",
+            name="Air Sensor V1",
+            device_communication_type=DeviceCatalog.OUTPUT_ONLY,
+        )
+        self.device.device_catalogs.add(self.catalog, secondary_catalog)
+
+        request = self.factory.get(
+            f"/api/device-hub/devices/{self.device.physical_device_uuid}/device-codes/",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = DeviceCodeListView.as_view()(request, physical_device_uuid=self.device.physical_device_uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["physical_device_uuid"], str(self.device.physical_device_uuid))
+        self.assertEqual(response.data["data"]["device_codes"], [self.catalog.code, secondary_catalog.code])
+
+    def test_device_code_list_view_returns_primary_catalog_when_no_m2m_catalogs_exist(self):
+        request = self.factory.get(
+            f"/api/device-hub/devices/{self.device.physical_device_uuid}/device-codes/",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = DeviceCodeListView.as_view()(request, physical_device_uuid=self.device.physical_device_uuid)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["device_codes"], [self.catalog.code])
 
     def test_device_latest_payload_view_returns_normalized_readings(self):
         request = self.factory.get(

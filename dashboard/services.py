@@ -38,6 +38,58 @@ def _update_kpi(card_lookup, card_data):
         card_lookup[card_id]["details"] = details
 
 
+def _build_quality_score_card(yield_summary):
+    quality_card = {
+        "id": "quality_score",
+        "title": "امتیاز کیفیت",
+        "subtitle": "برآورد کیفیت محصول",
+        "stats": "۵۹",
+        "avatarColor": "info",
+        "avatarIcon": "tabler-stars",
+        "chipText": "متوسط",
+        "chipColor": "warning",
+    }
+
+    chart_summary = yield_summary.get("yield_prediction_chart", {}).get("summary", [])
+    if not isinstance(chart_summary, list):
+        return quality_card
+
+    for item in chart_summary:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title", "")).strip()
+        if "کیفیت" not in title:
+            continue
+        amount = item.get("amount")
+        subtitle = item.get("subtitle")
+        if amount not in (None, ""):
+            quality_card["stats"] = str(amount)
+        if subtitle:
+            quality_card["chipText"] = str(subtitle)
+        quality_card["chipColor"] = "warning"
+        return quality_card
+
+    return quality_card
+
+
+def _build_days_until_harvest_card(yield_summary):
+    harvest_card = yield_summary.get("harvest_prediction_card", {})
+    days_until = harvest_card.get("daysUntil")
+    card = {
+        "id": "days_until_harvest",
+        "title": "روز تا برداشت",
+        "subtitle": "زمان باقیمانده تا پنجره برداشت",
+        "stats": "۱۳۵",
+        "avatarColor": "warning",
+        "avatarIcon": "tabler-calendar-event",
+        "chipText": "برنامه ریزی",
+        "chipColor": "success",
+    }
+    if days_until is not None:
+        card["stats"] = str(days_until)
+    return card
+
+
 def _build_overview_kpis(base_cards, crop_health_summary, water_stress_index, avg_soil_moisture, risk_summary, yield_summary):
     kpis = [crop_health_summary["farmHealthScore"], water_stress_index, avg_soil_moisture, *deepcopy(base_cards["kpis"])]
     card_lookup = {item["id"]: item for item in kpis}
@@ -47,6 +99,8 @@ def _build_overview_kpis(base_cards, crop_health_summary, water_stress_index, av
     _update_kpi(card_lookup, risk_summary.get("disease_risk", {}))
     _update_kpi(card_lookup, risk_summary.get("pest_risk", {}))
     _update_kpi(card_lookup, yield_summary.get("yield_prediction_card", {}))
+    _update_kpi(card_lookup, _build_quality_score_card(yield_summary))
+    _update_kpi(card_lookup, _build_days_until_harvest_card(yield_summary))
 
     return {"kpis": kpis}
 
