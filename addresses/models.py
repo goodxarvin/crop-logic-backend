@@ -1,5 +1,6 @@
 from django.db import models
 from config.settings import AUTH_USER_MODEL
+from django.urls import reverse
 
 class Province(models.Model):
     province_id = models.IntegerField(primary_key=True)
@@ -37,4 +38,6 @@ class Address(models.Model):
 
     def __str__(self) -> str:
         return f"{self.address_detail[:10]}..."
-    
+
+    def get_absolute_relative_url(self):
+        return reverse("addresses:address-api-urls:address-viewset-detail", kwargs={"pk": self.pk})

@@ -16,7 +16,7 @@ class CityAdmin(admin.ModelAdmin):
     list_display = (
         "city_name",
         "city_local_id",
-        "province"
+        "province",
     )
 
 admin.site.register(City, CityAdmin)
@@ -27,6 +27,7 @@ class AddressAdmin(admin.ModelAdmin):
         "address_detail",
         "province",
         "city",
+        "user__email",
     ]
 
 admin.site.register(Address, AddressAdmin)
