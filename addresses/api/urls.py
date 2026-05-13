@@ -5,7 +5,7 @@ from . import views
 app_name = "address-api-urls"
 
 router = DefaultRouter()
-router.register("", views.AddressViewSet, basename="address-viewset")
+router.register("info", views.AddressViewSet, basename="address-viewset")
 
 urlpatterns = [
     path("province/", views.ProvinceListAPIView.as_view(), name="get-provinces"),
