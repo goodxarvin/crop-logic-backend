@@ -18,14 +18,12 @@ urlpatterns = [
     path("api/crop-health/", include("crop_health.urls")),
     path("api/soil/", include("soil.urls")),
 
-    path("api/crop-zoning/", include("crop_zoning.urls")),
+    path("api/location-data/", include("crop_zoning.urls")),
     # path("api/yield-harvest/", include("yield_harvest.urls")),
     path("api/yield-harvest/", include("yield_harvest.crop_simulation_urls")),
 
     path("api/pest-detection/", include("pest_detection.urls")),
     path("api/pest-disease/", include("pest_detection.pest_disease_urls")),
-    path("api/sensor-7-in-1/", include("device_hub.sensor_7_in_1_urls")),
-    path("api/sensors/", include("device_hub.comparison_urls")),
     path("api/irrigation/", include("irrigation.urls")),
 
     path("api/weather/", include("water.weather_urls")),

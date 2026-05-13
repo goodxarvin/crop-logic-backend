@@ -4,10 +4,10 @@ from django.conf import settings
 from django.db import transaction
 
 from crop_zoning.services import (
-    create_zones_and_dispatch,
     get_default_area_feature,
     get_initial_zones_payload,
     normalize_area_feature,
+    ensure_latest_area_ready_for_processing,
 )
 from external_api_adapter import request as external_api_request
 from external_api_adapter.exceptions import ExternalAPIRequestError
@@ -22,7 +22,11 @@ class FarmDataSyncError(Exception):
 
 
 def dispatch_farm_zoning(area_feature, farm):
-    crop_area, _zones = create_zones_and_dispatch(normalize_area_feature(area_feature), farm=farm)
+    crop_area = ensure_latest_area_ready_for_processing(
+        farm_uuid=farm.farm_uuid,
+        area_feature=normalize_area_feature(area_feature),
+        owner=farm.owner,
+    )
     return crop_area, get_initial_zones_payload(crop_area)
 
 

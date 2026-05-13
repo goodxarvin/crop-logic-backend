@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import DeviceCatalogListView, DeviceCodeListView, DeviceCommandView, DeviceComparisonChartView, DeviceDetailView, DeviceLatestPayloadView, DeviceLogListView, DeviceRadarChartView, DeviceSummaryView, DeviceValuesListView, Sensor7In1SummaryView, SensorExternalAPIView, SensorExternalRequestLogListAPIView
+from .views import DeviceCatalogListView, DeviceCodeListView, DeviceCommandView, DeviceComparisonChartView, DeviceDetailView, DeviceLatestPayloadView, DeviceLogListView, DeviceRadarChartView, DeviceSummaryView, DeviceValuesListView, SensorExternalAPIView, SensorExternalRequestLogListAPIView
 
 urlpatterns = [
     path("catalog/", DeviceCatalogListView.as_view(), name="device-catalog-list"),
@@ -13,7 +13,6 @@ urlpatterns = [
     path("devices/<uuid:physical_device_uuid>/radar-chart/", DeviceRadarChartView.as_view(), name="device-radar-chart"),
     path("devices/<uuid:physical_device_uuid>/logs/", DeviceLogListView.as_view(), name="device-log-list"),
     path("devices/<uuid:physical_device_uuid>/commands/", DeviceCommandView.as_view(), name="device-command"),
-    path("summary/", Sensor7In1SummaryView.as_view(), name="sensor-7-in-1-summary"),
     path("", DeviceCatalogListView.as_view(), name="sensor-catalog-list"),
     path("external/", SensorExternalAPIView.as_view(), name="sensor-external-api"),
     path("external/logs/", SensorExternalRequestLogListAPIView.as_view(), name="sensor-external-api-log-list"),
