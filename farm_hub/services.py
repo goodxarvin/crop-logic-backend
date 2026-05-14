@@ -84,15 +84,32 @@ def sync_farm_data(
     if plant_ids:
         request_payload["plant_ids"] = [int(plant_id) for plant_id in plant_ids]
 
+    if farm.farm_type_id:
+        request_payload["farm_type_uuid"] = str(farm.farm_type.uuid)
+        request_payload["farm_type_name"] = farm.farm_type.name
+        request_payload["farm_type_description"] = farm.farm_type.description
+        request_payload["farm_type_metadata"] = (
+            farm.farm_type.metadata if isinstance(farm.farm_type.metadata, dict) else {}
+        )
+
     resolved_irrigation_method_id = irrigation_method_id
     if resolved_irrigation_method_id is None:
         resolved_irrigation_method_id = farm.irrigation_method_id
     if resolved_irrigation_method_id is not None:
         request_payload["irrigation_method_id"] = int(resolved_irrigation_method_id)
 
-    if not any(key in request_payload for key in ("sensor_payload", "plant_ids", "irrigation_method_id")):
+    if not any(
+        key in request_payload
+        for key in (
+            "sensor_payload",
+            "plant_ids",
+            "farm_type_uuid",
+            "farm_type_name",
+            "irrigation_method_id",
+        )
+    ):
         raise FarmDataSyncError(
-            "At least one of `sensor_payload`, `plant_ids`, or `irrigation_method_id` is required for farm data sync."
+            "At least one of `sensor_payload`, `plant_ids`, `farm_type`, or `irrigation_method_id` is required for farm data sync."
         )
 
     api_key = getattr(settings, "FARM_DATA_API_KEY", "")
@@ -101,11 +118,12 @@ def sync_farm_data(
         raise FarmDataSyncError("FARM_DATA_API_KEY is not configured.")
 
     logger.warning(
-        "Farm data sync start: farm_uuid=%s sensor_key=%s has_sensor_payload=%s plant_ids=%s irrigation_method_id=%s boundary_type=%s",
+        "Farm data sync start: farm_uuid=%s sensor_key=%s has_sensor_payload=%s plant_ids=%s farm_type_uuid=%s irrigation_method_id=%s boundary_type=%s",
         farm.farm_uuid,
         request_payload.get("sensor_key"),
         "sensor_payload" in request_payload,
         request_payload.get("plant_ids"),
+        request_payload.get("farm_type_uuid"),
         request_payload.get("irrigation_method_id"),
         request_payload["farm_boundary"].get("type") if isinstance(request_payload["farm_boundary"], dict) else None,
     )

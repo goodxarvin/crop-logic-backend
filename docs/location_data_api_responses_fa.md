@@ -655,6 +655,23 @@
 - استفاده از `crop_simulation`
 - پیشنهاد بهترین گیاه برای هر cluster
 
+### query params
+
+- `farm_uuid` اجباری است و باید UUID مزرعه باشد.
+
+نمونه:
+
+```http
+GET /api/location-data/remote-sensing/cluster-recommendations/?farm_uuid=11111111-1111-1111-1111-111111111111
+```
+
+### پیش‌نیازها
+
+- مزرعه باید در `farm_data` وجود داشته باشد.
+- برای مزرعه باید حداقل یک گیاه ثبت شده باشد.
+- برای `location` همان مزرعه باید خروجی KMeans در `location_data` موجود باشد.
+- داده‌های لازم برای ساخت payload شبیه‌سازی باید قابل تولید باشند.
+
 ### response موفق `200`
 
 ```json
@@ -663,12 +680,113 @@
   "msg": "success",
   "data": {
     "farm_uuid": "11111111-1111-1111-1111-111111111111",
-    "location_id": 12,
-    "evaluated_plant_count": 2,
+    "location_id": 1,
+    "evaluated_plant_count": 4,
     "cluster_count": 2,
-    "registered_plants": [],
-    "clusters": [],
-    "source_metadata": {}
+    "registered_plants": [
+      {
+        "plant_id": 201,
+        "plant_name": "maize",
+        "position": 0,
+        "stage": ""
+      }
+    ],
+    "clusters": [
+      {
+        "block_code": "",
+        "cluster_uuid": "daa278cb-cf75-4f17-bc94-bb3a780dd4d4",
+        "sub_block_code": "cluster-0",
+        "cluster_label": 0,
+        "temporal_extent": {
+          "start_date": "2026-04-11",
+          "end_date": "2026-05-11"
+        },
+        "cluster_block": {
+          "uuid": "daa278cb-cf75-4f17-bc94-bb3a780dd4d4",
+          "sub_block_code": "cluster-0",
+          "cluster_label": 0,
+          "chunk_size_sqm": 900,
+          "centroid_lat": "49.999770",
+          "centroid_lon": "49.999920",
+          "center_cell_code": "loc-1__block-farm__chunk-900__r0000c0000",
+          "center_cell_lat": "49.999635",
+          "center_cell_lon": "49.999710",
+          "cell_count": 4,
+          "cell_codes": [
+            "loc-1__block-farm__chunk-900__r0000c0000"
+          ],
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": []
+          },
+          "metadata": {}
+        },
+        "satellite_metrics": {
+          "ndvi": 0.659927,
+          "ndwi": -0.571487,
+          "soil_vv_db": -13.73536,
+          "soil_vv": -13.127913
+        },
+        "sensor_metrics": {},
+        "resolved_metrics": {
+          "ndvi": 0.659927,
+          "ndwi": -0.571487,
+          "soil_vv_db": -13.73536,
+          "soil_vv": -13.127913
+        },
+        "candidate_plants": [
+          {
+            "plant_id": 401,
+            "plant_name": "wheat",
+            "position": 3,
+            "stage": "",
+            "score": 123.4,
+            "predicted_yield": 123.4,
+            "predicted_yield_tons": 0.1234,
+            "biomass": 456.7,
+            "max_lai": 4.2,
+            "simulation_engine": "pcse",
+            "simulation_model_name": "Wofost81_NWLP_CWB_CNB",
+            "simulation_warning": null,
+            "supporting_metrics": {
+              "yield_estimate": 123.4,
+              "biomass": 456.7,
+              "max_lai": 4.2
+            }
+          }
+        ],
+        "suggested_plant": {
+          "plant_id": 401,
+          "plant_name": "wheat",
+          "position": 3,
+          "stage": "",
+          "score": 123.4,
+          "predicted_yield": 123.4,
+          "predicted_yield_tons": 0.1234,
+          "biomass": 456.7,
+          "max_lai": 4.2,
+          "simulation_engine": "pcse",
+          "simulation_model_name": "Wofost81_NWLP_CWB_CNB",
+          "simulation_warning": null,
+          "supporting_metrics": {
+            "yield_estimate": 123.4,
+            "biomass": 456.7,
+            "max_lai": 4.2
+          }
+        },
+        "source_metadata": {
+          "block_status": "completed",
+          "aggregation_strategy": "sub_block_mean",
+          "has_satellite_metrics": true,
+          "has_sensor_metrics": false
+        }
+      }
+    ],
+    "source_metadata": {
+      "source": "location_data+kmeans+farm_data+crop_simulation",
+      "location_id": 1,
+      "snapshot_block_count": 2
+    }
   }
 }
 ```
@@ -698,60 +816,105 @@
 
 ```json
 {
-  "block_code": "block-1",
+  "block_code": "",
   "cluster_uuid": "11111111-1111-1111-1111-111111111111",
   "sub_block_code": "cluster-0",
   "cluster_label": 0,
   "temporal_extent": {
-    "start_date": "2026-04-12",
-    "end_date": "2026-05-12"
+    "start_date": "2026-04-11",
+    "end_date": "2026-05-11"
   },
   "cluster_block": {},
   "satellite_metrics": {
-    "ndvi": 0.51,
-    "ndwi": 0.24,
-    "soil_vv": 0.13
+    "ndvi": 0.659927,
+    "ndwi": -0.571487,
+    "soil_vv_db": -13.73536,
+    "soil_vv": -13.127913
   },
   "sensor_metrics": {},
   "resolved_metrics": {
-    "ndvi": 0.51,
-    "ndwi": 0.24,
-    "soil_vv": 0.13
+    "ndvi": 0.659927,
+    "ndwi": -0.571487,
+    "soil_vv_db": -13.73536,
+    "soil_vv": -13.127913
   },
   "candidate_plants": [],
-  "suggested_plant": {},
+  "suggested_plant": null,
   "source_metadata": {}
 }
 ```
+
+فیلدهای مهم داخل هر cluster:
+
+- `block_code`: کد بلوک والد؛ در حالت تحلیل کل مزرعه ممکن است خالی باشد.
+- `cluster_uuid`: شناسه یکتای cluster.
+- `sub_block_code`: کد خوانا مثل `cluster-0`.
+- `cluster_label`: لیبل عددی KMeans.
+- `temporal_extent`: بازه زمانی داده remote sensing.
+- `cluster_block`: اطلاعات هندسی، centroid، سلول مرکزی و geometry.
+- `satellite_metrics`: میانگین متریک‌های ماهواره‌ای cluster.
+- `sensor_metrics`: داده سنسوری تجمیع‌شده، اگر وجود داشته باشد.
+- `resolved_metrics`: متریک نهایی که برای simulation استفاده شده است.
+- `candidate_plants`: همه گیاه‌های ارزیابی‌شده با رتبه‌بندی.
+- `suggested_plant`: بهترین گزینه نهایی برای همان cluster.
+- `source_metadata`: وضعیت پردازش و strategy تجمیع.
 
 ### ساختار هر آیتم `candidate_plants`
 
 ```json
 {
-  "plant_id": 101,
-  "plant_name": "Tomato",
-  "position": 0,
-  "stage": "vegetative",
-  "score": 150.0,
-  "predicted_yield": 150.0,
-  "predicted_yield_tons": 0.15,
-  "biomass": 300.0,
+  "plant_id": 401,
+  "plant_name": "wheat",
+  "position": 3,
+  "stage": "",
+  "score": 123.4,
+  "predicted_yield": 123.4,
+  "predicted_yield_tons": 0.1234,
+  "biomass": 456.7,
   "max_lai": 4.2,
   "simulation_engine": "pcse",
   "simulation_model_name": "Wofost81_NWLP_CWB_CNB",
   "simulation_warning": null,
-  "supporting_metrics": {}
+  "supporting_metrics": {
+    "yield_estimate": 123.4,
+    "biomass": 456.7,
+    "max_lai": 4.2
+  }
 }
 ```
 
 ### `400`
 
-وقتی مزرعه گیاه ثبت‌شده نداشته باشد یا پیش‌نیاز simulation کامل نباشد:
+وقتی `farm_uuid` ارسال نشده باشد یا معتبر نباشد:
+
+```json
+{
+  "code": 400,
+  "msg": "داده نامعتبر.",
+  "data": {
+    "farm_uuid": [
+      "This field is required."
+    ]
+  }
+}
+```
+
+وقتی مزرعه گیاه ثبت‌شده نداشته باشد:
 
 ```json
 {
   "code": 400,
   "msg": "برای این مزرعه هنوز هیچ گیاهی در farm_data ثبت نشده است.",
+  "data": null
+}
+```
+
+وقتی ساخت simulation یا مقایسه گیاه‌ها fail شود:
+
+```json
+{
+  "code": 400,
+  "msg": "مقایسه گیاه‌ها با crop_simulation انجام نشد: ...",
   "data": null
 }
 ```

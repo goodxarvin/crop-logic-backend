@@ -368,17 +368,38 @@ GET /api/location-data/remote-sensing/cluster-blocks/<cluster_uuid>/live/
 
 - `farm_uuid` اجباری
 
+نمونه:
+
+```http
+GET /api/location-data/remote-sensing/cluster-recommendations/?farm_uuid=<farm_uuid>
+```
+
 ### فیلدهای مهم response
 
+- `farm_uuid`
+- `location_id`
 - `registered_plants`
 - `clusters`
 - `evaluated_plant_count`
 - `cluster_count`
+- `source_metadata`
+
+### نکات مهم برای فرانت
+
+- هر آیتم `clusters` دقیقا مربوط به یک cluster از خروجی KMeans است.
+- `candidate_plants` لیست کامل رتبه‌بندی است و `suggested_plant` بهترین آیتم همان لیست است.
+- `resolved_metrics` همان متریک نهایی است که برای simulation استفاده شده و بهتر است مبنای نمایش KPI باشد.
+- `cluster_block` برای رسم روی نقشه و نمایش geometry، centroid و cellها استفاده می‌شود.
+- `source_metadata.has_sensor_metrics` مشخص می‌کند آیا باید در UI بخش سنسورها را نمایش دهید یا نه.
 
 ### استفاده در فرانت
 
 برای هر cluster این بخش ها مهم هستند:
 
+- `sub_block_code`
+- `cluster_label`
+- `temporal_extent`
+- `cluster_block`
 - `satellite_metrics`
 - `sensor_metrics`
 - `resolved_metrics`
@@ -388,9 +409,11 @@ GET /api/location-data/remote-sensing/cluster-blocks/<cluster_uuid>/live/
 ### UI پیشنهادی
 
 - کارت cluster با عنوان `sub_block_code` یا `cluster_label`
+- بازه زمانی از `temporal_extent.start_date` تا `temporal_extent.end_date`
 - KPIهای `resolved_metrics`
 - جدول candidateها با score
 - highlight کردن `suggested_plant`
+- اگر `candidate_plants` خالی بود، state خالی و بدون recommendation نشان دهید
 
 ---
 

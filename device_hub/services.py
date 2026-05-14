@@ -1,6 +1,7 @@
 from copy import deepcopy
 from datetime import timedelta
 import logging
+import uuid
 
 from django.conf import settings
 from django.db import OperationalError, ProgrammingError, transaction
@@ -99,14 +100,23 @@ def get_latest_sensor_external_request_log(*, farm_uuid, sensor_catalog_uuid, ph
 def create_sensor_external_notification(*, physical_device_uuid, payload=None):
     payload = payload or {}
     sensor = FarmDevice.objects.select_related("farm", "farm__current_crop_area", "sensor_catalog").filter(physical_device_uuid=physical_device_uuid).first()
+    runtime_context = build_sensor_runtime_context(sensor=sensor, payload=payload)
+    return create_sensor_external_notification_for_sensor(sensor=sensor, payload=payload, runtime_context=runtime_context)
+
+
+def create_sensor_external_notification_for_sensor(*, sensor, payload=None, runtime_context=None):
+    payload = payload or {}
     if sensor is None:
         raise ValueError("Physical device not found.")
+    runtime_context = runtime_context or build_sensor_runtime_context(sensor=sensor, payload=payload)
     try:
         with transaction.atomic():
             SensorExternalRequestLog.objects.create(
                 farm_uuid=sensor.farm.farm_uuid,
                 sensor_catalog_uuid=sensor.sensor_catalog.uuid if sensor.sensor_catalog else None,
                 physical_device_uuid=sensor.physical_device_uuid,
+                cluster_uuid=runtime_context["cluster_uuid"],
+                location_metadata=runtime_context["location_metadata"],
                 payload=payload,
             )
             return create_notification_for_farm_uuid(
@@ -114,7 +124,14 @@ def create_sensor_external_notification(*, physical_device_uuid, payload=None):
                 title="Sensor external API request",
                 message=f"Payload received from device {sensor.physical_device_uuid}.",
                 level="info",
-                metadata={"farm_uuid": str(sensor.farm.farm_uuid), "sensor_catalog_uuid": str(sensor.sensor_catalog.uuid) if sensor.sensor_catalog else None, "physical_device_uuid": str(sensor.physical_device_uuid), "payload": payload},
+                metadata={
+                    "farm_uuid": str(sensor.farm.farm_uuid),
+                    "sensor_catalog_uuid": str(sensor.sensor_catalog.uuid) if sensor.sensor_catalog else None,
+                    "physical_device_uuid": str(sensor.physical_device_uuid),
+                    "cluster_uuid": str(runtime_context["cluster_uuid"]) if runtime_context["cluster_uuid"] else None,
+                    "location_metadata": runtime_context["location_metadata"],
+                    "payload": payload,
+                },
             )
     except (ProgrammingError, OperationalError) as exc:
         raise ValueError("Sensor external API tables are not migrated.") from exc
@@ -123,15 +140,31 @@ def create_sensor_external_notification(*, physical_device_uuid, payload=None):
 def forward_sensor_payload_to_farm_data(*, physical_device_uuid, payload=None):
     payload = payload or {}
     sensor = FarmDevice.objects.select_related("farm", "farm__current_crop_area", "sensor_catalog").filter(physical_device_uuid=physical_device_uuid).first()
+    runtime_context = build_sensor_runtime_context(sensor=sensor, payload=payload)
+    return forward_sensor_payload_to_farm_data_for_sensor(sensor=sensor, payload=payload, runtime_context=runtime_context)
+
+
+def forward_sensor_payload_to_farm_data_for_sensor(*, sensor, payload=None, runtime_context=None):
+    payload = payload or {}
     if sensor is None:
         raise ValueError("Physical device not found.")
     farm_boundary = _get_farm_boundary(sensor=sensor)
     api_key = getattr(settings, "FARM_DATA_API_KEY", "")
     if not api_key:
         raise FarmDataForwardError("FARM_DATA_API_KEY is not configured.")
+    runtime_context = runtime_context or build_sensor_runtime_context(sensor=sensor, payload=payload)
     sensor_key = _get_sensor_key(sensor=sensor)
-    normalized_sensor_payload = _normalize_sensor_payload(sensor_key=sensor_key, sensor_payload=payload)
-    request_payload = {"farm_uuid": str(sensor.farm.farm_uuid), "farm_boundary": farm_boundary, "sensor_key": sensor_key, "sensor_payload": normalized_sensor_payload}
+    request_payload = {
+        "farm_uuid": str(sensor.farm.farm_uuid),
+        "farm_boundary": farm_boundary,
+        "sensor_key": sensor_key,
+        "sensor_payload": _build_ai_sensor_payload(
+            sensor=sensor,
+            sensor_key=sensor_key,
+            sensor_payload=payload,
+            runtime_context=runtime_context,
+        ),
+    }
     try:
         response = external_api_request(
             "ai",
@@ -169,10 +202,137 @@ def _normalize_sensor_payload(*, sensor_key, sensor_payload):
     return {sensor_key: sensor_payload}
 
 
+def _build_ai_sensor_payload(*, sensor, sensor_key, sensor_payload, runtime_context=None):
+    if sensor_payload and not isinstance(sensor_payload, dict):
+        raise FarmDataForwardError("`payload` must be a JSON object.")
+    raw_payload = _extract_payload(sensor_payload)
+    runtime_context = runtime_context or build_sensor_runtime_context(sensor=sensor, payload=sensor_payload)
+
+    device_payload = {
+        "sensor_key": sensor_key,
+        "physical_device_uuid": str(sensor.physical_device_uuid),
+        "recorded_at": timezone.now().isoformat(),
+        "metrics": raw_payload or {},
+        "metadata": {
+            "source_service": "backend_device_hub",
+            "farm_device_uuid": str(sensor.uuid),
+            "sensor_catalog_uuid": str(sensor.sensor_catalog.uuid) if sensor.sensor_catalog else None,
+            "sensor_type": sensor.sensor_type or "",
+            "device_name": sensor.name or "",
+            "cluster_uuid": str(runtime_context["cluster_uuid"]) if runtime_context["cluster_uuid"] else None,
+            "location": runtime_context["location_metadata"],
+        },
+    }
+    if runtime_context["cluster_uuid"] is not None:
+        device_payload["cluster_uuid"] = str(runtime_context["cluster_uuid"])
+    if runtime_context["location_metadata"].get("zone") is not None:
+        device_payload["zone"] = runtime_context["location_metadata"]["zone"]
+    if runtime_context["location_metadata"].get("depth_cm") is not None:
+        device_payload["depth_cm"] = runtime_context["location_metadata"]["depth_cm"]
+
+    return {
+        sensor.get_ai_device_key(): device_payload
+    }
+
+
+def build_sensor_runtime_context(*, sensor, payload=None):
+    payload = payload or {}
+    payload_location = _extract_payload_location_metadata(payload)
+    payload_cluster_uuid = _extract_cluster_uuid(payload)
+
+    location_metadata = dict(sensor.location_metadata or {})
+    location_metadata.update(payload_location)
+
+    return {
+        "cluster_uuid": payload_cluster_uuid or sensor.cluster_uuid,
+        "location_metadata": location_metadata,
+    }
+
+
+def sync_sensor_runtime_context(*, sensor, payload=None):
+    if sensor is None:
+        raise ValueError("Physical device not found.")
+
+    runtime_context = build_sensor_runtime_context(sensor=sensor, payload=payload)
+    update_fields = []
+    if runtime_context["cluster_uuid"] != sensor.cluster_uuid:
+        sensor.cluster_uuid = runtime_context["cluster_uuid"]
+        update_fields.append("cluster_uuid")
+    if runtime_context["location_metadata"] != (sensor.location_metadata or {}):
+        sensor.location_metadata = runtime_context["location_metadata"]
+        update_fields.append("location_metadata")
+    if update_fields:
+        update_fields.append("updated_at")
+        sensor.save(update_fields=update_fields)
+    return runtime_context
+
+
+def _extract_cluster_uuid(payload):
+    if not isinstance(payload, dict):
+        return None
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    candidates = [
+        payload.get("cluster_uuid"),
+        payload.get("clusterId"),
+        metadata.get("cluster_uuid"),
+        metadata.get("clusterId"),
+    ]
+    for candidate in candidates:
+        parsed = _parse_uuid(candidate)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _extract_payload_location_metadata(payload):
+    if not isinstance(payload, dict):
+        return {}
+
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    location = payload.get("location") if isinstance(payload.get("location"), dict) else {}
+    coordinates = payload.get("coordinates") if isinstance(payload.get("coordinates"), dict) else {}
+
+    lat = payload.get("lat", payload.get("latitude"))
+    lon = payload.get("lon", payload.get("lng", payload.get("longitude")))
+    if lat is None:
+        lat = location.get("lat", location.get("latitude"))
+    if lon is None:
+        lon = location.get("lon", location.get("lng", location.get("longitude")))
+    if lat is None:
+        lat = coordinates.get("lat", coordinates.get("latitude"))
+    if lon is None:
+        lon = coordinates.get("lon", coordinates.get("lng", coordinates.get("longitude")))
+
+    result = {}
+    if lat is not None:
+        result["lat"] = lat
+    if lon is not None:
+        result["lon"] = lon
+
+    for key in ("zone", "depth_cm", "cluster_code", "cluster_label"):
+        value = payload.get(key, metadata.get(key))
+        if value not in (None, ""):
+            result[key] = value
+
+    if location:
+        result["location"] = location
+    elif coordinates:
+        result["location"] = coordinates
+
+    return result
+
+
+def _parse_uuid(value):
+    if value in (None, ""):
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 def _get_sensor_key(*, sensor):
-    if sensor.sensor_catalog and sensor.sensor_catalog.code:
-        return sensor.sensor_catalog.code
-    return "sensor-7-1"
+    return sensor.get_sensor_key()
 
 
 def _get_farm_data_path():
