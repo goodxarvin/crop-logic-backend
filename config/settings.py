@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "account.apps.AccountConfig",
     "farm_hub.apps.FarmHubConfig",
     "device_hub.apps.DeviceHubConfig",
+    "subscriptions.apps.SubscriptionsConfig",
     "access_control.apps.AccessControlConfig",
     "dashboard",
     "crop_health.apps.CropHealthConfig",
