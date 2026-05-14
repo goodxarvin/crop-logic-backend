@@ -1,9 +1,11 @@
 import math
+import hashlib
 from copy import deepcopy
 from decimal import Decimal
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from celery.result import AsyncResult
 from kombu.exceptions import OperationalError
 from django.db import transaction
@@ -58,6 +60,9 @@ TASK_STATE_RETRY = "RETRY"
 TASK_STATE_SUCCESS = "SUCCESS"
 TASK_STATE_FAILURE = "FAILURE"
 TASK_STATE_REVOKED = "REVOKED"
+AI_LOCATION_DATA_PATH = "/api/location-data/"
+AI_REMOTE_SENSING_PATH = "/api/location-data/remote-sensing/"
+AI_CLUSTER_RECOMMENDATIONS_PATH = "/api/location-data/remote-sensing/cluster-recommendations/"
 
 
 def get_default_cell_side_km():
@@ -544,8 +549,101 @@ def build_area_zone_payload(zone):
     return base_payload
 
 
-def _build_area_layer_zone_base_payload(zone):
+def _serialize_cluster_candidate(candidate_payload):
+    if not isinstance(candidate_payload, dict):
+        return None
+
     return {
+        "plantId": candidate_payload.get("plant_id"),
+        "plantName": str(candidate_payload.get("plant_name") or ""),
+        "position": candidate_payload.get("position"),
+        "stage": str(candidate_payload.get("stage") or ""),
+        "score": candidate_payload.get("score"),
+        "predictedYield": candidate_payload.get("predicted_yield"),
+        "predictedYieldTons": candidate_payload.get("predicted_yield_tons"),
+        "biomass": candidate_payload.get("biomass"),
+        "maxLai": candidate_payload.get("max_lai"),
+        "simulationEngine": candidate_payload.get("simulation_engine"),
+        "simulationModelName": candidate_payload.get("simulation_model_name"),
+        "simulationWarning": str(candidate_payload.get("simulation_warning") or ""),
+        "supportingMetrics": deepcopy(candidate_payload.get("supporting_metrics") or {}),
+    }
+
+
+def _get_zone_ai_cluster_payload(zone):
+    analysis = getattr(zone, "analysis", None)
+    raw_response = getattr(analysis, "raw_response", None)
+    if not isinstance(raw_response, dict):
+        return {}
+
+    cluster_payload = raw_response.get("cluster_recommendation") or {}
+    if isinstance(cluster_payload, dict):
+        return cluster_payload
+    return {}
+
+
+def _build_zone_cluster_info(zone, cluster_payload):
+    cluster_block = cluster_payload.get("cluster_block") or {}
+    return {
+        "blockCode": str(cluster_payload.get("block_code") or ""),
+        "clusterUuid": str(cluster_payload.get("cluster_uuid") or cluster_block.get("uuid") or zone.zone_id),
+        "subBlockCode": str(cluster_payload.get("sub_block_code") or cluster_block.get("sub_block_code") or zone.zone_id),
+        "clusterLabel": cluster_payload.get("cluster_label"),
+        "cellCount": cluster_block.get("cell_count"),
+        "cellCodes": deepcopy(cluster_block.get("cell_codes") or []),
+        "centerCellCode": cluster_block.get("center_cell_code"),
+        "centerCellLat": cluster_block.get("center_cell_lat"),
+        "centerCellLon": cluster_block.get("center_cell_lon"),
+        "sourceMetadata": deepcopy(cluster_payload.get("source_metadata") or {}),
+    }
+
+
+def _build_zone_cluster_metrics(cluster_payload):
+    if not cluster_payload:
+        return {
+            "satelliteMetrics": {},
+            "sensorMetrics": {},
+            "resolvedMetrics": {},
+            "criteria": [],
+        }
+
+    suggested_plant = cluster_payload.get("suggested_plant")
+    return {
+        "satelliteMetrics": deepcopy(cluster_payload.get("satellite_metrics") or {}),
+        "sensorMetrics": deepcopy(cluster_payload.get("sensor_metrics") or {}),
+        "resolvedMetrics": deepcopy(cluster_payload.get("resolved_metrics") or {}),
+        "criteria": _build_metric_criteria(cluster_payload, suggested_plant),
+    }
+
+
+def _build_zone_crop_prediction(cluster_payload):
+    if not cluster_payload:
+        return {"suggestedPlant": None, "candidatePlants": []}
+
+    return {
+        "suggestedPlant": _serialize_cluster_candidate(cluster_payload.get("suggested_plant")),
+        "candidatePlants": [
+            item
+            for item in (
+                _serialize_cluster_candidate(candidate_payload)
+                for candidate_payload in (cluster_payload.get("candidate_plants") or [])
+            )
+            if item is not None
+        ],
+    }
+
+
+def _attach_ai_zone_payload(base_payload, zone):
+    cluster_payload = _get_zone_ai_cluster_payload(zone)
+    base_payload["clusterInfo"] = _build_zone_cluster_info(zone, cluster_payload)
+    base_payload["clusterMetrics"] = _build_zone_cluster_metrics(cluster_payload)
+    base_payload["cropPrediction"] = _build_zone_crop_prediction(cluster_payload)
+    return base_payload
+
+
+def _build_area_layer_zone_base_payload(zone):
+    return _attach_ai_zone_payload(
+        {
         "zoneId": zone.zone_id,
         "zoneUuid": str(zone.uuid),
         "geometry": zone.geometry,
@@ -555,7 +653,9 @@ def _build_area_layer_zone_base_payload(zone):
         "sequence": zone.sequence,
         "processing_status": zone.processing_status,
         "processing_error": zone.processing_error,
-    }
+        },
+        zone,
+    )
 
 
 def build_water_need_area_zone_payload(zone):
@@ -907,73 +1007,478 @@ def get_farm_for_uuid(farm_uuid, owner=None):
         raise ValueError("Farm not found.") from exc
 
 
+def _raise_ai_response_error(response, default_message):
+    payload = response.data if isinstance(response.data, dict) else {}
+    message = payload.get("msg") or payload.get("message") or default_message
+    if response.status_code >= 500:
+        raise ImproperlyConfigured(message)
+    raise ValueError(message)
+
+
+def _unwrap_ai_response(response, *, expected_statuses):
+    if response.status_code not in expected_statuses:
+        _raise_ai_response_error(response, f"AI location_data API returned status {response.status_code}.")
+
+    payload = response.data if isinstance(response.data, dict) else {}
+    if "data" in payload:
+        return payload["data"]
+    return payload
+
+
+def _request_ai_location_data(path, *, method="GET", payload=None, query=None):
+    return external_request(
+        "ai",
+        path,
+        method=method,
+        payload=payload,
+        query=query,
+    )
+
+
+def _feature_from_geometry(geometry):
+    if not isinstance(geometry, dict):
+        return get_default_area_feature()
+    if geometry.get("type") == "Feature":
+        return normalize_area_feature(geometry)
+    return normalize_area_feature(
+        {
+            "type": "Feature",
+            "properties": {},
+            "geometry": geometry,
+        }
+    )
+
+
+def _upsert_crop_area_snapshot(farm, area_feature):
+    normalized_feature = normalize_area_feature(area_feature)
+    ring = get_polygon_ring(normalized_feature)
+    points = normalize_points(ring)
+    area_sqm = round(polygon_area_sqm(ring), 2)
+    area_hectares = round(area_sqm / 10000.0, 4)
+    defaults = {
+        "geometry": normalized_feature,
+        "points": points,
+        "center": calculate_center(points),
+        "area_sqm": area_sqm,
+        "area_hectares": area_hectares,
+        "chunk_area_sqm": round(get_chunk_area_sqm(), 2),
+    }
+
+    crop_area = farm.current_crop_area
+    if crop_area is None:
+        crop_area = CropArea.objects.create(
+            farm=farm,
+            zone_count=0,
+            **defaults,
+        )
+        farm.current_crop_area = crop_area
+        farm.save(update_fields=["current_crop_area", "updated_at"])
+        return crop_area
+
+    for field_name, value in defaults.items():
+        setattr(crop_area, field_name, value)
+    crop_area.save(update_fields=[*defaults.keys(), "updated_at"])
+    return crop_area
+
+
+def _get_farm_area_feature(farm, fallback=None):
+    if fallback is not None:
+        return normalize_area_feature(fallback)
+
+    crop_area = farm.current_crop_area or farm.crop_areas.order_by("-created_at", "-id").first()
+    if crop_area is not None and crop_area.geometry:
+        return normalize_area_feature(crop_area.geometry)
+
+    return get_default_area_feature()
+
+
+def _build_processing_layer_payload(farm, remote_payload, *, page, page_size):
+    area_feature = _get_farm_area_feature(
+        farm,
+        fallback=((remote_payload.get("location") or {}).get("farm_boundary")),
+    )
+    location = remote_payload.get("location") or {}
+    run = remote_payload.get("run") or {}
+    status_value = str(remote_payload.get("status") or "").lower()
+    task_status = "PROCESSING" if status_value == "processing" else "PENDING"
+
+    return {
+        "task": {
+            "status": task_status,
+            "stage": status_value or "queued",
+            "stage_label": "در حال دریافت تقسیم بندی و متریک ها از AI",
+            "area_uuid": str(getattr(farm.current_crop_area, "uuid", "")) if farm.current_crop_area_id else "",
+            "total_zones": 0,
+            "completed_zones": 0,
+            "processing_zones": 0,
+            "pending_zones": 0,
+            "failed_zones": 0,
+            "remaining_zones": 0,
+            "progress_percent": 0,
+            "summary": {
+                "done": 0,
+                "in_progress": 0,
+                "remaining": 0,
+                "failed": 0,
+            },
+            "message": "تقسیم بندی و متریک های کشت در AI در حال آماده سازی است.",
+            "failed_zone_errors": [],
+            "cell_side_km": round(get_default_cell_side_km(), 4),
+            "task_id": remote_payload.get("task_id") or (run.get("metadata") or {}).get("task_id"),
+        },
+        "area": area_feature,
+        "zones": [],
+        "location": location,
+        "farmerBlocks": deepcopy(((location.get("block_layout") or {}).get("blocks") or [])),
+        "clusterBlocks": [],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_pages": 0,
+            "total_zones": 0,
+            "returned_zones": 0,
+            "has_next": False,
+            "has_previous": False,
+        },
+    }
+
+
+def _hash_color(value):
+    digest = hashlib.md5(str(value).encode("utf-8")).hexdigest()
+    return f"#{digest[:6]}"
+
+
+def _clamp_percent(value, *, default=0):
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0, min(100, round(numeric)))
+
+
+def _extract_zone_points(geometry):
+    coordinates = (geometry or {}).get("coordinates") or []
+    if not coordinates or not coordinates[0]:
+        return []
+    ring = coordinates[0]
+    return ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else ring
+
+
+def _build_metric_criteria(cluster_payload, suggested_plant):
+    resolved_metrics = cluster_payload.get("resolved_metrics") or {}
+    criteria = []
+
+    ndvi_score = _clamp_percent((resolved_metrics.get("ndvi") or 0) * 100)
+    criteria.append({"name": "NDVI", "value": ndvi_score})
+
+    ndwi_raw = resolved_metrics.get("ndwi")
+    ndwi_score = _clamp_percent(((float(ndwi_raw) + 1.0) / 2.0) * 100) if ndwi_raw is not None else 0
+    criteria.append({"name": "NDWI", "value": ndwi_score})
+
+    soil_moisture = resolved_metrics.get("soil_moisture")
+    if soil_moisture is not None:
+        criteria.append({"name": "رطوبت خاک", "value": _clamp_percent(soil_moisture)})
+
+    nitrogen = resolved_metrics.get("nitrogen")
+    if nitrogen is not None:
+        criteria.append({"name": "نیتروژن", "value": _clamp_percent(float(nitrogen) * 4)})
+
+    if suggested_plant is not None:
+        criteria.append({"name": "امتیاز AI", "value": _clamp_percent(suggested_plant.get("score"))})
+
+    return criteria[:4]
+
+
+def _derive_layer_bundle(cluster_payload, suggested_plant):
+    resolved_metrics = cluster_payload.get("resolved_metrics") or {}
+    criteria = _build_metric_criteria(cluster_payload, suggested_plant)
+    soil_score = next((item["value"] for item in criteria if item["name"] in {"NDVI", "نیتروژن"}), 0)
+    if soil_score >= 75:
+        soil_level = "high"
+    elif soil_score >= 45:
+        soil_level = "medium"
+    else:
+        soil_level = "low"
+
+    moisture_value = resolved_metrics.get("soil_moisture")
+    ndwi_raw = resolved_metrics.get("ndwi")
+    if moisture_value is not None:
+        water_score = _clamp_percent(100 - float(moisture_value))
+        water_value_text = f"{round(float(moisture_value), 2)}% soil moisture"
+    elif ndwi_raw is not None:
+        water_score = _clamp_percent(100 - (((float(ndwi_raw) + 1.0) / 2.0) * 100))
+        water_value_text = f"NDWI {round(float(ndwi_raw), 3)}"
+    else:
+        water_score = 0
+        water_value_text = ""
+    if water_score >= 65:
+        water_level = "high"
+    elif water_score >= 35:
+        water_level = "medium"
+    else:
+        water_level = "low"
+
+    ai_score = _clamp_percent((suggested_plant or {}).get("score"))
+    risk_score = max(0, min(100, round((100 - soil_score) * 0.6 + (100 - ai_score) * 0.4)))
+    if risk_score >= 65:
+        risk_level = "high"
+    elif risk_score >= 35:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+
+    return {
+        "criteria": criteria,
+        "soil": {
+            "score": soil_score,
+            "level": soil_level,
+            "color": _get_level_color_map("soil", soil_level),
+        },
+        "water": {
+            "level": water_level,
+            "value": water_value_text,
+            "color": _get_level_color_map("water", water_level),
+        },
+        "risk": {
+            "level": risk_level,
+            "color": _get_level_color_map("risk", risk_level),
+        },
+    }
+
+
+def _sync_crop_area_from_ai(farm, remote_payload, recommendation_payload=None):
+    location_payload = remote_payload.get("location") or {}
+    area_feature = _get_farm_area_feature(
+        farm,
+        fallback=location_payload.get("farm_boundary"),
+    )
+    crop_area = _upsert_crop_area_snapshot(farm, area_feature)
+    subdivision_result = remote_payload.get("subdivision_result") or {}
+    cluster_blocks = subdivision_result.get("cluster_blocks") or []
+    recommendation_map = {}
+    for cluster in (recommendation_payload or {}).get("clusters", []):
+        cluster_uuid = str(cluster.get("cluster_uuid") or ((cluster.get("cluster_block") or {}).get("uuid") or ""))
+        if cluster_uuid:
+            recommendation_map[cluster_uuid] = cluster
+
+    existing_zones = {zone.zone_id: zone for zone in crop_area.zones.all()}
+    retained_zone_ids = []
+
+    with transaction.atomic():
+        for sequence, cluster_block in enumerate(
+            sorted(cluster_blocks, key=lambda item: (item.get("cluster_label") is None, item.get("cluster_label"), item.get("sub_block_code") or ""))
+        ):
+            zone_id = str(cluster_block.get("uuid") or cluster_block.get("sub_block_code") or f"cluster-{sequence}")
+            geometry = cluster_block.get("geometry") or {}
+            points = _extract_zone_points(geometry)
+            area_sqm = round(polygon_area_sqm((geometry.get("coordinates") or [[points]])[0]), 2) if geometry.get("coordinates") else 0.0
+            area_hectares = round(area_sqm / 10000.0, 4)
+            zone_defaults = {
+                "geometry": geometry,
+                "points": points,
+                "center": {
+                    "longitude": float(cluster_block.get("centroid_lon") or 0),
+                    "latitude": float(cluster_block.get("centroid_lat") or 0),
+                },
+                "area_sqm": area_sqm,
+                "area_hectares": area_hectares,
+                "sequence": sequence,
+                "processing_status": CropZone.STATUS_COMPLETED,
+                "processing_error": "",
+                "task_id": str(((remote_payload.get("run") or {}).get("metadata") or {}).get("task_id") or ""),
+            }
+            zone = existing_zones.get(zone_id)
+            if zone is None:
+                zone = CropZone.objects.create(crop_area=crop_area, zone_id=zone_id, **zone_defaults)
+            else:
+                for field_name, value in zone_defaults.items():
+                    setattr(zone, field_name, value)
+                zone.save(update_fields=[*zone_defaults.keys(), "updated_at"])
+            retained_zone_ids.append(zone.zone_id)
+
+            cluster_payload = recommendation_map.get(zone_id, {})
+            suggested_plant = cluster_payload.get("suggested_plant")
+            layer_bundle = _derive_layer_bundle(cluster_payload, suggested_plant)
+
+            product_id = str((suggested_plant or {}).get("plant_name") or (suggested_plant or {}).get("plant_id") or "")
+            if product_id:
+                product, _ = CropProduct.objects.update_or_create(
+                    product_id=product_id,
+                    defaults={
+                        "label": str((suggested_plant or {}).get("plant_name") or product_id),
+                        "color": _hash_color(product_id),
+                    },
+                )
+                recommendation, _ = CropZoneRecommendation.objects.update_or_create(
+                    crop_zone=zone,
+                    defaults={
+                        "product": product,
+                        "match_percent": _clamp_percent((suggested_plant or {}).get("score")),
+                        "water_need": layer_bundle["water"]["value"],
+                        "estimated_profit": (
+                            f"{round(float((suggested_plant or {}).get('predicted_yield_tons')), 2)} ton/ha"
+                            if (suggested_plant or {}).get("predicted_yield_tons") is not None
+                            else ""
+                        ),
+                        "reason": "پیشنهاد محصول بر اساس متریک های سنجش از دور و تحلیل کلاستر AI تولید شده است.",
+                    },
+                )
+                CropZoneCriteria.objects.filter(recommendation=recommendation).delete()
+                CropZoneCriteria.objects.bulk_create(
+                    [
+                        CropZoneCriteria(
+                            recommendation=recommendation,
+                            name=item["name"],
+                            value=item["value"],
+                            sequence=index,
+                        )
+                        for index, item in enumerate(layer_bundle["criteria"])
+                    ]
+                )
+            else:
+                CropZoneRecommendation.objects.filter(crop_zone=zone).delete()
+
+            CropZoneWaterNeedLayer.objects.update_or_create(
+                crop_zone=zone,
+                defaults=layer_bundle["water"],
+            )
+            CropZoneSoilQualityLayer.objects.update_or_create(
+                crop_zone=zone,
+                defaults=layer_bundle["soil"],
+            )
+            CropZoneCultivationRiskLayer.objects.update_or_create(
+                crop_zone=zone,
+                defaults=layer_bundle["risk"],
+            )
+            CropZoneAnalysis.objects.update_or_create(
+                crop_zone=zone,
+                defaults={
+                    "source": "ai_location_data",
+                    "external_record_id": zone_id,
+                    "latitude": zone.center.get("latitude"),
+                    "longitude": zone.center.get("longitude"),
+                    "raw_response": {
+                        "remote_sensing": remote_payload,
+                        "cluster_recommendation": cluster_payload,
+                    },
+                    "depths": [],
+                },
+            )
+
+        CropZone.objects.filter(crop_area=crop_area).exclude(zone_id__in=retained_zone_ids).delete()
+        crop_area.zone_count = len(retained_zone_ids)
+        crop_area.chunk_area_sqm = subdivision_result.get("chunk_size_sqm") or crop_area.chunk_area_sqm
+        crop_area.save(update_fields=["zone_count", "chunk_area_sqm", "updated_at"])
+
+    return crop_area
+
+
+def _get_ai_remote_sensing_payload(*, farm_uuid, page, page_size):
+    response = _request_ai_location_data(
+        AI_REMOTE_SENSING_PATH,
+        method="GET",
+        query={
+            "farm_uuid": str(farm_uuid),
+            "page": page,
+            "page_size": page_size,
+        },
+    )
+    return _unwrap_ai_response(response, expected_statuses={200})
+
+
+def _start_ai_remote_sensing(*, farm_uuid):
+    response = _request_ai_location_data(
+        AI_REMOTE_SENSING_PATH,
+        method="POST",
+        payload={"farm_uuid": str(farm_uuid)},
+    )
+    return _unwrap_ai_response(response, expected_statuses={202})
+
+
+def _get_ai_cluster_recommendations(*, farm_uuid):
+    response = _request_ai_location_data(
+        AI_CLUSTER_RECOMMENDATIONS_PATH,
+        method="GET",
+        query={"farm_uuid": str(farm_uuid)},
+    )
+    return _unwrap_ai_response(response, expected_statuses={200})
+
+
+def _build_ai_layer_context(remote_payload, recommendation_payload=None):
+    location = deepcopy(remote_payload.get("location") or {})
+    subdivision_result = deepcopy(remote_payload.get("subdivision_result") or {})
+    run = deepcopy(remote_payload.get("run") or {})
+    return {
+        "source": {
+            "type": "ai_location_data",
+            "service": "ai",
+            "status": str(remote_payload.get("status") or ""),
+        },
+        "location": location,
+        "farmerBlocks": deepcopy(((location.get("block_layout") or {}).get("blocks") or [])),
+        "clusterBlocks": deepcopy(subdivision_result.get("cluster_blocks") or []),
+        "subdivisionSummary": {
+            "clusterCount": subdivision_result.get("cluster_count")
+            or len(subdivision_result.get("cluster_blocks") or []),
+            "chunkSizeSqm": subdivision_result.get("chunk_size_sqm") or remote_payload.get("chunk_size_sqm"),
+            "selectedFeatures": deepcopy(
+                subdivision_result.get("selected_features")
+                or run.get("selected_features")
+                or []
+            ),
+            "temporalExtent": deepcopy(remote_payload.get("temporal_extent") or {}),
+            "summary": deepcopy(remote_payload.get("summary") or {}),
+        },
+        "registeredPlants": deepcopy((recommendation_payload or {}).get("registered_plants") or []),
+        "evaluatedPlantCount": (recommendation_payload or {}).get("evaluated_plant_count"),
+    }
+
+
+def _get_latest_layer_payload_from_ai(zone_builder, *, farm_uuid, owner=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    farm = get_farm_for_uuid(farm_uuid, owner=owner)
+    remote_payload = _get_ai_remote_sensing_payload(
+        farm_uuid=farm_uuid,
+        page=page,
+        page_size=page_size,
+    )
+    remote_status = str(remote_payload.get("status") or "").lower()
+    if remote_status == "not_found":
+        remote_payload = _start_ai_remote_sensing(farm_uuid=farm_uuid)
+        return _build_processing_layer_payload(farm, remote_payload, page=page, page_size=page_size)
+    if remote_status != "success":
+        return _build_processing_layer_payload(farm, remote_payload, page=page, page_size=page_size)
+
+    recommendation_payload = None
+    try:
+        recommendation_payload = _get_ai_cluster_recommendations(farm_uuid=farm_uuid)
+    except ValueError:
+        recommendation_payload = None
+
+    crop_area = _sync_crop_area_from_ai(farm, remote_payload, recommendation_payload)
+    return _build_latest_area_layer_payload(
+        zone_builder,
+        area=crop_area,
+        page=page,
+        page_size=page_size,
+        extra_payload=_build_ai_layer_context(remote_payload, recommendation_payload),
+    )
+
+
 def ensure_latest_area_ready_for_processing(farm_uuid, area_feature=None, owner=None):
     farm = get_farm_for_uuid(farm_uuid, owner=owner)
-    latest_area = CropArea.objects.filter(farm=farm).order_by("-created_at", "-id").first()
-    if latest_area is None:
-        latest_area, _ = create_zones_and_dispatch(area_feature or get_default_area_feature(), farm=farm)
-        return latest_area
-
-    zones = create_missing_zones_for_area(latest_area)
-    for zone in zones:
-        ensure_rule_based_zone_data(zone)
-
-    stale_zone_ids = _get_stale_zone_ids(zones)
-    zones_to_dispatch = [
-        zone.id
-        for zone in zones
-        if zone.processing_status != CropZone.STATUS_COMPLETED
-        and zone.id not in stale_zone_ids
-        and not (zone.processing_status in {CropZone.STATUS_PENDING, CropZone.STATUS_PROCESSING} and zone.task_id)
-    ]
-
-    if stale_zone_ids:
-        dispatch_zone_processing_tasks(zone_ids=stale_zone_ids, force=True)
-    if zones_to_dispatch:
-        dispatch_zone_processing_tasks(zone_ids=zones_to_dispatch)
-
-    return CropArea.objects.get(id=latest_area.id)
+    return _upsert_crop_area_snapshot(farm, _get_farm_area_feature(farm, fallback=area_feature))
 
 
 def create_zones_and_dispatch(area_feature, cell_side_km=None, farm=None):
-    ensure_products_exist()
-    area_feature = normalize_area_feature(area_feature)
-    zoning_result = split_area_into_zones(area_feature, cell_side_km=cell_side_km)
-    area_data = zoning_result["area"]
+    if farm is None:
+        raise ValueError("farm is required.")
 
-    with transaction.atomic():
-        crop_area = CropArea.objects.create(
-            farm=farm,
-            geometry=area_data["geometry"],
-            points=area_data["points"],
-            center=area_data["center"],
-            area_sqm=round(area_data["area_sqm"], 2),
-            area_hectares=round(area_data["area_hectares"], 4),
-            chunk_area_sqm=round(area_data["chunk_area_sqm"], 2),
-            zone_count=area_data["zone_count"],
-        )
-        zones = CropZone.objects.bulk_create(
-            [
-                CropZone(
-                    crop_area=crop_area,
-                    zone_id=zone["zone_id"],
-                    geometry=zone["geometry"],
-                    points=zone["points"],
-                    center=zone["center"],
-                    area_sqm=round(zone["area_sqm"], 2),
-                    area_hectares=round(zone["area_hectares"], 4),
-                    sequence=zone["sequence"],
-                )
-                for zone in zoning_result["zones"]
-            ]
-        )
-
-    crop_area.refresh_from_db()
-    zones = list(crop_area.zones.order_by("sequence", "id"))
-    for zone in zones:
-        ensure_rule_based_zone_data(zone)
-    dispatch_zone_processing_tasks(crop_area.id)
-    return crop_area, zones
+    crop_area = _upsert_crop_area_snapshot(farm, area_feature)
+    CropZone.objects.filter(crop_area=crop_area).delete()
+    crop_area.zone_count = 0
+    crop_area.chunk_area_sqm = round(get_chunk_area_sqm(cell_side_km), 2)
+    crop_area.save(update_fields=["zone_count", "chunk_area_sqm", "updated_at"])
+    return crop_area, []
 
 
 def _zones_queryset(zone_ids=None):
@@ -982,6 +1487,7 @@ def _zones_queryset(zone_ids=None):
         "water_need_layer",
         "soil_quality_layer",
         "cultivation_risk_layer",
+        "analysis",
     ).prefetch_related(
         Prefetch("recommendation__criteria", queryset=CropZoneCriteria.objects.order_by("sequence", "id"))
     ).order_by("sequence", "id")
@@ -1017,7 +1523,13 @@ def _get_idle_area_payload(page, page_size):
     }
 
 
-def _build_latest_area_layer_payload(zone_builder, area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+def _build_latest_area_layer_payload(
+    zone_builder,
+    area=None,
+    page=1,
+    page_size=DEFAULT_ZONE_PAGE_SIZE,
+    extra_payload=None,
+):
     area = area or CropArea.objects.order_by("-created_at", "-id").first()
     if not area:
         return _get_idle_area_payload(page, page_size)
@@ -1058,7 +1570,7 @@ def _build_latest_area_layer_payload(zone_builder, area=None, page=1, page_size=
     if total_zones:
         progress_percent = round((completed_zones / total_zones) * 100, 2)
 
-    return {
+    payload = {
         "task": {
             "status": task_status,
             "stage": current_stage,
@@ -1107,34 +1619,46 @@ def _build_latest_area_layer_payload(zone_builder, area=None, page=1, page_size=
             "has_previous": page > 1 and total_pages > 0,
         },
     }
+    if extra_payload:
+        payload.update(extra_payload)
+    return payload
 
 
-def get_latest_area_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
-    return _build_latest_area_layer_payload(build_area_zone_payload, area=area, page=page, page_size=page_size)
+def get_latest_area_payload(*, farm_uuid, owner=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    return _get_latest_layer_payload_from_ai(
+        build_area_zone_payload,
+        farm_uuid=farm_uuid,
+        owner=owner,
+        page=page,
+        page_size=page_size,
+    )
 
 
-def get_latest_water_need_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
-    return _build_latest_area_layer_payload(
+def get_latest_water_need_payload(*, farm_uuid, owner=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    return _get_latest_layer_payload_from_ai(
         build_water_need_area_zone_payload,
-        area=area,
+        farm_uuid=farm_uuid,
+        owner=owner,
         page=page,
         page_size=page_size,
     )
 
 
-def get_latest_soil_quality_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
-    return _build_latest_area_layer_payload(
+def get_latest_soil_quality_payload(*, farm_uuid, owner=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    return _get_latest_layer_payload_from_ai(
         build_soil_quality_area_zone_payload,
-        area=area,
+        farm_uuid=farm_uuid,
+        owner=owner,
         page=page,
         page_size=page_size,
     )
 
 
-def get_latest_cultivation_risk_payload(area=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
-    return _build_latest_area_layer_payload(
+def get_latest_cultivation_risk_payload(*, farm_uuid, owner=None, page=1, page_size=DEFAULT_ZONE_PAGE_SIZE):
+    return _get_latest_layer_payload_from_ai(
         build_cultivation_risk_area_zone_payload,
-        area=area,
+        farm_uuid=farm_uuid,
+        owner=owner,
         page=page,
         page_size=page_size,
     )
@@ -1197,10 +1721,24 @@ def get_cultivation_risk_payload(zone_ids=None):
     }
 
 
-def get_zone_details_payload(zone_id):
-    zone = _zones_queryset().get(zone_id=zone_id)
+def get_zone_details_payload(zone_id, *, farm_uuid=None, owner=None):
+    zone_filters = {"zone_id": zone_id}
+    if farm_uuid:
+        _get_latest_layer_payload_from_ai(
+            build_area_zone_payload,
+            farm_uuid=farm_uuid,
+            owner=owner,
+            page=1,
+            page_size=DEFAULT_ZONE_PAGE_SIZE,
+        )
+        zone_filters["crop_area__farm__farm_uuid"] = farm_uuid
+    if owner is not None:
+        zone_filters["crop_area__farm__owner"] = owner
+
+    zone = _zones_queryset().get(**zone_filters)
     recommendation = getattr(zone, "recommendation", None)
     criteria = recommendation.criteria.all() if recommendation else []
+    cluster_payload = _get_zone_ai_cluster_payload(zone)
     return {
         "zoneId": zone.zone_id,
         "crop": recommendation.product.product_id if recommendation else "",
@@ -1210,4 +1748,7 @@ def get_zone_details_payload(zone_id):
         "reason": recommendation.reason if recommendation else "",
         "criteria": [{"name": item.name, "value": item.value} for item in criteria],
         "area_hectares": zone.area_hectares,
+        "clusterInfo": _build_zone_cluster_info(zone, cluster_payload),
+        "clusterMetrics": _build_zone_cluster_metrics(cluster_payload),
+        "cropPrediction": _build_zone_crop_prediction(cluster_payload),
     }
