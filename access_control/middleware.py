@@ -9,9 +9,12 @@ from farm_hub.models import FarmHub
 from .services import (
     AccessControlServiceUnavailable,
     authorize_feature,
+    get_farm_queryset_for_user,
     get_authorization_action,
     get_request_data,
     get_route_feature_code,
+    is_admin_route,
+    user_is_admin,
 )
 
 
@@ -28,6 +31,9 @@ class RouteFeatureAccessMiddleware(MiddlewareMixin):
         if user is None:
             return None
 
+        if is_admin_route(request.path, view_class=view_class) and not user_is_admin(user):
+            return JsonResponse({"code": 403, "msg": "Admin access is required for this route."}, status=403)
+
         app_label = view_class.__module__.split(".", 1)[0]
         feature_code = get_route_feature_code(app_label)
         if not feature_code:
@@ -37,12 +43,7 @@ class RouteFeatureAccessMiddleware(MiddlewareMixin):
         farm = None
         if farm_uuid:
             try:
-                farm = FarmHub.objects.select_related("farm_type", "subscription_plan").prefetch_related(
-                    "products",
-                    "sensors",
-                    "sensors__sensor_catalog",
-                    "sensors__device_catalogs",
-                ).get(farm_uuid=farm_uuid, owner=user)
+                farm = get_farm_queryset_for_user(user).get(farm_uuid=farm_uuid)
             except FarmHub.DoesNotExist:
                 return JsonResponse(
                     {"code": 403, "msg": f"Access to route feature `{feature_code}` is denied."},

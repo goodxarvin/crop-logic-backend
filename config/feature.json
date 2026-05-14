@@ -1,4 +1,7 @@
 {
+    "admin_route_prefixes": [
+      "/api/admin/"
+    ],
     "auth": "auth_access",
     "account": "account_management",
     "farm_hub": "farm_management",

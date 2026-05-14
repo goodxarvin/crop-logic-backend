@@ -94,7 +94,7 @@ class FarmHub(models.Model):
         related_name="farms",
     )
     subscription_plan = models.ForeignKey(
-        "access_control.SubscriptionPlan",
+        "subscriptions.SubscriptionPlan",
         on_delete=models.PROTECT,
         related_name="farms",
         null=True,
@@ -121,4 +121,3 @@ class FarmHub(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.farm_uuid})"
-
