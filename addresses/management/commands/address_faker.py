@@ -45,6 +45,7 @@ class Command(BaseCommand):
                 flat=True,))
             city = City.objects.get(Q(province=province) & Q(city_local_id=choice(city_list)))
             address = Address.objects.create(
+                for_sensor=choice([True, False]),
                 user=user1,
                 province=province,
                 city=city,

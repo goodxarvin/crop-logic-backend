@@ -27,6 +27,7 @@ class City(models.Model):
 
 
 class Address(models.Model):
+    for_sensor = models.BooleanField(default=False, null=True)
     user = models.ForeignKey(AUTH_USER_MODEL, on_delete=models.CASCADE)
     province = models.ForeignKey("Province", on_delete=models.CASCADE, related_name="province")
     city = models.ForeignKey("City", on_delete=models.CASCADE, related_name="city")
