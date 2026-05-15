@@ -8,6 +8,7 @@ if [ "${SKIP_MIGRATE}" != "1" ]; then
     echo "Running develop seeders..."
     python manage.py seed_admin_farm
     python manage.py seed_sensor_7_in_1
+    python manage.py seed_province_city
     echo "Develop seeders done."
   fi
 fi
