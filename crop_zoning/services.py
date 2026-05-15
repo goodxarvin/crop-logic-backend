@@ -1464,6 +1464,29 @@ def _get_latest_layer_payload_from_ai(zone_builder, *, farm_uuid, owner=None, pa
     )
 
 
+def ensure_farm_ai_clusters_synced(*, farm_uuid, owner=None):
+    farm = get_farm_for_uuid(farm_uuid, owner=owner)
+    remote_payload = _get_ai_remote_sensing_payload(
+        farm_uuid=farm_uuid,
+        page=1,
+        page_size=DEFAULT_ZONE_PAGE_SIZE,
+    )
+    remote_status = str(remote_payload.get("status") or "").lower()
+    if remote_status == "not_found":
+        _start_ai_remote_sensing(farm_uuid=farm_uuid)
+        return None
+    if remote_status != "success":
+        return None
+
+    recommendation_payload = None
+    try:
+        recommendation_payload = _get_ai_cluster_recommendations(farm_uuid=farm_uuid)
+    except ValueError:
+        recommendation_payload = None
+
+    return _sync_crop_area_from_ai(farm, remote_payload, recommendation_payload)
+
+
 def ensure_latest_area_ready_for_processing(farm_uuid, area_feature=None, owner=None):
     farm = get_farm_for_uuid(farm_uuid, owner=owner)
     return _upsert_crop_area_snapshot(farm, _get_farm_area_feature(farm, fallback=area_feature))
