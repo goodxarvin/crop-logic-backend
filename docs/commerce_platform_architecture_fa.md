@@ -914,6 +914,138 @@ enum `task_type`:
 - افزودن `metadata`
 - افزودن فیلدهای default و active
 
+### 6.7) تغییرات دقیق پیشنهادی در مدل `addresses`
+
+پیشنهاد می‌شود app فعلی `addresses` از یک address book ساده به یک address domain کامل ارتقا پیدا کند.
+
+#### ساختار پیشنهادی مدل اصلی
+
+به‌جای مدل فعلی `Address` با فیلدهای محدود، این ساختار پیشنهاد می‌شود:
+
+- `uuid`
+- `user`
+- `farm` nullable
+- `label`
+- `address_type`
+- `recipient_name`
+- `recipient_phone`
+- `province`
+- `city`
+- `postal_code`
+- `street_address`
+- `address_detail`
+- `landmark`
+- `latitude`
+- `longitude`
+- `location_point`
+- `delivery_instructions`
+- `is_default`
+- `is_active`
+- `metadata`
+- `created_at`
+- `updated_at`
+
+#### تغییرات روی مدل‌های موجود
+
+- مدل `Province` و `City` می‌توانند باقی بمانند.
+- بهتر است `related_name`های فعلی در `Address` بازبینی شوند چون الان `province` و `city` برای relation naming مناسب commerce نیستند.
+- بهتر است برای `Address` از `UUIDField` استفاده شود تا در APIها `pk` عددی expose نشود.
+- فیلد `address_detail` بهتر است حفظ شود اما `street_address` هم جدا اضافه شود تا UI بتواند آدرس ساختاریافته‌تری ارسال کند.
+
+#### مدل snapshot برای checkout و order
+
+برای جلوگیری از تغییر تاریخچه:
+
+- `CheckoutAddressSnapshot`
+- `OrderAddressSnapshot`
+
+هر snapshot باید حداقل این فیلدها را نگه دارد:
+
+- `source_address_uuid` nullable
+- `address_type`
+- `label`
+- `recipient_name`
+- `recipient_phone`
+- `province_name`
+- `city_name`
+- `postal_code`
+- `street_address`
+- `address_detail`
+- `latitude`
+- `longitude`
+- `location_geojson`
+- `delivery_instructions`
+
+#### ruleهای validation آدرس
+
+- `shipping` باید `recipient_name` و `recipient_phone` داشته باشد.
+- `farm_location` باید حداقل یا مختصات داشته باشد یا geojson/location payload معتبر.
+- `billing` می‌تواند برای شخص حقیقی یا حقوقی metadata مجزا داشته باشد.
+- اگر `installation_requested=true` باشد و item نصب‌پذیر باشد، وجود `farm_location` الزامی است.
+- اگر order فقط digital/subscription باشد، shipping address لازم نیست.
+
+#### migration strategy برای `addresses`
+
+1. افزودن `uuid` و فیلدهای جدید به مدل فعلی
+2. migration داده برای map کردن `address_detail` به `street_address/address_detail`
+3. افزودن enum برای `address_type`
+4. افزودن relation اختیاری به `FarmHub`
+5. افزودن endpointهای جدید
+6. نگه‌داشتن endpoint قبلی `api/address/` به‌صورت deprecated برای مدت کوتاه
+
+### 6.8) APIهای user-facing برای `addresses`
+
+- `GET /api/addresses/`
+- `POST /api/addresses/`
+- `GET /api/addresses/{uuid}/`
+- `PATCH /api/addresses/{uuid}/`
+- `DELETE /api/addresses/{uuid}/`
+- `POST /api/addresses/{uuid}/set-default/`
+- `GET /api/addresses/types/`
+- `GET /api/addresses/provinces/`
+- `GET /api/addresses/provinces/{provinceId}/cities/`
+
+نمونه payload پیشنهادی:
+
+```json
+{
+  "label": "مزرعه اصلی",
+  "addressType": "farm_location",
+  "recipientName": "علی رضایی",
+  "recipientPhone": "09120000000",
+  "provinceId": 1,
+  "cityId": 12,
+  "postalCode": "1234567890",
+  "streetAddress": "جاده قدیم، بعد از پل",
+  "addressDetail": "ورودی دوم، کنار انبار",
+  "latitude": 35.123,
+  "longitude": 51.456,
+  "deliveryInstructions": "قبل از مراجعه تماس بگیرید",
+  "farmUuid": null
+}
+```
+
+### 6.9) APIهای admin/backoffice برای `addresses`
+
+برای پنل admin، آدرس فقط CRUD ساده نیست؛ باید ابزار پشتیبانی و بررسی order را هم بدهد.
+
+- `GET /api/admin/addresses/`
+- `GET /api/admin/addresses/{uuid}/`
+- `PATCH /api/admin/addresses/{uuid}/`
+- `GET /api/admin/addresses/?userId=`
+- `GET /api/admin/addresses/?farmUuid=`
+- `GET /api/admin/addresses/?addressType=shipping`
+- `GET /api/admin/orders/{orderUuid}/addresses/`
+- `GET /api/admin/checkout/sessions/{checkoutUuid}/addresses/`
+
+کاربرد admin:
+
+- مشاهده آدرس‌های ثبت‌شده کاربر
+- بررسی آدرس snapshot شده روی order
+- اصلاح آدرس قبل از dispatch
+- بررسی اینکه shipping address و farm location یکی هستند یا نه
+- تشخیص اینکه سفارش نیاز به نصب در مزرعه دارد یا فقط ارسال
+
 ---
 
 ## 7) سناریوهای اصلی کسب‌وکار
@@ -1342,6 +1474,223 @@ workflow پیشنهادی:
 - `POST /api/provisioning/tasks/{uuid}/retry/`
 
 این API بیشتر admin/internal خواهد بود.
+
+## 10.10) APIهای موردنیاز برای پنل admin / backoffice
+
+پیشنهاد می‌شود APIهای پنل admin از APIهای user-facing جدا باشند تا:
+
+- permissionها واضح‌تر شوند
+- query/filterهای سنگین وارد API کاربر نشوند
+- عملیات حساس مثل refund، override، retry و manual approval کنترل‌شده باشند
+- audit trail برای عملیات اپراتوری بهتر ثبت شود
+
+پیشنهاد namespace:
+
+- `api/admin/catalog/...`
+- `api/admin/orders/...`
+- `api/admin/payments/...`
+- `api/admin/wallet/...`
+- `api/admin/checkout/...`
+- `api/admin/farm-onboarding/...`
+- `api/admin/provisioning/...`
+- `api/admin/addresses/...`
+
+### A) Admin Catalog APIs
+
+- `GET /api/admin/catalog/items/`
+- `POST /api/admin/catalog/items/`
+- `GET /api/admin/catalog/items/{uuid}/`
+- `PATCH /api/admin/catalog/items/{uuid}/`
+- `POST /api/admin/catalog/items/{uuid}/activate/`
+- `POST /api/admin/catalog/items/{uuid}/deactivate/`
+- `GET /api/admin/catalog/mappings/woocommerce/`
+- `POST /api/admin/catalog/mappings/woocommerce/sync/`
+
+کاربرد:
+
+- مدیریت sellable itemها
+- فعال/غیرفعال کردن item
+- کنترل mapping با WooCommerce
+- بررسی sync status و payloadها
+
+### B) Admin Cart and Checkout APIs
+
+- `GET /api/admin/cart/`
+- `GET /api/admin/cart/{uuid}/`
+- `GET /api/admin/checkout/sessions/`
+- `GET /api/admin/checkout/sessions/{uuid}/`
+- `POST /api/admin/checkout/sessions/{uuid}/force-expire/`
+- `POST /api/admin/checkout/sessions/{uuid}/force-cancel/`
+- `POST /api/admin/checkout/sessions/{uuid}/recalculate-pricing/`
+
+کاربرد:
+
+- پشتیبانی checkoutهای stuck
+- بررسی requirementهای ناقص
+- expire/cancel دستی session
+- refresh pricing در موارد استثنایی
+
+### C) Admin Farm Onboarding APIs
+
+- `GET /api/admin/farm-onboarding/sessions/`
+- `GET /api/admin/farm-onboarding/sessions/{uuid}/`
+- `GET /api/admin/farm-onboarding/sessions/?status=awaiting_operator_review`
+- `POST /api/admin/farm-onboarding/sessions/{uuid}/approve/`
+- `POST /api/admin/farm-onboarding/sessions/{uuid}/reject/`
+- `POST /api/admin/farm-onboarding/sessions/{uuid}/rerun-analysis/`
+- `POST /api/admin/farm-onboarding/sessions/{uuid}/override-recommendation/`
+
+کاربرد:
+
+- صف review کارشناسی
+- تأیید یا رد طراحی مزرعه
+- اجرای مجدد تحلیل
+- override پیشنهاد سنسورها و تجهیزات
+
+### D) Admin Order APIs
+
+- `GET /api/admin/orders/`
+- `GET /api/admin/orders/{uuid}/`
+- `GET /api/admin/orders/{uuid}/timeline/`
+- `GET /api/admin/orders/{uuid}/items/`
+- `POST /api/admin/orders/{uuid}/mark-paid/`
+- `POST /api/admin/orders/{uuid}/cancel/`
+- `POST /api/admin/orders/{uuid}/refund/`
+- `POST /api/admin/orders/{uuid}/split/`
+- `POST /api/admin/orders/{uuid}/resend-notification/`
+
+query params مهم:
+
+- `status`
+- `paymentStatus`
+- `fulfillmentStatus`
+- `farmUuid`
+- `userId`
+- `orderNumber`
+- `from`
+- `to`
+
+کاربرد:
+
+- جست‌وجوی orderها
+- refund یا cancel توسط اپراتور
+- بررسی history و breakdown itemها
+- split order در caseهای خاص
+
+### E) Admin Payment APIs
+
+- `GET /api/admin/payments/intents/`
+- `GET /api/admin/payments/intents/{uuid}/`
+- `GET /api/admin/payments/intents/{uuid}/attempts/`
+- `POST /api/admin/payments/intents/{uuid}/retry/`
+- `POST /api/admin/payments/intents/{uuid}/mark-failed/`
+- `POST /api/admin/payments/intents/{uuid}/reconcile/`
+- `GET /api/admin/payments/provider-callback-logs/`
+
+کاربرد:
+
+- بررسی paymentهای ناموفق
+- مشاهده callback payload
+- retry یا reconcile دستی
+- کنترل payment drift با gateway
+
+### F) Admin Wallet APIs
+
+- `GET /api/admin/wallets/`
+- `GET /api/admin/wallets/{uuid}/`
+- `GET /api/admin/wallets/{uuid}/transactions/`
+- `POST /api/admin/wallets/{uuid}/adjust-balance/`
+- `POST /api/admin/wallets/{uuid}/hold/`
+- `POST /api/admin/wallets/{uuid}/release-hold/`
+- `POST /api/admin/wallets/{uuid}/manual-refund/`
+- `GET /api/admin/wallets/reports/summary/`
+
+کاربرد:
+
+- پشتیبانی مالی
+- adjustment کنترل‌شده
+- hold/release برای بررسی تقلب یا اختلاف
+- گزارش‌گیری مالی پنل
+
+نکته مهم:
+
+- `adjust-balance` باید حتماً reason code، note و audit actor داشته باشد.
+
+### G) Admin Fulfillment APIs
+
+- `GET /api/admin/fulfillment/shipments/`
+- `GET /api/admin/fulfillment/shipments/{uuid}/`
+- `POST /api/admin/fulfillment/shipments/{uuid}/dispatch/`
+- `POST /api/admin/fulfillment/shipments/{uuid}/mark-delivered/`
+- `GET /api/admin/fulfillment/installations/`
+- `POST /api/admin/fulfillment/installations/{uuid}/schedule/`
+- `POST /api/admin/fulfillment/installations/{uuid}/assign-team/`
+- `POST /api/admin/fulfillment/installations/{uuid}/complete/`
+
+کاربرد:
+
+- مدیریت ارسال و نصب
+- تعیین تیم عملیات
+- ثبت completion واقعی در مزرعه
+
+### H) Admin Provisioning APIs
+
+- `GET /api/admin/provisioning/tasks/`
+- `GET /api/admin/provisioning/tasks/{uuid}/`
+- `POST /api/admin/provisioning/tasks/{uuid}/retry/`
+- `POST /api/admin/provisioning/tasks/{uuid}/force-complete/`
+- `POST /api/admin/provisioning/tasks/{uuid}/mark-failed/`
+
+کاربرد:
+
+- پیگیری taskهای async
+- retry after failure
+- بررسی dependencyهای subscription/access/device attach
+
+### I) Admin Address APIs
+
+- `GET /api/admin/addresses/`
+- `GET /api/admin/addresses/{uuid}/`
+- `PATCH /api/admin/addresses/{uuid}/`
+- `GET /api/admin/orders/{orderUuid}/addresses/`
+- `GET /api/admin/checkout/sessions/{checkoutUuid}/addresses/`
+
+این بخش در سناریوهای dispatch و پشتیبانی order بسیار مهم است.
+
+### J) Admin Analytics and Ops APIs
+
+- `GET /api/admin/commerce/metrics/overview/`
+- `GET /api/admin/commerce/metrics/orders/`
+- `GET /api/admin/commerce/metrics/payments/`
+- `GET /api/admin/commerce/metrics/wallet/`
+- `GET /api/admin/commerce/metrics/onboarding/`
+
+نمونه KPIها:
+
+- conversion rate checkout
+- payment success rate
+- average settlement time
+- pending provisioning count
+- awaiting operator review count
+- shipment delay count
+
+### K) Permissionهای پنل admin
+
+پیشنهاد می‌شود roleهای زیر تعریف شوند:
+
+- `commerce_admin`
+- `finance_admin`
+- `support_agent`
+- `fulfillment_operator`
+- `agronomy_reviewer`
+- `catalog_manager`
+
+نمونه محدودسازی:
+
+- `finance_admin` به wallet adjustment و refund دسترسی دارد.
+- `support_agent` فقط read و note/add tracking دارد.
+- `agronomy_reviewer` فقط onboarding review و recommendation approval دارد.
+- `catalog_manager` فقط catalog و Woo mapping را مدیریت می‌کند.
 
 ---
 
@@ -1820,7 +2169,348 @@ appها:
 
 ---
 
-## 26) خروجی مورد انتظار این سند برای implementation
+## 26) ترتیب پیاده‌سازی پیشنهادی به‌صورت اجرایی
+
+این بخش، ترتیب عملی implementation را به شکلی می‌دهد که:
+
+- dependencyها رعایت شوند
+- سریع‌ترین value برای frontend و admin panel تولید شود
+- migration ریسک کمتری داشته باشد
+- appها از ابتدا قابل تست و قابل توسعه بمانند
+
+### فاز صفر: تثبیت مفاهیم دامنه و قراردادها
+
+قبل از نوشتن مدل‌ها:
+
+1. نهایی‌سازی enumها
+   - `item_type`
+   - `order_status`
+   - `payment_status`
+   - `wallet_transaction_type`
+   - `address_type`
+   - `onboarding_status`
+2. نهایی‌سازی ownership ruleها
+   - wallet در سطح user
+   - order در سطح user + farm
+   - checkout در یک farm context
+3. نهایی‌سازی response contractهای frontend
+   - wallet summary
+   - wallet transactions
+   - order detail
+   - checkout session
+4. نهایی‌سازی admin permission roleها
+
+خروجی این فاز:
+
+- مستند enumها
+- مستند API contractهای MVP
+- تصمیم قطعی درباره single-farm checkout
+
+### فاز 1: refactor `addresses` و زیرساخت location
+
+اولین پیاده‌سازی واقعی باید `addresses` باشد، چون تقریباً همه flowها به آن وابسته‌اند.
+
+کارها:
+
+1. refactor مدل `Address`
+2. افزودن `uuid`, `label`, `address_type`, `recipient_name`, `recipient_phone`
+3. افزودن `latitude`, `longitude`, `delivery_instructions`, `metadata`
+4. افزودن relation اختیاری به `FarmHub`
+5. ساخت endpointهای جدید `api/addresses/...`
+6. ساخت endpointهای admin برای addresses
+7. نگه‌داشتن endpoint قبلی به‌صورت deprecated
+
+چرا اول؟
+
+- checkout بدون address model درست ناقص می‌ماند.
+- fulfillment و installation بدون farm location قابل طراحی نیست.
+- admin panel برای order support به address snapshot نیاز دارد.
+
+خروجی این فاز:
+
+- app `addresses` قابل استفاده برای user و admin
+- آماده شدن پایه برای checkout و fulfillment
+
+### فاز 2: `wallet` + `ledger` + wallet admin APIs
+
+این فاز بهترین نقطه برای unblock کردن UI فعلی wallet است.
+
+کارها:
+
+1. ساخت app `wallet`
+2. ساخت app `ledger`
+3. تعریف `Wallet`, `WalletTransaction`, `LedgerAccount`, `JournalEntry`, `JournalLine`
+4. پیاده‌سازی posting service بین wallet و ledger
+5. ساخت APIهای:
+   - `GET /api/wallet/summary/`
+   - `GET /api/wallet/accounts/`
+   - `GET /api/wallet/transactions/`
+   - `GET /api/wallet/transactions/{id}/`
+6. ساخت APIهای admin:
+   - `GET /api/admin/wallets/`
+   - `POST /api/admin/wallets/{uuid}/adjust-balance/`
+   - `POST /api/admin/wallets/{uuid}/manual-refund/`
+7. اتصال dashboard wallet card به app جدید
+
+چرا دوم؟
+
+- نیاز UI شما را مستقیم پوشش می‌دهد.
+- الگوی transaction/ledger برای payment و refundهای بعدی آماده می‌شود.
+
+خروجی این فاز:
+
+- wallet MVP کامل
+- admin financial support MVP
+
+### فاز 3: `commerce_catalog` + bridge اولیه WooCommerce
+
+بعد از wallet، باید catalog داخلی ساخته شود تا از `farm_hub.Product` جدا شوید.
+
+کارها:
+
+1. ساخت app `commerce_catalog`
+2. تعریف `SellableItem`, `SellableItemVariant`, `ExternalCatalogMapping`
+3. تعریف item behavior flags
+4. ساخت APIهای catalog برای frontend
+5. ساخت APIهای admin catalog
+6. تعریف sync contract با WooCommerce plugin
+
+چرا قبل از cart؟
+
+- cart باید روی sellable item واقعی کار کند، نه روی مدل crop فعلی.
+- mapping با Woo از ابتدا باید روی entity درست بنشیند.
+
+خروجی این فاز:
+
+- catalog داخلی مستقل
+- پایه‌ی سالم برای cart و checkout
+
+### فاز 4: `cart`
+
+وقتی catalog و address آماده شد، cart قابل پیاده‌سازی است.
+
+کارها:
+
+1. ساخت app `cart`
+2. تعریف `Cart` و `CartItem`
+3. پیاده‌سازی add/remove/update item
+4. پشتیبانی از mixed cart
+5. validate کردن requirementها در سطح item
+6. attach کردن farm یا draft farm به cart item
+7. ساخت APIهای cart
+8. ساخت admin read-only API برای بررسی cartهای مشکل‌دار
+
+چرا اینجا؟
+
+- cart به catalog نیاز دارد.
+- cart validation به address/farm requirement flags نیاز دارد.
+
+خروجی این فاز:
+
+- cart MVP
+- mixed-item cart support
+
+### فاز 5: `checkout`
+
+این فاز orchestration اصلی را می‌سازد.
+
+کارها:
+
+1. ساخت app `checkout`
+2. تعریف `CheckoutSession`
+3. attach کردن address snapshotها
+4. pricing snapshot اولیه
+5. requirement engine
+6. attach کردن farm یا onboarding session
+7. confirm checkout و lock cart
+8. ساخت APIهای user-facing checkout
+9. ساخت APIهای admin برای force-expire / force-cancel / recalculate
+
+dependencyها:
+
+- catalog
+- cart
+- addresses
+- wallet برای payment preparation
+
+خروجی این فاز:
+
+- multi-step checkout MVP
+- پایه‌ی ورود به payment و order creation
+
+### فاز 6: `orders` + `payments`
+
+در این مرحله commerce هسته‌ای واقعی کامل می‌شود.
+
+کارها:
+
+1. ساخت app `orders`
+2. ساخت app `payments`
+3. تعریف `Order`, `OrderItem`, `PaymentIntent`, `PaymentAttempt`
+4. ساخت order creation از checkout
+5. ساخت gateway flow
+6. ساخت wallet payment flow
+7. ساخت hybrid payment flow در صورت نیاز
+8. ساخت receipt endpoint
+9. ساخت admin order APIs
+10. ساخت admin payment APIs
+
+چرا بعد از checkout؟
+
+- order باید از checkout finalized ساخته شود.
+- payment intent باید روی price freeze شده ساخته شود.
+
+خروجی این فاز:
+
+- ثبت سفارش
+- پرداخت
+- refund request پایه
+- admin order/payment operations
+
+### فاز 7: `fulfillment`
+
+بعد از اینکه order ساخته می‌شود، fulfillment اهمیت پیدا می‌کند.
+
+کارها:
+
+1. ساخت app `fulfillment`
+2. تعریف `Shipment` و `InstallationRequest`
+3. ساخت shipment lifecycle
+4. ساخت installation scheduling
+5. ساخت admin fulfillment APIs
+6. اتصال به address snapshotهای order
+
+چرا این فاز جداست؟
+
+- برای MVP اولیه پرداخت شاید هنوز fulfillment دستی باشد.
+- جدا کردنش باعث می‌شود order/payment سریع‌تر بالا بیاید.
+
+خروجی این فاز:
+
+- shipment tracking پایه
+- installable item operation flow
+
+### فاز 8: `farm_onboarding`
+
+این فاز پیچیده‌ترین بخش domain شما است و بهتر است بعد از commerce core بیاید.
+
+کارها:
+
+1. ساخت app `farm_onboarding`
+2. تعریف `FarmOnboardingSession` و `FarmOnboardingRecommendation`
+3. collect کردن farm setup data
+4. ذخیره map/block/crop/irrigation data
+5. اجرای async analysis
+6. ساخت status polling
+7. ساخت admin review APIs
+8. attach کردن onboarding session به checkout
+
+چرا دیرتر؟
+
+- domain complexity بالا دارد.
+- به cart/checkout/order نیازمند است.
+
+خروجی این فاز:
+
+- onboarding اولیه مزرعه
+- analysis workflow
+- operator review flow
+
+### فاز 9: `provisioning`
+
+بعد از onboarding و order/payment، provisioning automation را اضافه کنید.
+
+کارها:
+
+1. ساخت app `provisioning`
+2. تعریف `ProvisioningTask`
+3. taskهای:
+   - `activate_subscription`
+   - `rebuild_access_profile`
+   - `create_farm_hub`
+   - `attach_devices`
+4. ساخت admin provisioning APIs
+5. اتصال با `access_control`
+6. اتصال با `device_hub`
+
+خروجی این فاز:
+
+- activation بعد از خرید
+- sync operational resources
+
+### فاز 10: `promotions`, `billing`, `merchant_integrations` hardening
+
+این فاز برای production-readiness و کامل شدن کسب‌وکار است.
+
+کارها:
+
+1. app `promotions`
+2. app `billing`
+3. app `merchant_integrations`
+4. Woo sync کامل
+5. invoice/tax documents
+6. campaign/coupon rules
+7. admin reporting/metrics تکمیلی
+
+خروجی این فاز:
+
+- commerce production hardening
+- marketing و accounting readiness
+
+### ترتیب خلاصه‌شده appها
+
+ترتیب نهایی پیشنهادی:
+
+1. `addresses`
+2. `wallet`
+3. `ledger`
+4. `commerce_catalog`
+5. `cart`
+6. `checkout`
+7. `orders`
+8. `payments`
+9. `fulfillment`
+10. `farm_onboarding`
+11. `provisioning`
+12. `promotions`
+13. `billing`
+14. `merchant_integrations`
+
+### اگر بخواهید سریع‌ترین MVP را بسازید
+
+MVP کوتاه‌تر:
+
+1. `addresses`
+2. `wallet`
+3. `ledger`
+4. `commerce_catalog`
+5. `cart`
+6. `checkout`
+7. `orders`
+8. `payments`
+
+و در این مرحله:
+
+- wallet UI کامل می‌شود
+- خرید ساده کالا و subscription فعال می‌شود
+- admin مالی و order support پایه آماده می‌شود
+
+### اگر بخواهید admin panel را زودتر آماده کنید
+
+پیشنهاد خاص برای admin-first:
+
+1. `addresses` admin APIs
+2. `wallet` admin APIs
+3. `catalog` admin APIs
+4. `orders` admin read APIs
+5. `payments` admin reconciliation APIs
+6. `farm_onboarding` review APIs
+
+یعنی حتی قبل از کامل شدن همه flowهای user-facing، پنل عملیات و پشتیبانی می‌تواند آماده شود.
+
+---
+
+## 27) خروجی مورد انتظار این سند برای implementation
 
 این سند باید مبنای کارهای بعدی زیر باشد:
 
