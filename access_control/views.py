@@ -2,13 +2,19 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
-
-from config.swagger import code_response
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from farm_hub.models import FarmHub
 
+from config.swagger import code_response
+
 from .serializers import FeatureAuthorizationRequestSerializer
-from .services import AccessControlServiceUnavailable, request_opa_batch_authorization
+from .services import (
+    AccessControlServiceUnavailable,
+    get_farm_queryset_for_user,
+    get_user_role,
+    request_opa_batch_authorization,
+    user_is_admin,
+)
 
 
 class FarmFeatureAuthorizationView(APIView):
@@ -27,15 +33,7 @@ class FarmFeatureAuthorizationView(APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            farm = FarmHub.objects.select_related("subscription_plan", "farm_type").prefetch_related(
-                "products",
-                "sensors",
-                "sensors__sensor_catalog",
-                "sensors__device_catalogs",
-            ).get(
-                farm_uuid=farm_uuid,
-                owner=request.user,
-            )
+            farm = get_farm_queryset_for_user(request.user).get(farm_uuid=farm_uuid)
         except FarmHub.DoesNotExist:
             return Response({"code": 404, "msg": "Farm not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -68,6 +66,35 @@ class FarmFeatureAuthorizationView(APIView):
                     "features": serializer.validated_data["features"],
                     "action": serializer.validated_data["action"],
                     "decision": opa_result,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PanelRoutingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Access Control"],
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Returns the panel target for the authenticated user.",
+            )
+        },
+    )
+    def get(self, request):
+        role = get_user_role(request.user)
+        panel = "admin" if user_is_admin(request.user) else "user"
+        return Response(
+            {
+                "code": 200,
+                "msg": "success",
+                "data": {
+                    "panel": panel,
+                    "role": role,
+                    "permissions": [],
                 },
             },
             status=status.HTTP_200_OK,

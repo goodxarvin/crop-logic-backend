@@ -119,7 +119,19 @@ def serialize_products_for_ai(products=None):
                 "growth_profile": product.growth_profile if isinstance(product.growth_profile, dict) else {},
                 "is_active": True,
                 "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-                "farm_type": product.farm_type.name if product.farm_type_id else DEFAULT_FARM_TYPE_NAME,
+                "farm_type": {
+                    "uuid": str(product.farm_type.uuid) if product.farm_type_id else None,
+                    "name": product.farm_type.name if product.farm_type_id else DEFAULT_FARM_TYPE_NAME,
+                    "description": product.farm_type.description if product.farm_type_id else "",
+                    "metadata": (
+                        product.farm_type.metadata
+                        if product.farm_type_id and isinstance(product.farm_type.metadata, dict)
+                        else {}
+                    ),
+                    "updated_at": product.farm_type.updated_at.isoformat()
+                    if product.farm_type_id and product.farm_type.updated_at
+                    else None,
+                },
             }
         )
     return payload

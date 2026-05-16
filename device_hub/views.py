@@ -13,7 +13,7 @@ from soil.serializers import SoilComparisonChartSerializer, SoilRadarChartSerial
 from .authentication import SensorExternalAPIKeyAuthentication
 from .sensor_serializers import DeviceSummarySerializer, Sensor7In1SummarySerializer, SensorComparisonChartQuerySerializer, SensorComparisonChartResponseSerializer, SensorRadarChartQuerySerializer, SensorRadarChartResponseSerializer, SensorValuesListQuerySerializer, SensorValuesListResponseSerializer
 from .serializers import DeviceCatalogSerializer, DeviceCodeListResponseSerializer, DeviceCodeQuerySerializer, DeviceCommandRequestSerializer, DeviceCommandResponseSerializer, DeviceDetailSerializer, DeviceLatestPayloadSerializer, DeviceRangeQuerySerializer, SensorExternalRequestLogQuerySerializer, SensorExternalRequestLogSerializer, SensorExternalRequestSerializer
-from .services import DeviceDataUnavailableError, FarmDataForwardError, build_device_comparison_chart, build_device_latest_payload, build_device_radar_chart, build_device_summary, build_device_values_list, create_sensor_external_notification, execute_device_command, forward_sensor_payload_to_farm_data, get_farm_device_by_physical_uuid, get_farm_device_map_for_logs, get_primary_soil_sensor, get_sensor_7_in_1_comparison_chart_data, get_sensor_7_in_1_radar_chart_data, get_sensor_7_in_1_summary_data, get_sensor_comparison_chart_data, get_sensor_external_request_logs_for_farm, get_sensor_radar_chart_data, get_sensor_values_list_data, validate_output_device_catalog
+from .services import DeviceDataUnavailableError, FarmDataForwardError, build_device_comparison_chart, build_device_latest_payload, build_device_radar_chart, build_device_summary, build_device_values_list, create_sensor_external_notification_for_sensor, execute_device_command, forward_sensor_payload_to_farm_data_for_sensor, get_farm_device_by_physical_uuid, get_farm_device_map_for_logs, get_primary_soil_sensor, get_sensor_7_in_1_comparison_chart_data, get_sensor_7_in_1_radar_chart_data, get_sensor_7_in_1_summary_data, get_sensor_comparison_chart_data, get_sensor_external_request_logs_for_farm, get_sensor_radar_chart_data, get_sensor_values_list_data, sync_sensor_runtime_context, validate_output_device_catalog
 
 
 class DeviceCatalogListView(APIView):
@@ -297,9 +297,26 @@ class SensorExternalAPIView(APIView):
     def post(self, request):
         serializer = SensorExternalRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        sensor = get_farm_device_by_physical_uuid(
+            physical_device_uuid=serializer.validated_data["uuid"]
+        )
+        if sensor is None:
+            return Response({"code": 404, "msg": "Physical device not found."}, status=status.HTTP_404_NOT_FOUND)
         try:
-            notification = create_sensor_external_notification(physical_device_uuid=serializer.validated_data["uuid"], payload=serializer.validated_data.get("payload"))
-            forward_sensor_payload_to_farm_data(physical_device_uuid=serializer.validated_data["uuid"], payload=serializer.validated_data.get("payload"))
+            runtime_context = sync_sensor_runtime_context(
+                sensor=sensor,
+                payload=serializer.validated_data.get("payload"),
+            )
+            forward_sensor_payload_to_farm_data_for_sensor(
+                sensor=sensor,
+                payload=serializer.validated_data.get("payload"),
+                runtime_context=runtime_context,
+            )
+            notification = create_sensor_external_notification_for_sensor(
+                sensor=sensor,
+                payload=serializer.validated_data.get("payload"),
+                runtime_context=runtime_context,
+            )
         except ValueError as exc:
             if "not migrated" in str(exc):
                 return Response({"code": 503, "msg": "Required tables are not ready. Run migrations."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

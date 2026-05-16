@@ -2,9 +2,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import RequestFactory, SimpleTestCase, override_settings
+from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated, PermissionDenied
 
 from account.views import ProfileView
 from config.observability import METRICS
+from config.exception_handler import custom_exception_handler
 
 from .middleware import RouteFeatureAccessMiddleware
 from .services import batch_authorize_features, build_authorization_input
@@ -139,4 +141,33 @@ class RouteFeatureAccessMiddlewareTests(SimpleTestCase):
             feature_code="account_management",
             action="edit",
             route="/api/account/profile/",
+        )
+
+
+class CustomExceptionHandlerTests(SimpleTestCase):
+    def test_permission_denied_is_wrapped_in_standard_response(self):
+        response = custom_exception_handler(PermissionDenied("Access to this API is denied."), {"view": None, "request": None})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.data,
+            {"code": 403, "msg": "error", "data": {"detail": "Access to this API is denied."}},
+        )
+
+    def test_not_authenticated_is_wrapped_in_standard_response(self):
+        response = custom_exception_handler(NotAuthenticated("Login required."), {"view": None, "request": None})
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.data,
+            {"code": 401, "msg": "error", "data": {"detail": "Login required."}},
+        )
+
+    def test_authentication_failed_is_wrapped_in_standard_response(self):
+        response = custom_exception_handler(AuthenticationFailed("Token is invalid."), {"view": None, "request": None})
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.data,
+            {"code": 401, "msg": "error", "data": {"detail": "Token is invalid."}},
         )
