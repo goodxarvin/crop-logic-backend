@@ -97,12 +97,14 @@ class FarmListCreateViewTests(TestCase):
         self.assertEqual(len(response.data["data"]["sensors"]), 1)
         self.assertEqual(response.data["data"]["sensors"][0]["sensor_catalog_uuid"], str(self.weather_station.uuid))
         self.assertEqual(response.data["data"]["sensors"][0]["physical_device_uuid"], physical_device_uuid)
-        self.assertGreater(response.data["data"]["zoning"]["zone_count"], 1)
+        self.assertEqual(response.data["data"]["zoning"]["zone_count"], 0)
+        self.assertEqual(response.data["data"]["zoning"]["zones"], [])
         self.assertEqual(
             response.data["data"]["zoning"]["zone_count"],
             CropArea.objects.get().zone_count,
         )
         self.assertEqual(CropArea.objects.count(), 1)
+        self.assertEqual(CropArea.objects.get().geometry, AREA_GEOJSON)
         mock_external_api_request.assert_called_once_with(
             "ai",
             "/api/farm-data/",

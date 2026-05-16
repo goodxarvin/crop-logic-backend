@@ -4,6 +4,7 @@ import logging
 import time
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
@@ -13,9 +14,9 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import QueryDict
 from farm_hub.models import FarmHub
 from config.observability import classify_exception, log_event, observe_operation, record_metric
+from subscriptions.services import get_effective_subscription_plan
 
-from .catalog import GOLD_PLAN_CODE
-from .models import AccessFeature, AccessRule, FarmAccessProfile, SubscriptionPlan
+from .models import AccessFeature, AccessRule, FarmAccessProfile
 
 
 logger = logging.getLogger(__name__)
@@ -40,24 +41,42 @@ ACTION_MAP = {
 }
 
 
-def _get_authz_cache_timeout():
+def _get_authz_cache_timeout() -> int:
     return int(getattr(settings, "ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT", 300))
 
 
 @lru_cache(maxsize=1)
-def load_route_feature_map():
+def load_route_feature_map() -> dict[str, Any]:
     feature_map_path = Path(settings.BASE_DIR) / "config" / "feature.json"
     with feature_map_path.open("r", encoding="utf-8") as feature_map_file:
         return json.load(feature_map_file)
 
 
-def get_route_feature_code(app_label):
+def get_route_feature_code(app_label: str | None) -> str | None:
     if not app_label:
         return None
-    return load_route_feature_map().get(app_label)
+    feature_map = load_route_feature_map()
+    if isinstance(feature_map.get("apps"), dict):
+        return feature_map["apps"].get(app_label)
+    feature_code = feature_map.get(app_label)
+    return feature_code if isinstance(feature_code, str) else None
 
 
-def _get_authorization_cache_key(farm, user, features, action, route):
+def get_admin_route_prefixes() -> list[str]:
+    feature_map = load_route_feature_map()
+    prefixes = feature_map.get("admin_route_prefixes", [])
+    if not isinstance(prefixes, list):
+        return []
+    return [prefix for prefix in prefixes if isinstance(prefix, str) and prefix]
+
+
+def is_admin_route(path: str, *, view_class: type | None = None) -> bool:
+    if getattr(view_class, "admin_only", False):
+        return True
+    return any(path.startswith(prefix) for prefix in get_admin_route_prefixes())
+
+
+def _get_authorization_cache_key(farm: Any, user: Any, features: list[str], action: str, route: str | None) -> str:
     raw_key = json.dumps(
         {
             "farm_uuid": str(getattr(farm, "farm_uuid", "")),
@@ -72,22 +91,39 @@ def _get_authorization_cache_key(farm, user, features, action, route):
     return f"access-control:authz:{digest}"
 
 
-def get_default_subscription_plan():
-    return SubscriptionPlan.objects.filter(is_active=True, metadata__is_default=True).order_by("name").first()
+def get_user_role(user: Any) -> str:
+    explicit_role = getattr(user, "role", None)
+    if isinstance(explicit_role, str) and explicit_role.strip():
+        return explicit_role.strip().lower()
+    if bool(getattr(user, "is_staff", False)) or bool(getattr(user, "is_superuser", False)):
+        return "admin"
+    return "farmer"
 
 
-def get_effective_subscription_plan(farm):
-    if farm.subscription_plan_id:
-        return farm.subscription_plan
-
-    default_plan = get_default_subscription_plan()
-    if default_plan is not None:
-        return default_plan
-
-    return SubscriptionPlan.objects.filter(code=GOLD_PLAN_CODE, is_active=True).order_by("name").first()
+def user_is_admin(user: Any) -> bool:
+    return get_user_role(user) == "admin"
 
 
-def _match_rule(rule, farm, subscription_plan, product_ids, sensor_catalog_ids, sensor_catalog_codes):
+def get_farm_queryset_for_user(user: Any):
+    queryset = FarmHub.objects.select_related("farm_type", "subscription_plan").prefetch_related(
+        "products",
+        "sensors",
+        "sensors__sensor_catalog",
+        "sensors__device_catalogs",
+    )
+    if user_is_admin(user):
+        return queryset
+    return queryset.filter(owner=user)
+
+
+def _match_rule(
+    rule: AccessRule,
+    farm: FarmHub,
+    subscription_plan: Any,
+    product_ids: list[int],
+    sensor_catalog_ids: set[int],
+    sensor_catalog_codes: set[str],
+) -> bool:
     if not rule.is_active:
         return False
 
@@ -110,13 +146,8 @@ def _match_rule(rule, farm, subscription_plan, product_ids, sensor_catalog_ids, 
     return True
 
 
-def build_farm_access_profile(farm):
-    farm = FarmHub.objects.select_related("farm_type", "subscription_plan").prefetch_related(
-        "products",
-        "sensors",
-        "sensors__sensor_catalog",
-        "sensors__device_catalogs",
-    ).get(pk=farm.pk)
+def build_farm_access_profile(farm: FarmHub) -> dict[str, Any]:
+    farm = get_farm_queryset_for_user(farm.owner).get(pk=farm.pk)
 
     subscription_plan = get_effective_subscription_plan(farm)
     product_ids = list(farm.products.values_list("id", flat=True))
@@ -196,7 +227,7 @@ def build_farm_access_profile(farm):
     return profile
 
 
-def build_opa_resource(farm):
+def build_opa_resource(farm: FarmHub | None) -> dict[str, Any]:
     if farm is None:
         return {
             "farm_id": None,
@@ -232,7 +263,7 @@ def build_opa_resource(farm):
     }
 
 
-def build_opa_user(user):
+def build_opa_user(user: Any) -> dict[str, Any]:
     return {
         "id": getattr(user, "id", None),
         "username": getattr(user, "username", ""),
@@ -240,22 +271,28 @@ def build_opa_user(user):
         "phone_number": getattr(user, "phone_number", ""),
         "is_staff": bool(getattr(user, "is_staff", False)),
         "is_superuser": bool(getattr(user, "is_superuser", False)),
-        "role": "farmer",
+        "role": get_user_role(user),
     }
 
 
-def get_authorization_action(method):
+def get_authorization_action(method: str) -> str:
     return ACTION_MAP.get(method.upper(), "view")
 
 
-def _opa_url(path):
+def _opa_url(path: str) -> str:
     base_url = getattr(settings, "ACCESS_CONTROL_AUTHZ_BASE_URL", "").strip()
     if not base_url:
         raise ImproperlyConfigured("ACCESS_CONTROL_AUTHZ_BASE_URL is not configured.")
     return urljoin(f"{base_url.rstrip('/')}/", path.lstrip("/"))
 
 
-def build_authorization_input(farm, user, features, action, route=None):
+def build_authorization_input(
+    farm: FarmHub | None,
+    user: Any,
+    features: list[str],
+    action: str,
+    route: str | None = None,
+) -> dict[str, Any]:
     return {
         "user": build_opa_user(user),
         "resource": build_opa_resource(farm),
@@ -265,7 +302,13 @@ def build_authorization_input(farm, user, features, action, route=None):
     }
 
 
-def request_opa_batch_authorization(farm, user, features, action, route=None):
+def request_opa_batch_authorization(
+    farm: FarmHub | None,
+    user: Any,
+    features: list[str],
+    action: str,
+    route: str | None = None,
+) -> dict[str, Any]:
     if not getattr(settings, "ACCESS_CONTROL_AUTHZ_ENABLED", True):
         return {"decisions": {feature: True for feature in features}}
 
@@ -324,7 +367,7 @@ def request_opa_batch_authorization(farm, user, features, action, route=None):
         return result
 
 
-def normalize_opa_batch_result(data, features):
+def normalize_opa_batch_result(data: dict[str, Any], features: list[str]) -> dict[str, bool]:
     decisions = data.get("decisions")
     if isinstance(decisions, dict):
         return {feature: bool(decisions.get(feature, False)) for feature in features}
@@ -351,7 +394,13 @@ def normalize_opa_batch_result(data, features):
     raise AccessControlServiceUnavailable("OPA authorization service returned an unsupported payload.")
 
 
-def batch_authorize_features(farm, user, features, action, route=None):
+def batch_authorize_features(
+    farm: FarmHub | None,
+    user: Any,
+    features: list[str],
+    action: str,
+    route: str | None = None,
+) -> dict[str, bool]:
     if not features:
         return {}
 
@@ -397,11 +446,17 @@ def batch_authorize_features(farm, user, features, action, route=None):
     return decisions
 
 
-def authorize_feature(farm, user, feature_code, action, route=None):
+def authorize_feature(
+    farm: FarmHub | None,
+    user: Any,
+    feature_code: str,
+    action: str,
+    route: str | None = None,
+) -> bool:
     return batch_authorize_features(farm, user, [feature_code], action, route=route).get(feature_code, False)
 
 
-def get_request_data(request):
+def get_request_data(request: Any) -> dict[str, Any] | QueryDict:
     request_data = getattr(request, "data", None)
     if isinstance(request_data, QueryDict):
         return request_data

@@ -92,3 +92,13 @@ class SoilSummarySerializer(serializers.Serializer):
     avgSoilMoisture = serializers.IntegerField(required=False, help_text="میانگین رطوبت خاک به‌صورت عدد گرد شده.")
     avgSoilMoistureRaw = serializers.FloatField(required=False, help_text="میانگین خام رطوبت خاک.")
     avgSoilMoistureStatus = serializers.CharField(required=False, allow_blank=True, help_text="وضعیت متنی رطوبت خاک.")
+
+
+class SoilMonitorSerializer(serializers.Serializer):
+    farm_uuid = serializers.CharField(required=False, allow_blank=True, help_text="UUID مزرعه.")
+    area_uuid = serializers.CharField(required=False, allow_blank=True, allow_null=True, help_text="UUID آخرین محدوده فعال مزرعه.")
+    zone_count = serializers.IntegerField(required=False, help_text="تعداد بخش‌ها یا زون‌های زمین.")
+    monitored_zones = serializers.IntegerField(required=False, help_text="تعداد زون‌هایی که سنسور متصل دارند.")
+    unassigned_sensor_count = serializers.IntegerField(required=False, help_text="تعداد سنسورهایی که به زون خاصی متصل نشده‌اند.")
+    zones = serializers.ListField(child=serializers.DictField(), required=False, help_text="لیست زون‌ها به همراه سنسورها و متریک‌های هر بخش.")
+    unassigned_sensors = serializers.ListField(child=serializers.DictField(), required=False, help_text="سنسورهای بدون زون یا بدون تطبیق.")

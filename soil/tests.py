@@ -4,11 +4,13 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory
 
+from crop_zoning.models import CropArea, CropZone, CropZoneAnalysis
+from device_hub.models import DeviceCatalog, FarmDevice, SensorExternalRequestLog
 from external_api_adapter.adapter import AdapterResponse
 from farm_hub.models import FarmHub, FarmType
 from account.models import User
 
-from .views import SoilAnomalyDetectionView, SoilMoistureHeatmapView, SoilSummaryView
+from .views import SoilAnomalyDetectionView, SoilMoistureHeatmapView, SoilMonitorView, SoilSummaryView
 
 
 TEST_CACHES = {
@@ -180,26 +182,71 @@ class SoilMoistureHeatmapViewTests(TestCase):
             name="Heatmap Farm",
         )
 
-    @patch("soil.views.external_api_request")
-    def test_heatmap_proxies_to_soile_moisture_heatmap(self, mock_external_api_request):
-        mock_external_api_request.return_value = AdapterResponse(
-            status_code=200,
-            data={
-                "data": {
-                    "farm_uuid": str(self.farm.farm_uuid),
-                    "location": {},
-                    "current_sensor": {},
-                    "soil_profile": [],
-                    "timestamp": "2026-04-26T10:00:00Z",
-                    "grid_resolution": {},
-                    "grid_cells": [],
-                    "sensor_points": [],
-                    "quality_legend": {},
-                    "depth_layers": [],
-                    "model_metadata": {},
-                    "summary": {},
-                }
-            },
+    def test_heatmap_returns_only_existing_zone_clusters_with_moisture(self):
+        area = CropArea.objects.create(
+            farm=self.farm,
+            geometry={"type": "Polygon", "coordinates": []},
+            points=[],
+            center={"lat": 35.7, "lon": 51.4},
+            area_sqm=2000,
+            area_hectares=0.2,
+            chunk_area_sqm=1000,
+            zone_count=2,
+        )
+        self.farm.current_crop_area = area
+        self.farm.save(update_fields=["current_crop_area", "updated_at"])
+
+        zone_one = CropZone.objects.create(
+            crop_area=area,
+            zone_id="cluster-a",
+            geometry={"type": "Polygon", "coordinates": []},
+            points=[],
+            center={"lat": 35.71, "lon": 51.41},
+            area_sqm=1000,
+            area_hectares=0.1,
+            sequence=1,
+        )
+        zone_two = CropZone.objects.create(
+            crop_area=area,
+            zone_id="cluster-b",
+            geometry={"type": "Polygon", "coordinates": []},
+            points=[],
+            center={"lat": 35.72, "lon": 51.42},
+            area_sqm=1000,
+            area_hectares=0.1,
+            sequence=2,
+        )
+
+        catalog = DeviceCatalog.objects.create(code="soil_probe_heatmap", name="Soil Probe Heatmap")
+        sensor_one = FarmDevice.objects.create(
+            farm=self.farm,
+            sensor_catalog=catalog,
+            physical_device_uuid="44444444-4444-4444-4444-444444444444",
+            name="Cluster A Sensor",
+            sensor_type="soil_probe",
+            cluster_uuid=zone_one.uuid,
+        )
+        sensor_two = FarmDevice.objects.create(
+            farm=self.farm,
+            sensor_catalog=catalog,
+            physical_device_uuid="55555555-5555-5555-5555-555555555555",
+            name="Cluster B Sensor",
+            sensor_type="soil_probe",
+            cluster_uuid=zone_two.uuid,
+        )
+        SensorExternalRequestLog.objects.create(
+            farm_uuid=self.farm.farm_uuid,
+            sensor_catalog_uuid=catalog.uuid,
+            physical_device_uuid=sensor_one.physical_device_uuid,
+            cluster_uuid=zone_one.uuid,
+            payload={"soil_moisture": 41.0},
+        )
+        SensorExternalRequestLog.objects.create(
+            farm_uuid=self.farm.farm_uuid,
+            sensor_catalog_uuid=catalog.uuid,
+            physical_device_uuid=sensor_two.physical_device_uuid,
+            cluster_uuid=zone_two.uuid,
+            payload={"soil_moisture": 67.0},
         )
 
         request = self.factory.get(f"/api/soil/moisture-heatmap/?farm_uuid={self.farm.farm_uuid}")
@@ -208,12 +255,88 @@ class SoilMoistureHeatmapViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["code"], 200)
         self.assertEqual(response.data["data"]["farm_uuid"], str(self.farm.farm_uuid))
-        mock_external_api_request.assert_called_once_with(
-            "ai",
-            "/api/soile/moisture-heatmap/",
-            method="POST",
-            payload={"farm_uuid": str(self.farm.farm_uuid)},
-        )
+        self.assertEqual(len(response.data["data"]["grid_cells"]), 2)
+        self.assertEqual(response.data["data"]["grid_cells"][0]["cluster"], "cluster-a")
+        self.assertEqual(response.data["data"]["grid_cells"][0]["moisture"], 41.0)
+        self.assertEqual(response.data["data"]["grid_cells"][1]["cluster"], "cluster-b")
+        self.assertEqual(response.data["data"]["grid_cells"][1]["moisture"], 67.0)
+        self.assertEqual(response.data["data"]["summary"]["total_clusters"], 2)
+
+    @patch("soil.services.ensure_farm_ai_clusters_synced")
+    def test_heatmap_fetches_clusters_from_ai_when_backend_has_no_zone_data(self, mock_sync_clusters):
+        def _seed_ai_clusters(*args, **kwargs):
+            area = CropArea.objects.create(
+                farm=self.farm,
+                geometry={"type": "Polygon", "coordinates": []},
+                points=[],
+                center={"lat": 35.7, "lon": 51.4},
+                area_sqm=2000,
+                area_hectares=0.2,
+                chunk_area_sqm=1000,
+                zone_count=2,
+            )
+            self.farm.current_crop_area = area
+            self.farm.save(update_fields=["current_crop_area", "updated_at"])
+
+            zone_one = CropZone.objects.create(
+                crop_area=area,
+                zone_id="cluster-a",
+                geometry={"type": "Polygon", "coordinates": []},
+                points=[],
+                center={"lat": 35.71, "lon": 51.41},
+                area_sqm=1000,
+                area_hectares=0.1,
+                sequence=1,
+            )
+            zone_two = CropZone.objects.create(
+                crop_area=area,
+                zone_id="cluster-b",
+                geometry={"type": "Polygon", "coordinates": []},
+                points=[],
+                center={"lat": 35.72, "lon": 51.42},
+                area_sqm=1000,
+                area_hectares=0.1,
+                sequence=2,
+            )
+            CropZoneAnalysis.objects.create(
+                crop_zone=zone_one,
+                source="ai_location_data",
+                external_record_id="cluster-a",
+                raw_response={
+                    "cluster_recommendation": {
+                        "satellite_metrics": {"soil_vv": 0.31},
+                        "resolved_metrics": {"soil_moisture": 44.0},
+                    }
+                },
+                depths=[],
+            )
+            CropZoneAnalysis.objects.create(
+                crop_zone=zone_two,
+                source="ai_location_data",
+                external_record_id="cluster-b",
+                raw_response={
+                    "cluster_recommendation": {
+                        "satellite_metrics": {"soil_vv": 0.52},
+                        "resolved_metrics": {"soil_moisture": 61.0},
+                    }
+                },
+                depths=[],
+            )
+            return area
+
+        mock_sync_clusters.side_effect = _seed_ai_clusters
+
+        request = self.factory.get(f"/api/soil/moisture-heatmap/?farm_uuid={self.farm.farm_uuid}")
+        response = SoilMoistureHeatmapView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(len(response.data["data"]["grid_cells"]), 2)
+        self.assertEqual(response.data["data"]["grid_cells"][0]["soil_vv"], 0.31)
+        self.assertEqual(response.data["data"]["grid_cells"][0]["moisture"], 44.0)
+        self.assertEqual(response.data["data"]["grid_cells"][1]["soil_vv"], 0.52)
+        self.assertEqual(response.data["data"]["summary"]["monitored_clusters"], 2)
+        mock_sync_clusters.assert_called_once_with(farm_uuid=self.farm.farm_uuid, owner=self.farm.owner)
 
     def test_heatmap_requires_farm_uuid(self):
         request = self.factory.get("/api/soil/moisture-heatmap/")
@@ -361,6 +484,96 @@ class SoilSummaryViewTests(TestCase):
     def test_summary_returns_404_for_missing_farm(self):
         request = self.factory.get("/api/soil/summary/?farm_uuid=11111111-1111-1111-1111-111111111111")
         response = SoilSummaryView.as_view()(request)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["code"], 404)
+        self.assertEqual(response.data["data"]["farm_uuid"][0], "Farm not found.")
+
+
+class SoilMonitorViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = User.objects.create_user(
+            username="soil-monitor-user",
+            password="secret123",
+            email="soil-monitor@example.com",
+            phone_number="09120000103",
+        )
+        self.farm_type = FarmType.objects.create(name="Soil Monitor Farm Type")
+        self.farm = FarmHub.objects.create(
+            owner=self.user,
+            farm_type=self.farm_type,
+            name="Monitor Farm",
+        )
+
+    def test_monitor_returns_zone_sensor_data_from_crop_zoning_and_device_logs(self):
+        area = CropArea.objects.create(
+            farm=self.farm,
+            geometry={"type": "Polygon", "coordinates": []},
+            points=[],
+            center={"lat": 35.7, "lon": 51.4},
+            area_sqm=2000,
+            area_hectares=0.2,
+            chunk_area_sqm=1000,
+            zone_count=1,
+        )
+        self.farm.current_crop_area = area
+        self.farm.save(update_fields=["current_crop_area", "updated_at"])
+
+        zone_cluster_uuid = "11111111-1111-1111-1111-111111111222"
+        CropZone.objects.create(
+            crop_area=area,
+            zone_id=zone_cluster_uuid,
+            geometry={"type": "Polygon", "coordinates": []},
+            points=[],
+            center={"lat": 35.71, "lon": 51.41},
+            area_sqm=1000,
+            area_hectares=0.1,
+            sequence=1,
+        )
+
+        catalog = DeviceCatalog.objects.create(code="soil_probe", name="Soil Probe")
+        sensor = FarmDevice.objects.create(
+            farm=self.farm,
+            sensor_catalog=catalog,
+            physical_device_uuid="33333333-3333-3333-3333-333333333333",
+            name="Zone A Sensor",
+            sensor_type="soil_probe",
+            cluster_uuid=zone_cluster_uuid,
+        )
+        SensorExternalRequestLog.objects.create(
+            farm_uuid=self.farm.farm_uuid,
+            sensor_catalog_uuid=catalog.uuid,
+            physical_device_uuid=sensor.physical_device_uuid,
+            cluster_uuid=zone_cluster_uuid,
+            payload={"soil_moisture": 43.5, "temperature": 24.2, "ph": 6.8},
+        )
+
+        request = self.factory.get(f"/api/soil/monitor/?farm_uuid={self.farm.farm_uuid}")
+        response = SoilMonitorView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], 200)
+        self.assertEqual(response.data["data"]["zone_count"], 1)
+        self.assertEqual(response.data["data"]["monitored_zones"], 1)
+        zone_data = response.data["data"]["zones"][0]
+        self.assertEqual(zone_data["zone_id"], zone_cluster_uuid)
+        self.assertEqual(zone_data["aggregated_metrics"]["soil_moisture"], 43.5)
+        self.assertEqual(zone_data["status"]["label"], "کم")
+        self.assertEqual(len(zone_data["sensors"]), 1)
+        self.assertEqual(zone_data["sensors"][0]["name"], "Zone A Sensor")
+
+    def test_monitor_requires_farm_uuid(self):
+        request = self.factory.get("/api/soil/monitor/")
+        response = SoilMonitorView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], 400)
+        self.assertEqual(response.data["data"]["farm_uuid"][0], "This field is required.")
+
+    def test_monitor_returns_404_for_missing_farm(self):
+        request = self.factory.get("/api/soil/monitor/?farm_uuid=11111111-1111-1111-1111-111111111111")
+        response = SoilMonitorView.as_view()(request)
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data["code"], 404)

@@ -12,12 +12,14 @@ from farm_hub.models import FarmHub
 from .serializers import (
     SoilAnomalyDetectionSerializer,
     SoilKpiSerializer,
+    SoilMonitorSerializer,
     SoilMoistureHeatmapSerializer,
     SoilSummarySerializer,
 )
 from .services import (
     get_anomaly_detection_card_data,
     get_avg_soil_moisture_data,
+    get_soil_monitor_data,
     get_soil_moisture_heatmap_data,
 )
 
@@ -177,25 +179,8 @@ class SoilMoistureHeatmapView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        adapter_response = external_api_request(
-            "ai",
-            "/api/soile/moisture-heatmap/",
-            method="POST",
-            payload={"farm_uuid": str(farm.farm_uuid)},
-        )
-        if adapter_response.status_code >= 400:
-            response_data = (
-                adapter_response.data
-                if isinstance(adapter_response.data, dict)
-                else {"message": str(adapter_response.data)}
-            )
-            return Response(
-                {"code": adapter_response.status_code, "msg": "error", "data": response_data},
-                status=adapter_response.status_code,
-            )
-
         return Response(
-            {"code": 200, "msg": "success", "data": _extract_adapter_result(adapter_response.data)},
+            {"code": 200, "msg": "success", "data": get_soil_moisture_heatmap_data(farm)},
             status=status.HTTP_200_OK,
         )
 
@@ -253,5 +238,34 @@ class SoilSummaryView(APIView):
         _store_recent_soil_summary(response_payload)
         return Response(
             {"code": 200, "msg": "success", "data": response_payload},
+            status=status.HTTP_200_OK,
+        )
+
+
+class SoilMonitorView(APIView):
+    @extend_schema(
+        tags=["Soil"],
+        parameters=[
+            farm_uuid_query_param(required=True, description="UUID of the farm for zone-based soil monitoring."),
+        ],
+        responses={200: status_response("SoilMonitorResponse", data=SoilMonitorSerializer())},
+    )
+    def get(self, request):
+        farm_uuid = request.query_params.get("farm_uuid")
+        if not farm_uuid:
+            return Response(
+                {"code": 400, "msg": "error", "data": {"farm_uuid": ["This field is required."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        farm = _get_farm_from_request(request)
+        if farm is None:
+            return Response(
+                {"code": 404, "msg": "error", "data": {"farm_uuid": ["Farm not found."]}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {"code": 200, "msg": "success", "data": get_soil_monitor_data(farm)},
             status=status.HTTP_200_OK,
         )

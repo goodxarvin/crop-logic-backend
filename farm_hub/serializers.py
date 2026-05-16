@@ -1,9 +1,9 @@
 from rest_framework import serializers
-from access_control.models import SubscriptionPlan
-from access_control.serializers import SubscriptionPlanSerializer
 from access_control.catalog import GOLD_PLAN_CODE
-from access_control.services import get_effective_subscription_plan
 from device_hub.models import DeviceCatalog, FarmDevice
+from subscriptions.models import SubscriptionPlan
+from subscriptions.serializers import SubscriptionPlanSerializer
+from subscriptions.services import get_effective_subscription_plan
 
 from .models import FarmHub, FarmType, Product
 from .services import normalize_farm_boundary_input
@@ -53,6 +53,8 @@ class FarmDeviceSerializer(serializers.ModelSerializer):
             "physical_device_uuid",
             "name",
             "sensor_type",
+            "cluster_uuid",
+            "location_metadata",
             "is_active",
             "specifications",
             "power_source",
@@ -116,6 +118,8 @@ class FarmDeviceWriteSerializer(serializers.ModelSerializer):
             "physical_device_uuid",
             "name",
             "sensor_type",
+            "cluster_uuid",
+            "location_metadata",
             "is_active",
             "specifications",
             "power_source",

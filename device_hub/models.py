@@ -60,6 +60,8 @@ class FarmDevice(models.Model):
     physical_device_uuid = models.UUIDField(default=uuid_lib.uuid4, unique=True, db_index=True)
     name = models.CharField(max_length=255)
     sensor_type = models.CharField(max_length=255, blank=True, default="")
+    cluster_uuid = models.UUIDField(null=True, blank=True, db_index=True)
+    location_metadata = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
     specifications = models.JSONField(default=dict, blank=True)
     power_source = models.JSONField(default=dict, blank=True)
@@ -90,11 +92,21 @@ class FarmDevice(models.Model):
                 return catalog
         return None
 
+    def get_sensor_key(self):
+        if self.sensor_catalog and self.sensor_catalog.code:
+            return self.sensor_catalog.code
+        return "sensor-7-1"
+
+    def get_ai_device_key(self):
+        return f"device:{self.physical_device_uuid}"
+
 
 class SensorExternalRequestLog(models.Model):
     farm_uuid = models.UUIDField(db_index=True)
     sensor_catalog_uuid = models.UUIDField(null=True, blank=True, db_index=True)
     physical_device_uuid = models.UUIDField(db_index=True)
+    cluster_uuid = models.UUIDField(null=True, blank=True, db_index=True)
+    location_metadata = models.JSONField(default=dict, blank=True)
     payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

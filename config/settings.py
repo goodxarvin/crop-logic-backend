@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "account.apps.AccountConfig",
     "farm_hub.apps.FarmHubConfig",
     "device_hub.apps.DeviceHubConfig",
+    "subscriptions.apps.SubscriptionsConfig",
     "access_control.apps.AccessControlConfig",
     "dashboard",
     "crop_health.apps.CropHealthConfig",
@@ -150,6 +151,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "config.exception_handler.custom_exception_handler",
 }
 
 SPECTACULAR_SETTINGS = {
