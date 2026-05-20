@@ -39,5 +39,6 @@ urlpatterns = [
     path("api/farmer-todos/", include("farmer_todos.urls")),
 
     path("api/sensor-external-api/", include("device_hub.sensor_external_api_urls")),
-    path("api/address/", include("addresses.urls"))
+    path("api/address/", include("addresses.urls")),
+    path("api/commerce-catalog/", include("commerce_catalog.urls"))
 ]
