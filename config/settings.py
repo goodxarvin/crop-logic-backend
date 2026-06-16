@@ -66,7 +66,8 @@ INSTALLED_APPS = [
     "drf_spectacular_sidecar",
     "corsheaders",
     "addresses",
-    "commerce_catalog",
+    "commerce_catalog.apps.CommerceCatalogConfig",
+    "pricing.apps.PricingConfig",
 ]
 
 MIDDLEWARE = [
