@@ -1,7 +1,12 @@
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested.routers import NestedDefaultRouter
 from . import views
-from pricing.api.views import PriceTierViewSet, PriceHistoryViewSet
+from pricing.api.views import (
+    PriceTierViewSet,
+    PriceHistoryViewSet,
+    DiscountSellableItemRelationViewSet,
+    DiscountSKURelationViewSet,
+)
 
 app_name = "api-urls"
 
@@ -24,6 +29,11 @@ sellable_router.register("skus", views.SKUViewset, basename="sku")
 sellable_router.register(
     "add-on-assignments", views.AddOnAssignmentViewSet, basename="add-on-assignments"
 )
+sellable_router.register(
+    "dicsount-sellable-item-relations",
+    DiscountSellableItemRelationViewSet,
+    basename="discount-sellable-item-relations",
+)
 
 variants_router = NestedDefaultRouter(sellable_router, "variants", lookup="variant")
 variants_router.register(
@@ -36,6 +46,11 @@ sku_router.register(
 )
 sku_router.register("price-tiers", PriceTierViewSet, basename="price-tiers")
 sku_router.register("price-history", PriceHistoryViewSet, basename="price-history")
+sku_router.register(
+    "discount-sku-relations",
+    DiscountSKURelationViewSet,
+    basename="discount-sku-relations",
+)
 
 bundle_router = NestedDefaultRouter(router, "bundles", lookup="bundle")
 bundle_router.register(
