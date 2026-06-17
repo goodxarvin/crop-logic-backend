@@ -20,7 +20,7 @@ class BasePriceViewSet(viewsets.ModelViewSet):
     permission_classes = [
         IsSuperUser,
     ]
-    queryset = BasePrice.objects.all()
+    # queryset = BasePrice.objects.all()
     serializer_class = BasePriceSerializer
     pagination_class = BasePricePagination
     filter_backends = [
@@ -46,6 +46,19 @@ class BasePriceViewSet(viewsets.ModelViewSet):
         "updated_at",
         "amount",
     ]
+
+    def get_queryset(self):
+        currency_id = self.kwargs.get("currency_pk")
+        if currency_id:
+            return BasePrice.objects.filter(currency_id=currency_id)
+        return BasePrice.objects.all()
+
+    def perform_create(self, serializer):
+        currency_id = self.kwargs.get("currency_pk")
+        if currency_id:
+            serializer.save(currency_id=currency_id)
+        else:
+            serializer.save()
 
 
 class PriceTierViewSet(viewsets.ModelViewSet):
@@ -85,14 +98,23 @@ class PriceTierViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         sku_id = self.kwargs.get("sku_pk")
+        currency_id = self.kwargs.get("currency_pk")
         if sku_id:
             return PriceTier.objects.filter(Q(sku_id=sku_id) & Q(is_active=True))
+        elif currency_id:
+            return PriceTier.objects.filter(
+                Q(currency_id=currency_id) & Q(is_active=True)
+            )
+
         return PriceTier.objects.filter(is_active=True)
 
     def perform_create(self, serializer):
         sku_id = self.kwargs.get("sku_pk")
+        currency_id = self.kwargs.get("currency_pk")
         if sku_id:
             serializer.save(sku_id=sku_id)
+        elif currency_id:
+            serializer.save(currency_id=currency_id)
         else:
             serializer.save()
 
