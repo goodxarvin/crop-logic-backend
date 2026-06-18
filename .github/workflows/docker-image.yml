@@ -4,10 +4,10 @@ on:
   push:
     branches:
       - dev
-      - arvin-dev
   pull_request:
     branches:
       - main
+      - dev
 
 jobs:
   test:
