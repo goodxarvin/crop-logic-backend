@@ -23,13 +23,13 @@ jobs:
       run: docker network create crop_network
 
 
-    - name: Create Dummy Env File
-      run: |
-        echo "DEBUG=True" >> .env
-        echo "SECRET_KEY=test_secret_key" >> .env
-        echo "DB_NAME=croplogic" >> .env
-        echo "DB_USER=root"
-        echo "DB_PASSWORD=root" # 
+    # - name: Create Dummy Env File
+    #   run: |
+    #     echo "DEBUG=True" >> .env
+    #     echo "SECRET_KEY=test_secret_key" >> .env
+    #     echo "DB_NAME=croplogic" >> .env
+    #     echo "DB_USER=root"
+    #     echo "DB_PASSWORD=root" # 
 
 
   
@@ -46,9 +46,14 @@ jobs:
       run: |
         docker compose -f docker-compose-original-source.yml logs web
   
+
     - name: Run Django Tests inside Docker
       run: |
-        docker compose -f docker-compose-original-source.yml  exec -T web python manage.py test
+        docker compose -f docker-compose-original-source.yml exec -T \
+          -e DB_USER=root \
+          -e DB_PASSWORD=root \
+          web python manage.py test
+
 
 
     - name: Clean up Docker
