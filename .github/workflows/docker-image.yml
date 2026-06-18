@@ -30,11 +30,11 @@ jobs:
   
     - name: Run Django Tests inside Docker
       run: |
-        docker-compose exec -T web python manage.py test
+        docker compose exec -T web python manage.py test
 
 
     - name: Clean up Docker
       if: always() 
       run: |
-        docker compose down
+        docker compose -f docker-compose-original-source.yml down
 
