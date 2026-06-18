@@ -53,6 +53,7 @@ services:
   web:
     build:
       context: .
+      dockerfile: Dockerfile.source
     container_name: backend-web
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     volumes:
@@ -85,6 +86,7 @@ services:
   celery:
     build:
       context: .
+      dockerfile: Dockerfile.source
     container_name: backend-celery
     command: ["celery", "-A", "config", "worker", "-l", "info"]
     volumes:
@@ -114,6 +116,7 @@ services:
   celery-beat:
     build:
       context: .
+      dockerfile: Dockerfile.source
     container_name: backend-celery-beat
     command: ["celery", "-A", "config", "beat", "-l", "info"]
     volumes:
