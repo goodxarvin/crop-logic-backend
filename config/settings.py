@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_filters",
     "auth.apps.AuthConfig",
     "account.apps.AccountConfig",
     "farm_hub.apps.FarmHubConfig",
@@ -65,6 +66,8 @@ INSTALLED_APPS = [
     "drf_spectacular_sidecar",
     "corsheaders",
     "addresses",
+    "commerce_catalog.apps.CommerceCatalogConfig",
+    "pricing.apps.PricingConfig",
 ]
 
 MIDDLEWARE = [

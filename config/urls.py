@@ -1,12 +1,22 @@
 from django.contrib import admin
 from django.urls import include, path
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/docs/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path(
+        "api/docs/swagger/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/docs/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"
+    ),
     path("api/auth/", include("auth.urls")),
     path("api/account/", include("account.urls")),
     path("api/farm-hub/", include("farm_hub.urls")),
@@ -17,19 +27,15 @@ urlpatterns = [
     path("api/farm-dashboard/", include("dashboard.urls")),
     path("api/crop-health/", include("crop_health.urls")),
     path("api/soil/", include("soil.urls")),
-
     path("api/location-data/", include("crop_zoning.urls")),
     # path("api/yield-harvest/", include("yield_harvest.urls")),
     path("api/yield-harvest/", include("yield_harvest.crop_simulation_urls")),
-
     path("api/pest-detection/", include("pest_detection.urls")),
     path("api/pest-disease/", include("pest_detection.pest_disease_urls")),
     path("api/irrigation/", include("irrigation.urls")),
-
     path("api/weather/", include("water.weather_urls")),
     path("api/water/", include("water.urls")),
     path("api/economy/", include("economic_overview.urls")),
-
     path("api/fertilization/", include("fertilization.urls")),
     path("api/farm-ai-assistant/", include("farm_ai_assistant.urls")),
     path("api/notifications/", include("notifications.urls")),
@@ -37,7 +43,8 @@ urlpatterns = [
     path("api/plants/", include("plants.urls")),
     path("api/events/", include("farmer_calendar.urls")),
     path("api/farmer-todos/", include("farmer_todos.urls")),
-
     path("api/sensor-external-api/", include("device_hub.sensor_external_api_urls")),
-    path("api/address/", include("addresses.urls"))
+    path("api/address/", include("addresses.urls")),
+    path("api/commerce-catalog/", include("commerce_catalog.urls")),
+    path("api/pricing/", include("pricing.urls")),
 ]
