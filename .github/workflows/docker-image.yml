@@ -1,0 +1,48 @@
+name: Docker Compose CI
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+ 
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+
+    - name: Create External Docker Network
+      run: docker network create crop_network
+
+  
+    - name: Build and Run Docker Compose
+      run: |
+        docker compose -f docker-compose-original-source.yml up -d --build
+
+  
+    - name: Wait for Database
+      run: sleep 15
+
+    - name: Check Containers Log If Crashing
+      if: always()
+      run: |
+        docker compose -f docker-compose-original-source.yml logs web
+  
+    - name: Run Django Tests inside Docker
+      run: |
+        docker compose -f docker-compose-original-source.yml  exec -T web python manage.py test
+
+
+    - name: Clean up Docker
+      if: always() 
+      run: |
+        docker compose -f docker-compose-original-source.yml down
+
