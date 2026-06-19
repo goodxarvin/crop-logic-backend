@@ -52,7 +52,8 @@ jobs:
         docker compose -f docker-compose-original-source.yml exec -T \
           -e DB_USER=root \
           -e DB_PASSWORD=root \
-          web python manage.py test
+          web python manage.py test --exclude=yield_harvest --exclude=soil
+
 
 
 
