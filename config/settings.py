@@ -13,7 +13,12 @@ LOG_DIR.mkdir(exist_ok=True)
 
 
 def _get_csv_env(name, default=""):
-    return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
+    return [
+        item.strip()
+        for item in os.environ.get(name, default).split(",")
+        if item.strip()
+    ]
+
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dev-only")
 DEBUG = os.environ.get("DEBUG", "0") == "1"
@@ -68,6 +73,7 @@ INSTALLED_APPS = [
     "addresses",
     "commerce_catalog.apps.CommerceCatalogConfig",
     "pricing.apps.PricingConfig",
+    "wallet.apps.WalletConfig",
 ]
 
 MIDDLEWARE = [
@@ -116,7 +122,9 @@ DATABASES = {
 }
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -135,13 +143,19 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": os.getenv("CACHE_URL", os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")),
+        "LOCATION": os.getenv(
+            "CACHE_URL", os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
+        ),
         "KEY_PREFIX": "croplogic",
     }
 }
 
-PEST_DISEASE_RISK_SUMMARY_CACHE_TTL = int(os.getenv("PEST_DISEASE_RISK_SUMMARY_CACHE_TTL", "14400"))
-WATER_NEED_PREDICTION_CACHE_TTL = int(os.getenv("WATER_NEED_PREDICTION_CACHE_TTL", "14400"))
+PEST_DISEASE_RISK_SUMMARY_CACHE_TTL = int(
+    os.getenv("PEST_DISEASE_RISK_SUMMARY_CACHE_TTL", "14400")
+)
+WATER_NEED_PREDICTION_CACHE_TTL = int(
+    os.getenv("WATER_NEED_PREDICTION_CACHE_TTL", "14400")
+)
 SOIL_SUMMARY_CACHE_TTL = int(os.getenv("SOIL_SUMMARY_CACHE_TTL", "14400"))
 SOIL_ANOMALIES_CACHE_TTL = int(os.getenv("SOIL_ANOMALIES_CACHE_TTL", "14400"))
 
@@ -191,14 +205,22 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG
 USE_EXTERNAL_API_MOCK = os.getenv("USE_EXTERNAL_API_MOCK", "false").lower() == "true"
 EXTERNAL_API_TIMEOUT = int(os.getenv("EXTERNAL_API_TIMEOUT", "30"))
 
-ACCESS_CONTROL_AUTHZ_ENABLED = os.getenv("ACCESS_CONTROL_AUTHZ_ENABLED", "true").lower() == "true"
+ACCESS_CONTROL_AUTHZ_ENABLED = (
+    os.getenv("ACCESS_CONTROL_AUTHZ_ENABLED", "true").lower() == "true"
+)
 ACCESS_CONTROL_AUTHZ_BASE_URL = os.getenv(
     "ACCESS_CONTROL_AUTHZ_BASE_URL",
     "http://croplogic-accsess-opa:8181",
 )
-ACCESS_CONTROL_AUTHZ_BATCH_PATH = os.getenv("ACCESS_CONTROL_AUTHZ_BATCH_PATH", "/v1/data/croplogic/authz/batch_decision")
-ACCESS_CONTROL_AUTHZ_TIMEOUT = int(os.getenv("ACCESS_CONTROL_AUTHZ_TIMEOUT", str(EXTERNAL_API_TIMEOUT)))
-ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT = int(os.getenv("ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT", "300"))
+ACCESS_CONTROL_AUTHZ_BATCH_PATH = os.getenv(
+    "ACCESS_CONTROL_AUTHZ_BATCH_PATH", "/v1/data/croplogic/authz/batch_decision"
+)
+ACCESS_CONTROL_AUTHZ_TIMEOUT = int(
+    os.getenv("ACCESS_CONTROL_AUTHZ_TIMEOUT", str(EXTERNAL_API_TIMEOUT))
+)
+ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT = int(
+    os.getenv("ACCESS_CONTROL_AUTHZ_CACHE_TIMEOUT", "300")
+)
 
 EXTERNAL_SERVICES = {
     "ai": {
@@ -232,13 +254,19 @@ FARM_DATA_API_HOST = os.getenv("FARM_DATA_API_HOST", "")
 FARM_DATA_API_PORT = os.getenv("FARM_DATA_API_PORT", "")
 FARM_DATA_API_PATH = os.getenv("FARM_DATA_API_PATH", "/api/farm-data/")
 FARM_DATA_API_KEY = os.getenv("FARM_DATA_API_KEY", "")
-FARM_DATA_API_TIMEOUT = int(os.getenv("FARM_DATA_API_TIMEOUT", str(EXTERNAL_API_TIMEOUT)))
+FARM_DATA_API_TIMEOUT = int(
+    os.getenv("FARM_DATA_API_TIMEOUT", str(EXTERNAL_API_TIMEOUT))
+)
 CELERY_TASK_DEFAULT_QUEUE = os.getenv("CELERY_TASK_DEFAULT_QUEUE", "default")
 CELERY_TASK_ACKS_LATE = True
-CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1"))
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(
+    os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
+)
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "120"))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "90"))
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = os.getenv("CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP", "true").lower() == "true"
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = (
+    os.getenv("CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP", "true").lower() == "true"
+)
 FARM_ALERTS_AI_SYNC_CRON_MINUTE = os.getenv("FARM_ALERTS_AI_SYNC_CRON_MINUTE", "0")
 FARM_ALERTS_AI_SYNC_CRON_HOUR = os.getenv("FARM_ALERTS_AI_SYNC_CRON_HOUR", "*")
 
