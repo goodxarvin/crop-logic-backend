@@ -1,10 +1,10 @@
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
-from .paginations import WalletPagination, TransactionPagination
-from .permissions import IsSuperUser
-from .serializers import WalletSerializer, TransactionSerializer
-from ..models import Wallet, Transaction
+from ..paginations import WalletPagination, TransactionPagination
+from ..permissions import IsSuperUser
+from ..serializers import WalletSerializer, TransactionSerializer
+from ...models import Wallet, Transaction
 
 
 # get access for superusers to wallet model

@@ -76,6 +76,12 @@ class Transaction(models.Model):
     wallet = models.ForeignKey(
         Wallet, on_delete=models.PROTECT, related_name="transactions"
     )
+    authority = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        unique=True,
+    )
     transaction_type = models.CharField(
         max_length=20,
         choices=TransactionType.choices,
@@ -85,7 +91,7 @@ class Transaction(models.Model):
         choices=DirectionType.choices,
     )
     status_type = models.CharField(max_length=20, choices=StatusType.choices)
-    amount = models.DecimalField(max_digits=18, decimal_places=6)
+    amount = models.DecimalField(max_digits=18, decimal_places=6, default=Decimal("0"))
 
     reference_type = models.CharField(
         max_length=255,
@@ -103,7 +109,7 @@ class Transaction(models.Model):
         help_text="مثلا درگاه زرین‌پال یا انتقال پایا",
     )
     balance_after = models.DecimalField(
-        max_digits=18, decimal_places=6, null=True, blank=True
+        max_digits=18, decimal_places=6, default=Decimal("0")
     )
     metadata = models.JSONField(default=dict, blank=True)
 
