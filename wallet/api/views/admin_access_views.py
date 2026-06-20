@@ -1,14 +1,14 @@
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
-from .paginations import WalletPagination, TransactionPagination
-from .permissions import IsSuperUser
-from .serializers import WalletSerializer, TransactionSerializer
-from ..models import Wallet, Transaction
+from ..paginations import WalletPagination, TransactionPagination
+from ..permissions import IsSuperUser
+from ..serializers import WalletSerializer, TransactionSerializer
+from ...models import Wallet, Transaction
 
 
 # get access for superusers to wallet model
-class WalletListView(viewsets.ReadOnlyModelViewSet):
+class WalletListViewset(viewsets.ReadOnlyModelViewSet):
     permission_classes = [
         IsSuperUser,
     ]
@@ -42,7 +42,7 @@ class WalletListView(viewsets.ReadOnlyModelViewSet):
 
 
 # get access for superusers to transaction model
-class TransactionListView(viewsets.ReadOnlyModelViewSet):
+class TransactionListViewset(viewsets.ReadOnlyModelViewSet):
     permission_classes = [
         IsSuperUser,
     ]
