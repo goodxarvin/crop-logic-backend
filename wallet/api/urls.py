@@ -10,15 +10,36 @@ router.register("transactions", views.TransactionListViewset, basename="transact
 router.register(
     "my-transactions", views.UserTransactionViewset, basename="my-transactions"
 )
+router.register(
+    "pending-withdrawals", views.AdminPendingViewset, basename="pending-withdrawal"
+)
 
 urlpatterns = [
-    path("wallets/topup/", views.WalletTopupAPIView.as_view(), name="wallet-topup"),
     path(
-        "wallets/topup/callback/",
+        "topup/",
+        views.WalletTopupAPIView.as_view(),
+        name="wallet-topup",
+    ),
+    path(
+        "topup/callback/",
         views.WalletTopupCallbackAPIView.as_view(),
         name="wallet-callback",
     ),
-    path("my-wallet/", views.UserWalletRetrieveAPIView.as_view(), name="my-wallet"),
+    path(
+        "my-wallet/",
+        views.UserWalletRetrieveAPIView.as_view(),
+        name="my-wallet",
+    ),
+    path(
+        "withdrawal-request/",
+        views.UserWithdrawalRequestAPIView.as_view(),
+        name="user-withdrawal-request",
+    ),
+    path(
+        "process-withdrawal/<uuid:uuid>/<str:action_type>/",
+        views.AdminWithdrawalProcessAPIView.as_view(),
+        name="process-withdrawal",
+    ),
 ]
 
 urlpatterns += router.urls

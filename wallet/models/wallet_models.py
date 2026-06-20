@@ -15,7 +15,7 @@ class WalletStatus(models.TextChoices):
 class Wallet(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="wallets"
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="wallet"
     )
     status = models.CharField(
         max_length=20, choices=WalletStatus.choices, default=WalletStatus.ACTIVE
@@ -136,3 +136,40 @@ class Transaction(models.Model):
         return (
             f"TXN {self.uuid} - {self.get_transaction_type_display()} - {self.amount}"
         )
+
+
+class WithdrawalStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+
+
+class WithdrawalRequest(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    wallet = models.ForeignKey(
+        Wallet, on_delete=models.PROTECT, related_name="withdrawal_requests"
+    )
+    amount = models.DecimalField(max_digits=18, decimal_places=6)
+
+    shiba_number = models.CharField(max_length=26)
+    card_number = models.CharField(max_length=16, null=True, blank=True)
+    account_holder_name = models.CharField(max_length=100)
+
+    status = models.CharField(
+        max_length=20,
+        choices=WithdrawalStatus.choices,
+        default=WithdrawalStatus.PENDING,
+    )
+
+    transaction = models.OneToOneField(
+        "Transaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="withdrawal_detail",
+    )
+    rejection_reason = models.TextField(null=True, blank=True)
+    bank_tracking_code = models.CharField(max_length=100, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

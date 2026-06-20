@@ -14,7 +14,7 @@ class WalletTopupAPIView(APIView):
     def post(self, request):
         user = request.user
         amount = request.data.get("amount")
-        wallet = user.wallets
+        wallet = user.wallet
 
         txn = WalletService.create_topup_transaction(
             wallet=wallet,
@@ -28,7 +28,7 @@ class WalletTopupAPIView(APIView):
             "merchant_id": "00000000-0000-0000-0000-000000000000",
             "amount": int(txn.amount) if int(txn.amount) >= 1000 else 1000,
             "description": f"Topup of {txn.amount} {wallet.currency.code} for user {user.email}",
-            "callback_url": f"http://localhost:8000/api/wallet/wallets/topup/callback/?txn_id={txn.uuid}",
+            "callback_url": f"http://localhost:8000/api/wallet/topup/callback/?txn_id={txn.uuid}",
             "metadata": {
                 "mobile": user.phone_number,
                 "email": user.email,
