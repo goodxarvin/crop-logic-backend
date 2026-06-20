@@ -8,7 +8,7 @@ from ...models import Wallet, Transaction
 
 
 # get access for superusers to wallet model
-class WalletListView(viewsets.ReadOnlyModelViewSet):
+class WalletListViewset(viewsets.ReadOnlyModelViewSet):
     permission_classes = [
         IsSuperUser,
     ]
@@ -42,7 +42,7 @@ class WalletListView(viewsets.ReadOnlyModelViewSet):
 
 
 # get access for superusers to transaction model
-class TransactionListView(viewsets.ReadOnlyModelViewSet):
+class TransactionListViewset(viewsets.ReadOnlyModelViewSet):
     permission_classes = [
         IsSuperUser,
     ]

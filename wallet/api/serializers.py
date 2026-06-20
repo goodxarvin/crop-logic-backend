@@ -20,6 +20,19 @@ class WalletSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["uuid", "user", "created_at", "updated_at"]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        request = self.context.get("request")
+
+        if request and not request.user.is_staff:
+            excluded_fields = [
+                "uuid",
+                "user",
+            ]
+            for field_name in excluded_fields:
+                self.fields.pop(field_name, None)
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -46,7 +59,23 @@ class TransactionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["uuid", "wallet", "created_at", "updated_at"]
 
-    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        request = self.context.get("request")
+
+        if request and not request.user.is_staff:
+            excluded_fields = [
+                "uuid",
+                "wallet",
+                "actor_id",
+                "operator_note",
+                "metadata",
+                "reference_id",
+                "method",
+            ]
+            for field_name in excluded_fields:
+                self.fields.pop(field_name, None)
 
     def validate_metadata(self, value):
         if not value:

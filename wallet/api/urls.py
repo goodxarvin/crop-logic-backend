@@ -5,8 +5,11 @@ from . import views
 # from django.urls import path
 
 router = DefaultRouter()
-router.register("wallets", views.WalletListView, basename="wallets")
-router.register("transactions", views.TransactionListView, basename="transactions")
+router.register("wallets", views.WalletListViewset, basename="wallets")
+router.register("transactions", views.TransactionListViewset, basename="transactions")
+router.register(
+    "my-transactions", views.UserTransactionViewset, basename="my-transactions"
+)
 
 urlpatterns = [
     path("wallets/topup/", views.WalletTopupAPIView.as_view(), name="wallet-topup"),
@@ -15,6 +18,7 @@ urlpatterns = [
         views.WalletTopupCallbackAPIView.as_view(),
         name="wallet-callback",
     ),
+    path("my-wallet/", views.UserWalletRetrieveAPIView.as_view(), name="my-wallet"),
 ]
 
 urlpatterns += router.urls
