@@ -18,7 +18,7 @@ class Wallet(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="wallets"
     )
     status = models.CharField(
-        max_length=20, choices=WalletStatus.choices, default=WalletStatus.PENDING
+        max_length=20, choices=WalletStatus.choices, default=WalletStatus.ACTIVE
     )
     currency = models.ForeignKey(
         "pricing.Currency", on_delete=models.PROTECT, related_name="wallets"
