@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "commerce_catalog.apps.CommerceCatalogConfig",
     "pricing.apps.PricingConfig",
     "wallet.apps.WalletConfig",
+    "ledger.apps.LedgerConfig",
 ]
 
 MIDDLEWARE = [

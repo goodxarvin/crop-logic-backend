@@ -14,12 +14,14 @@ class WalletTopupAPIView(APIView):
     def post(self, request):
         user = request.user
         amount = request.data.get("amount")
+        fee = 0
+        tax = (amount / 100) * 10 if amount != 0 else 0
         wallet = user.wallet
 
         txn = WalletService.create_topup_transaction(
             wallet=wallet,
             method="zarinpal",
-            amount=amount if amount else Decimal("0"),
+            amount=(amount + fee + tax) if amount else Decimal("0"),
         )
 
         zarinpal_request_url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
