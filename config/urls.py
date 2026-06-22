@@ -48,4 +48,5 @@ urlpatterns = [
     path("api/commerce-catalog/", include("commerce_catalog.urls")),
     path("api/pricing/", include("pricing.urls")),
     path("api/wallet/", include("wallet.urls")),
+    path("api/ledger/", include("ledger.urls")),
 ]
