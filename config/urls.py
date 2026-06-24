@@ -44,9 +44,10 @@ urlpatterns = [
     path("api/events/", include("farmer_calendar.urls")),
     path("api/farmer-todos/", include("farmer_todos.urls")),
     path("api/sensor-external-api/", include("device_hub.sensor_external_api_urls")),
-    path("api/address/", include("addresses.urls")),
+    path("api/address/", include("address.urls")),
     path("api/commerce-catalog/", include("commerce_catalog.urls")),
     path("api/pricing/", include("pricing.urls")),
     path("api/wallet/", include("wallet.urls")),
     path("api/ledger/", include("ledger.urls")),
+    path("api/cart/", include("cart.urls")),
 ]

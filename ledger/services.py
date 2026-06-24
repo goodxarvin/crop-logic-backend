@@ -10,7 +10,7 @@ class LedgerService:
     def record_topup_ledger(cls, wallet_transaction: Transaction):
         amount = wallet_transaction.amount
         wallet = wallet_transaction.wallet
-        user = wallet.user
+        #  user = wallet.user
 
         user_ledger_code = f"v1:wallet:{getattr(wallet, 'uuid', wallet.uuid)}"
 
@@ -33,12 +33,12 @@ class LedgerService:
             user_ledger_line = LedgerLine.objects.create(
                 ledger_transaction=ledger_txn,
                 account=user_ledger_account,
-                amount=-wallet_transaction.amount,
+                amount=-amount,
             )
             bank_ledger_line = LedgerLine.objects.create(
                 ledger_transaction=ledger_txn,
                 account=bank_ledger_account,
-                amount=wallet_transaction.amount,
+                amount=amount,
             )
 
             total_balance = user_ledger_line.amount + bank_ledger_line.amount

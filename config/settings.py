@@ -70,11 +70,12 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "corsheaders",
-    "addresses",
+    "address.apps.AddressConfig",
     "commerce_catalog.apps.CommerceCatalogConfig",
     "pricing.apps.PricingConfig",
     "wallet.apps.WalletConfig",
     "ledger.apps.LedgerConfig",
+    "cart.apps.CartConfig",
 ]
 
 MIDDLEWARE = [
