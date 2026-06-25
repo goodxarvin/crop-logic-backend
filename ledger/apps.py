@@ -7,3 +7,4 @@ class LedgerConfig(AppConfig):
 
     def ready(self):
         import ledger.signals
+

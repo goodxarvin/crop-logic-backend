@@ -22,7 +22,6 @@ class WalletTopupAPIView(APIView):
             wallet=wallet,
             method="zarinpal",
             amount=Decimal(amount + fee + tax) if amount else Decimal("0"),
-        )
 
         zarinpal_request_url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
 

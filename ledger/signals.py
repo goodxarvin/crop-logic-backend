@@ -20,3 +20,4 @@ def create_liable_ledger_account(sender, instance, created, **kwargs):
             )
         except Exception as e:
             print(f"Error creating user ledger account: {str(e)}")
+
