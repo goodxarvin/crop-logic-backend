@@ -21,8 +21,7 @@ class WalletTopupAPIView(APIView):
         txn = WalletService.create_topup_transaction(
             wallet=wallet,
             method="zarinpal",
-            amount=(amount + fee + tax) if amount else Decimal("0"),
-        )
+            amount=Decimal(amount + fee + tax) if amount else Decimal("0"),
 
         zarinpal_request_url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
 

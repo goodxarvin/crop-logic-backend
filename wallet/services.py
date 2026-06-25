@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from ledger.services import LedgerService
 from .models import (
     Wallet,
     Transaction,
@@ -63,6 +64,8 @@ class WalletService:
         txn.reference_id = gateway_ref_id
         txn.balance_after = wallet.available_balance
         txn.save()
+
+        LedgerService.record_topup_ledger(wallet_transaction=txn)
 
         return txn
 
