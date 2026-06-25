@@ -18,9 +18,9 @@ class SellableItemViewSet(viewsets.ModelViewSet):
         SearchFilter,
         OrderingFilter,
         DjangoFilterBackend,
-        ]
+    ]
     search_fields = [
-        "item_type", 
+        "item_type",
         "title",
         "description",
         "short_description",
@@ -28,12 +28,13 @@ class SellableItemViewSet(viewsets.ModelViewSet):
         "external_source",
         "external_id",
         "metadata",
-        ]
+    ]
     filterset_fields = [
         "item_type",
         "is_installable",
         "tax_class__name",
-        "requires_farm_context",
+        "requires_shipping_address",
+        "requires_farm_address",
         "external_source",
     ]
     ordering_fields = [
@@ -41,4 +42,3 @@ class SellableItemViewSet(viewsets.ModelViewSet):
         "title",
         "updated_at",
     ]
-

@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "wallet.apps.WalletConfig",
     "ledger.apps.LedgerConfig",
     "cart.apps.CartConfig",
+    "checkout.apps.CheckoutConfig",
 ]
 
 MIDDLEWARE = [

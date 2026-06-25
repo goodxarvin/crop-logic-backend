@@ -50,6 +50,7 @@ class AddressSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "user_email",
             "absolute_url",
+            "relative_url",
             "province_name",
             "city_name",
             "created_at",

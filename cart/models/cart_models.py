@@ -58,7 +58,6 @@ class CartItem(models.Model):
                 quantity=self.quantity,
                 farm=self.farm,
             )
-            print("---------------------------------------", sku_price_details)
             return sku_price_details
 
         except Exception as e:

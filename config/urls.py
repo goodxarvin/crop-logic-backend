@@ -50,4 +50,5 @@ urlpatterns = [
     path("api/wallet/", include("wallet.urls")),
     path("api/ledger/", include("ledger.urls")),
     path("api/cart/", include("cart.urls")),
+    path("api/checkout/", include("checkout.urls")),
 ]
