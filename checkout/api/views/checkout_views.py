@@ -2,8 +2,8 @@ from rest_framework import viewsets, mixins, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-from cart.models import Cart
 from ..serializers import CheckoutSessionSerializer
+from ..paginations import SessionPagination
 from ...models import CheckoutSession
 from ...services import CheckoutService
 
@@ -19,6 +19,7 @@ class CheckoutViewset(
         IsAuthenticated,
     ]
     serializer_class = CheckoutSessionSerializer
+    pagination_class = SessionPagination
     queryset = CheckoutSession.objects.all()
     lookup_field = "uuid"
 
@@ -27,7 +28,7 @@ class CheckoutViewset(
 
     def perform_create(self, serializer):
 
-        cart = Cart.objects.filter(user=self.request.user).first()
+        # cart = Cart.objects.filter(user=self.request.user).first()
         checkout_session = CheckoutService.create_checkout_session(
             user=self.request.user,
             farm=serializer.validated_data.get("farm"),

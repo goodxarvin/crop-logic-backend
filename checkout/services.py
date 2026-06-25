@@ -1,7 +1,10 @@
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from .models import CheckoutSession, StatusType
+from order.models import Order
+from order.models import StatusType as OrderStatusType
+from .models import CheckoutSession
+from .models import StatusType as SessionStatusType
 
 
 class CheckoutService:
@@ -17,22 +20,22 @@ class CheckoutService:
 
         CheckoutSession.objects.filter(
             user=user,
-            status=StatusType.DRAFT,
-        ).update(status=StatusType.CANCELLED)
+            status=SessionStatusType.DRAFT,
+        ).update(status=SessionStatusType.CANCELLED)
 
         checkout_session = CheckoutSession.objects.create(
             user=user,
             cart=cart,
             farm=farm,
-            status=StatusType.DRAFT,
+            status=SessionStatusType.DRAFT,
         )
         return checkout_session
 
     @classmethod
     @transaction.atomic
-    def freeze_and_finilize_session(cls, checkout_session: CheckoutSession):
+    def freeze_and_finilize_session(cls, checkout_session: CheckoutSession) -> tuple:
 
-        if checkout_session.status != StatusType.DRAFT:
+        if checkout_session.status != SessionStatusType.DRAFT:
             raise ValidationError("checkout status type must be draft.")
 
         requirements = checkout_session.get_requirements
@@ -81,10 +84,42 @@ class CheckoutService:
             "total_items_price": checkout_cart.total_items_price,
         }
 
-        checkout_session.status = StatusType.AWAITING_PAYMENT
+        checkout_session.status = SessionStatusType.AWAITING_PAYMENT
         checkout_session.payment_deadline_at = timezone.now() + timezone.timedelta(
             minutes=30
         )
         checkout_session.save()
+
+        items_list = []
+        for item in checkout_cart.cart_items.all():
+            items_list.append(
+                {
+                    "sku_id": item.sku.id,
+                    "sku_title": item.sku.title,
+                    "quantity": item.quantity,
+                    "farm_id": item.farm.uuid if item.farm else None,
+                    "base_price": item.total_sku_base_price,
+                    "discount_amount": item.total_sku_discount_amount,
+                    "final_price": item.final_sku_price,
+                }
+            )
+
+        Order.objects.create(
+            user=checkout_session.user,
+            checkout_session_uuid=checkout_session.uuid,
+            total_amount=checkout_cart.total_items_price,
+            status=OrderStatusType.PENDING,
+            shipping_address_snapshot=(
+                checkout_session.shipping_address_snapshot
+                if checkout_session.shipping_address_snapshot
+                else {}
+            ),
+            farm_address_snapshot=(
+                checkout_session.farm_address_snapshot
+                if checkout_session.farm_address_snapshot
+                else {}
+            ),
+            items_snapshot={"items": items_list},
+        )
 
         return checkout_session

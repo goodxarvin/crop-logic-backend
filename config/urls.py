@@ -51,4 +51,5 @@ urlpatterns = [
     path("api/ledger/", include("ledger.urls")),
     path("api/cart/", include("cart.urls")),
     path("api/checkout/", include("checkout.urls")),
+    path("api/order/", include("order.urls")),
 ]
