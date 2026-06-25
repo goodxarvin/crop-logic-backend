@@ -10,30 +10,33 @@ from ..models import (
     ProductAddOn,
     AddOnAssignment,
     TaxClass,
-    )
+)
+
 
 class SellableItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SellableItem
         fields = [
-            "item_type", 
+            "item_type",
             "title",
             "description",
             "short_description",
             "is_active",
             "is_installable",
-            "requires_farm_context",
+            "requires_shipping_address",
+            "requires_farm_address",
             "tax_class",
             "external_source",
             "external_id",
             "metadata",
-            ]
+        ]
 
     def validate_metadata(self, value):
         if not value:
             return {}
         return value
+
 
 class ProductVariantSerializer(serializers.ModelSerializer):
 
@@ -53,6 +56,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         if not value:
             return {}
         return value
+
 
 class ProductAttributeValueSerializer(serializers.ModelSerializer):
 
@@ -74,6 +78,7 @@ class ProductAttributeValueSerializer(serializers.ModelSerializer):
             return {}
         return value
 
+
 class TaxClassSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -91,6 +96,7 @@ class TaxClassSerializer(serializers.ModelSerializer):
         if not value:
             return {}
         return value
+
 
 class SKUseralizer(serializers.ModelSerializer):
 
@@ -121,6 +127,7 @@ class SKUseralizer(serializers.ModelSerializer):
             return {}
         return value
 
+
 class ProductAddOnSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -128,7 +135,7 @@ class ProductAddOnSerializer(serializers.ModelSerializer):
         fields = [
             "name",
             "description",
-            'price',
+            "price",
             "is_multiple",
             "is_active",
             "metadata",
@@ -138,6 +145,7 @@ class ProductAddOnSerializer(serializers.ModelSerializer):
         if not value:
             return {}
         return value
+
 
 class AddOnAssignmentSerializer(serializers.ModelSerializer):
 
@@ -162,6 +170,7 @@ class AddOnAssignmentSerializer(serializers.ModelSerializer):
 
         return fields
 
+
 class ProductBundleSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -179,8 +188,9 @@ class ProductBundleSerializer(serializers.ModelSerializer):
             return {}
         return value
 
+
 class ProductBundleItemSerializer(serializers.ModelSerializer):
-     
+
     class Meta:
         model = ProductBundleItem
         fields = [
@@ -198,5 +208,5 @@ class ProductBundleItemSerializer(serializers.ModelSerializer):
                 fields.get("sku").read_only = True
             elif "bundle_pk" in view.kwargs:
                 fields.get("bundle").read_only = True
-            
+
         return fields

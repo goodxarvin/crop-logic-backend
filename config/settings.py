@@ -70,11 +70,14 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "corsheaders",
-    "addresses",
+    "address.apps.AddressConfig",
     "commerce_catalog.apps.CommerceCatalogConfig",
     "pricing.apps.PricingConfig",
     "wallet.apps.WalletConfig",
     "ledger.apps.LedgerConfig",
+    "cart.apps.CartConfig",
+    "checkout.apps.CheckoutConfig",
+    "order.apps.OrderConfig",
 ]
 
 MIDDLEWARE = [
@@ -278,7 +281,15 @@ CELERY_BEAT_SCHEDULE = {
             minute=FARM_ALERTS_AI_SYNC_CRON_MINUTE,
             hour=FARM_ALERTS_AI_SYNC_CRON_HOUR,
         ),
-    }
+    },
+    "expired_checkout_check": {
+        "task": "checkout.tasks.expire_abandoned_checkout_sessions",
+        "schedule": 1800.0,
+    },
+    "expired_order_check": {
+        "task": "order.tasks.cancel_order_after_3_days",
+        "schedule": 50.0,
+    },
 }
 
 LOGGING = {
