@@ -1,8 +1,9 @@
 from django.db import models
-
-import uuid
 from django.db import models
+from django.core.exceptions import ValidationError
+import uuid
 from django.conf import settings
+from address.models import Address, AddressType
 
 
 class StatusType(models.TextChoices):
@@ -26,11 +27,17 @@ class Order(models.Model):
         verbose_name="user",
     )
 
-    checkout_session_uuid = models.UUIDField(
-        null=True, blank=True, verbose_name="checkout_session_uuid"
+    cart = models.ForeignKey(
+        "cart.Cart", on_delete=models.PROTECT, related_name="checkout_sessions"
     )
 
-    total_amount = models.PositiveIntegerField(verbose_name="total_order_amount")
+    farm = models.ForeignKey(
+        "farm_hub.FarmHub",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="checkout_sessions",
+    )
 
     status = models.CharField(
         max_length=20,
@@ -39,16 +46,51 @@ class Order(models.Model):
         verbose_name="order_status",
     )
 
-    shipping_address_snapshot = models.JSONField(
+    shipping_address = models.ForeignKey(
+        "address.Address",
+        on_delete=models.SET_NULL,
         null=True,
+        blank=True,
+        related_name="+",
+    )
+    farm_address = models.ForeignKey(
+        "address.Address",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    billing_address = models.ForeignKey(
+        "address.Address",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    pricing_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+    shipping_address_snapshot = models.JSONField(
+        default=dict,
         blank=True,
     )
     farm_address_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+    billing_address_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    items_snapshot = models.JSONField(
         null=True,
         blank=True,
     )
 
-    items_snapshot = models.JSONField(null=True, blank=True)
+    customer_notes = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -57,4 +99,43 @@ class Order(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Order {self.uuid} - {self.user.username} ({self.get_status_display()})"
+        return f"Order {self.uuid} - {self.user.username} ({self.status})"
+
+    @property
+    def get_requirements(self):
+
+        cart_items = self.cart.cart_items.all()
+
+        needs_shipping_address = any(
+            getattr(item.sku.item, "requires_shipping_address", False)
+            for item in cart_items
+        )
+        needs_farm_address = any(
+            getattr(item.sku.item, "requires_farm_address", False)
+            for item in cart_items
+        )
+        return {
+            "requires_shipping_address": needs_shipping_address,
+            "requires_farm_address": needs_farm_address,
+        }
+
+    def clean(self):
+        super().clean()
+
+        if (
+            self.shipping_address
+            and getattr(self.shipping_address, "address_type", None)
+            != AddressType.SHIPPING
+        ):
+            raise ValidationError({"shipping_address": "incorrect address type."})
+
+        if (
+            self.farm_address
+            and getattr(self.farm_address, "address_type", None)
+            != AddressType.FARM_LOCATION
+        ):
+            raise ValidationError({"farm_address": "incorrect address type."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
