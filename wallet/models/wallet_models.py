@@ -97,16 +97,16 @@ class Transaction(models.Model):
         max_length=255,
         null=True,
         blank=True,
-        help_text="نوع موجودیت مثل Order, PaymentIntent",
     )
     reference_id = models.CharField(
-        max_length=100, null=True, blank=True, help_text="شناسه موجودیت متصل"
+        max_length=100,
+        null=True,
+        blank=True,
     )
     method = models.CharField(
         max_length=100,
         null=True,
         blank=True,
-        help_text="مثلا درگاه زرین‌پال یا انتقال پایا",
     )
     balance_after = models.DecimalField(
         max_digits=18, decimal_places=6, default=Decimal("0")
@@ -116,11 +116,14 @@ class Transaction(models.Model):
     title = models.CharField(max_length=50, null=True, blank=True)
     description = models.TextField(blank=True, null=True)
     reason_code = models.CharField(
-        max_length=50, blank=True, null=True, help_text="کد دلیل برای اصلاحیه‌های دستی"
+        max_length=50,
+        blank=True,
+        null=True,
     )
-    operator_note = models.TextField(blank=True, null=True, help_text="یادداشت ادمین")
+    operator_note = models.TextField(blank=True, null=True)
     actor_id = models.IntegerField(
-        blank=True, null=True, help_text="آی‌دی ادمینی که این تراکنش را ثبت کرده"
+        blank=True,
+        null=True,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

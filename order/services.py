@@ -1,6 +1,8 @@
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
+from payment.models import Payment, PaymentStatus
+from payment.services import PaymentService
 from checkout.models import StatusType as SessionStatusType
 from checkout.models import CheckoutSession
 from .models import StatusType as OrderStatusType
@@ -16,13 +18,14 @@ class OrderService:
         cart = user.cart
         available_cart_items = cart.cart_items.exists()
         if not available_cart_items:
-            return ValidationError("threse is nothing in the cart of this user.")
+            raise ValidationError("threse is nothing in the cart of this user.")
 
         order = Order.objects.create(
             user=user,
             cart=cart,
             farm=farm,
             status=OrderStatusType.PENDING,
+            total_amount=cart.total_items_price,
         )
         return order
 
@@ -99,9 +102,9 @@ class OrderService:
         CheckoutSession.objects.filter(
             user=order.user,
             status=SessionStatusType.AWAITING_PAYMENT,
-        ).update(status=OrderStatusType.CANCELLED)
+        ).update(status=SessionStatusType.CANCELLED)
 
-        CheckoutSession.objects.create(
+        checkout_session = CheckoutSession.objects.create(
             user=order.user,
             order_uuid=order.uuid,
             status=SessionStatusType.AWAITING_PAYMENT,
@@ -117,5 +120,18 @@ class OrderService:
             items_snapshot={"items": items_list},
             payment_deadline_at=timezone.now() + timezone.timedelta(minutes=30),
         )
+        payment = Payment.objects.create(
+            user=order.user,
+            order_uuid=order.uuid,
+            checkout_session_uuid=checkout_session.uuid,
+            amount=order.total_amount,
+            status=PaymentStatus.PENDING,
+        )
+        # PaymentService.initiate_payment(
+        #     user=order.user,
+        #     payment=payment,
+        #     is_wallet=order.is_payable_with_wallet,
+        #     order_uuid=order.uuid,
+        # )
 
         return order

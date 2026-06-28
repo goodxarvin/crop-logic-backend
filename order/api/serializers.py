@@ -25,6 +25,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "farm_address_snapshot",
             "billing_address_snapshot",
             "items_snapshot",
+            "total_amount",
             "customer_notes",
             "created_at",
             "updated_at",
@@ -39,6 +40,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "farm_address_snapshot",
             "billing_address_snapshot",
             "items_snapshot",
+            "total_amount",
             "created_at",
             "updated_at",
         ]

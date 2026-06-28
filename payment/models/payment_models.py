@@ -18,6 +18,7 @@ class Payment(models.Model):
     )
 
     order_uuid = models.UUIDField(db_index=True)
+    checkout_session_uuid = models.UUIDField(db_index=True, null=True)
 
     amount = models.DecimalField(max_digits=12, decimal_places=0)
 

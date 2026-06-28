@@ -7,9 +7,7 @@ from address.models import AddressType
 
 class StatusType(models.TextChoices):
     DRAFT = "draft", "Draft"
-    AWAITING_REQUIREMENTS = "awaiting_requirements", "Awaiting_requirements"
     AWAITING_PAYMENT = "awaiting_payment", "Awaiting_payment"
-    PAYMENT_PROCESSING = "payment_processing", "payment_processing"
     COMPLETED = "completed", "Completed"
     CANCELLED = "cancelled", "Cancelled"
     EXPIRED = "expired", "Expired"

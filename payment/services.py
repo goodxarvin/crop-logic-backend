@@ -4,7 +4,15 @@ from django.conf import settings
 from django.db import transaction
 from config.failure_contract import StructuredServiceError
 from config.observability import observe_operation
+from checkout.models import CheckoutSession
+from checkout.models import StatusType as SessionStatusType
 from order.models import Order
+from order.models import StatusType as OrderStatusType
+from wallet.models import (
+    Wallet,
+    Transaction,
+)
+from wallet.models import StatusType as TXNStatusType
 from .models import Payment, PaymentStatus
 
 logger = logging.getLogger(__name__)
@@ -18,24 +26,16 @@ ZARINPAL_START_PAY_URL = (
 class PaymentService:
 
     @classmethod
-    def initiate_payment(cls, user, checkout, amount) -> tuple:
-        order = Order.objects.filter(
-            user=user,
-            checkout_uuid=checkout.uuid,
-        ).first()
-
-        payment = Payment.objects.create(
-            user=user,
-            amount=amount,
-            order_uuid=order.uuid,
-            status=PaymentStatus.PENDING,
-        )
+    @transaction.atomic
+    def initiate_payment_bank_portal(
+        cls, user, payment: Payment, txn: Transaction, amount
+    ) -> str:
 
         payload = {
             "merchant_id": "00000000-0000-0000-0000-000000000000",
             "amount": int(amount) if int(amount) >= 1000 else 1000,
             "description": f"Topup of {amount} {user.wallet.currency.code} for user {user.email}",
-            "callback_url": f"http://localhost:8000/api/payment/callback/",
+            "callback_url": f"http://localhost:8000/api/checkouts/callback/",
             "metadata": {
                 "mobile": user.phone_number,
                 "email": user.email,
@@ -46,8 +46,13 @@ class PaymentService:
             source="payment_service", provider="zarinpal", operation="request_token"
         ) as observer:
             try:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                }
                 response = requests.post(
                     ZARINPAL_REQUEST_URL,
+                    headers=headers,
                     json=payload,
                     timeout=10,
                 )
@@ -67,7 +72,15 @@ class PaymentService:
         errors = response_data.get("errors")
         data = response_data.get("data")
 
-        if errors or not data:
+        if (
+            errors
+            or not data
+            or not response_data["data"].get("code")
+            in [
+                100,
+                101,
+            ]
+        ):
             payment.status = PaymentStatus.FAILED
             payment.save(update_fields=["status"])
 
@@ -83,5 +96,50 @@ class PaymentService:
         payment.authority = authority
         payment.save(update_fields=["authority"])
 
+        txn.authority = authority
+        txn.method = "zarinpal portal"
+        txn.save(update_fields=["authority", "method"])
+
         redirect_url = f"{ZARINPAL_START_PAY_URL}{authority}"
-        return (redirect_url, authority, order, checkout)
+        return redirect_url
+
+    @transaction.atomic
+    @classmethod
+    def wallet_payment(
+        cls,
+        wallet: Wallet,
+        payment: Payment,
+        checkout_session: CheckoutSession,
+        txn: Transaction,
+        order: Order,
+    ):
+        txn.method = "wallet payment"
+
+        if not order.is_payable_with_wallet:
+            payment.status = PaymentStatus.FAILED
+            checkout_session.status = SessionStatusType.CANCELLED
+            txn.status_type = TXNStatusType.REJECTED
+            payment.save(update_fields=["status"])
+            checkout_session.save(update_fields=["status"])
+            txn.save(update_fields=["status_type", "method"])
+            raise StructuredServiceError(
+                error_code="wallet_insufficient_error",
+                message="insufficient money in wallet",
+                source="payment_service",
+                retriable=False,
+            )
+
+        wallet.available_balance -= order.total_amount
+        wallet.save(update_fields=["available_balance"])
+        payment.status = PaymentStatus.SUCCESS
+        checkout_session.status = SessionStatusType.COMPLETED
+        txn.status_type = TXNStatusType.CONFIRMED
+        order.status = OrderStatusType.PAID
+        payment.save(update_fields=["status"])
+        checkout_session.save(update_fields=["status"])
+        txn.save(update_fields=["status_type", "method"])
+        order.save(update_fields=["status"])
+
+        order.cart.cart_items.all().delete()
+
+        return {"details": "successful wallet payment operation."}
