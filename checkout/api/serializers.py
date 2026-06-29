@@ -16,8 +16,13 @@ class CheckoutSessionSerializer(serializers.ModelSerializer):
             "farm_address_snapshot",
             "items_snapshot",
             "payment_deadline_at",
-            # "confirmed_at",
+            "confirmed_at",
             "created_at",
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class InitiateCheckoutSerializer(serializers.Serializer):
+    order_uuid = serializers.UUIDField(required=True)
+    wallet_pay = serializers.BooleanField(required=True)

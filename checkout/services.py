@@ -16,17 +16,12 @@ from wallet.models import (
 from .models import CheckoutSession
 from .models import StatusType as SessionStatusType
 
-ZARINPAL_REQUEST_URL = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
-ZARINPAL_START_PAY_URL = (
-    "https://sandbox.zarinpal.com/pg/pages/Multi-Pool/Pay.html?Authority="
-)
-
 
 class CheckoutService:
 
     @classmethod
     @transaction.atomic
-    def initiate_checkout_payment(cls, order_uuid: str, wallet_pay: bool, user):
+    def initiate_checkout_payment(cls, order_uuid: str, wallet_pay: bool, user) -> dict:
         order = Order.objects.select_for_update().get(uuid=order_uuid)
         if order.status != OrderStatusType.PENDING:
             raise ValidationError("order status is not PENDING.")
@@ -82,6 +77,8 @@ class CheckoutService:
         else:
             redirect_url = PaymentService.initiate_payment_bank_portal(
                 user=user,
+                order=order,
+                checkout_session=checkout_session,
                 payment=payment,
                 txn=txn,
                 amount=order.total_amount,

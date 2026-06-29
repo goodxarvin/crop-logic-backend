@@ -12,12 +12,20 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        print("creating zarinpal ledger model instance...")
+        print("creating zarinpal and wallet pay ledger model instance...")
 
-        zarinpal_ledger_account = LedgerAccount.objects.create(
+        LedgerAccount.objects.get_or_create(
             name="zarinpal ledger aacount",
             account_type=AccountType.ASSET,
             code="zarinpal_1001",
         )
 
-        self.stdout.write(self.style.SUCCESS("zarinpal ledger account cretaed."))
+        LedgerAccount.objects.get_or_create(
+            name="direct wallet ledger aacount",
+            account_type=AccountType.ASSET,
+            code="direct_wallet_pay_1002",
+        )
+
+        self.stdout.write(
+            self.style.SUCCESS("zarinpal and wallet pay ledger account cretaed.")
+        )

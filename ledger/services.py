@@ -12,7 +12,7 @@ class LedgerService:
         wallet = wallet_transaction.wallet
         #  user = wallet.user
 
-        user_ledger_code = f"v1:wallet:{getattr(wallet, 'uuid', wallet.id)}"
+        user_ledger_code = f"v1:wallet:{getattr(wallet, 'uuid', wallet.uuid)}"
 
         with transaction.atomic():
             try:

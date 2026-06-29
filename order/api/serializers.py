@@ -9,6 +9,11 @@ class OrderSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    payable_with_wallet = serializers.BooleanField(
+        source="is_payable_with_wallet",
+        read_only=True,
+    )
+
     class Meta:
         model = Order
         fields = [
@@ -26,6 +31,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "billing_address_snapshot",
             "items_snapshot",
             "total_amount",
+            "payable_with_wallet",
             "customer_notes",
             "created_at",
             "updated_at",
@@ -41,6 +47,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "billing_address_snapshot",
             "items_snapshot",
             "total_amount",
+            "payable_with_wallet",
             "created_at",
             "updated_at",
         ]

@@ -20,6 +20,7 @@ class SellableItem(models.Model):
     slug = models.SlugField(unique=True, allow_unicode=True)
     description = models.TextField(blank=True)
     short_description = models.CharField(max_length=150, null=True, blank=True)
+    image = models.ImageField(null=True, default=True)
     is_active = models.BooleanField(default=True)
     is_installable = models.BooleanField(default=False)
     requires_shipping_address = models.BooleanField(default=False)
