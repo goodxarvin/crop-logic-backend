@@ -6,6 +6,7 @@ from config.failure_contract import StructuredServiceError
 from config.observability import observe_operation
 from checkout.models import CheckoutSession
 from checkout.models import StatusType as SessionStatusType
+from ledger.services import LedgerService
 from order.models import Order
 from order.models import StatusType as OrderStatusType
 from wallet.models import (
@@ -141,5 +142,7 @@ class PaymentService:
         order.save(update_fields=["status"])
 
         order.cart.cart_items.all().delete()
+
+        LedgerService.record_wallet_ledger(wallet_transaction=txn)
 
         return {"details": "successful wallet payment operation."}

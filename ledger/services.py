@@ -12,7 +12,7 @@ class LedgerService:
         wallet = wallet_transaction.wallet
         #  user = wallet.user
 
-        user_ledger_code = f"v1:wallet:{getattr(wallet, 'uuid', wallet.uuid)}"
+        user_ledger_code = f"v1:wallet:{getattr(wallet, 'uuid', wallet.id)}"
 
         with transaction.atomic():
             try:
@@ -46,5 +46,47 @@ class LedgerService:
                 raise ValidationError(
                     "total balance is unequal to 0 there is a was problem during transaction"
                 )
+            return ledger_txn
 
+    @classmethod
+    def record_wallet_ledger(cls, wallet_transaction: Transaction):
+        amount = wallet_transaction.amount
+        wallet = wallet_transaction.wallet
+
+        user_ledger_code = f"v1:wallet:{getattr(wallet, 'uuid', wallet.uuid)}"
+
+        with transaction.atomic():
+            try:
+                user_ledger_account = LedgerAccount.objects.get(code=user_ledger_code)
+            except LedgerAccount.DoesNotExist:
+                raise ValidationError("user ledger account does not exist")
+
+            try:
+                wallet_ledger_account = LedgerAccount.objects.get(
+                    code="direct_wallet_pay_1002"
+                )
+            except LedgerAccount.DoesNotExist:
+                raise ValidationError("wallet ledger account does not exist")
+
+            ledger_txn = LedgerTransaction.objects.create(
+                description="user buy with wallet operation ledger transaction",
+                wallet_transaction=wallet_transaction,
+            )
+
+            user_ledger_line = LedgerLine.objects.create(
+                ledger_transaction=ledger_txn,
+                account=user_ledger_account,
+                amount=-amount,
+            )
+            bank_ledger_line = LedgerLine.objects.create(
+                ledger_transaction=ledger_txn,
+                account=wallet_ledger_account,
+                amount=amount,
+            )
+
+            total_balance = user_ledger_line.amount + bank_ledger_line.amount
+            if total_balance != 0:
+                raise ValidationError(
+                    "total balance is unequal to 0 there is a was problem during transaction"
+                )
             return ledger_txn
