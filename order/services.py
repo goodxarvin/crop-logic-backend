@@ -44,14 +44,14 @@ class OrderService:
 
             shipping_address = order.shipping_address
             order.shipping_address_snapshot = {
-                "address_type": shipping_address.address_type,
-                "receiver_name": shipping_address.receiver_name,
-                "province": shipping_address.province,
-                "city": shipping_address.city,
-                "postal_code": shipping_address.postal_code,
-                "address_detail": shipping_address.postal_code,
-                "created_at": shipping_address.created_at,
-                "updated_at": shipping_address.updated_at,
+                "address_type": str(shipping_address.address_type),
+                "receiver_name": str(shipping_address.receiver_name),
+                "province": str(shipping_address.province),
+                "city": str(shipping_address.city),
+                "postal_code": str(shipping_address.postal_code),
+                "address_detail": str(shipping_address.postal_code),
+                "created_at": str(shipping_address.created_at),
+                "updated_at": str(shipping_address.updated_at),
             }
 
         if requirements["requires_farm_address"]:
@@ -60,26 +60,26 @@ class OrderService:
 
             farm_address = order.farm_address
             order.farm_address_snapshot = {
-                "address_type": farm_address.address_type,
-                "receiver_name": farm_address.receiver_name,
-                "receiver_phone": farm_address.receiver_phone,
-                "latitute": farm_address.latitute,
-                "longtitute": farm_address.longtitute,
+                "address_type": str(farm_address.address_type),
+                "receiver_name": str(farm_address.receiver_name),
+                "receiver_phone": str(farm_address.receiver_phone),
+                "latitute": str(farm_address.latitute),
+                "longtitute": str(farm_address.longtitute),
                 "for_sensor": farm_address.for_sensor,
-                "province": farm_address.province,
-                "city": farm_address.city,
-                "postal_code": farm_address.postal_code,
-                "address_detail": farm_address.postal_code,
-                "created_at": farm_address.created_at,
-                "updated_at": farm_address.updated_at,
+                "province": str(farm_address.province),
+                "city": str(farm_address.city),
+                "postal_code": str(farm_address.postal_code),
+                "address_detail": str(farm_address.postal_code),
+                "created_at": str(farm_address.created_at),
+                "updated_at": str(farm_address.updated_at),
             }
 
         order_cart = order.cart
         order.pricing_snapshot = {
-            "total_items_count": order_cart.total_items_count,
-            "total_items_base_price": order_cart.total_items_base_price,
-            "total_items_discount_price": order_cart.total_items_discount_price,
-            "total_items_price": order_cart.total_items_price,
+            "total_items_count": str(order_cart.total_items_count),
+            "total_items_base_price": str(order_cart.total_items_base_price),
+            "total_items_discount_price": str(order_cart.total_items_discount_price),
+            "total_items_price": str(order_cart.total_items_price),
         }
 
         items_list = []

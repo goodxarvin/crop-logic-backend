@@ -9,7 +9,7 @@ class SKU(models.Model):
     title = models.CharField(max_length=51, blank=True)
     barcode = models.CharField(max_length=50, unique=True, null=True, blank=True)
     base_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    image = models.ImageField(null=True, default=True)
+    image = models.ImageField(null=True, blank=True)
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     attributes = models.JSONField(default=dict, blank=True)

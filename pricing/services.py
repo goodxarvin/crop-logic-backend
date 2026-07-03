@@ -1,3 +1,4 @@
+import logging
 from django.utils import timezone
 from django.db.models import Q
 from decimal import Decimal
@@ -8,6 +9,8 @@ from .models import (
     BasePrice,
     PriceTier,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PricingService:
@@ -113,6 +116,13 @@ class PricingService:
         total_base_price = unit_price * quantity
         total_discount_amount = discount_amount_per_unit * quantity
         total_final_price = final_price_per_unit * quantity
+
+        # logger.info(f"""total_base_price={total_base_price},
+        #     total_discount_amount={total_discount_amount},
+        #     total_final_price={total_final_price},
+        #     unit_price={unit_price},
+        #     discount_amount_per_unit={discount_amount_per_unit},
+        #     final_price_per_unit={final_price_per_unit}""")
 
         return {
             "currecny_code": currency.code,

@@ -26,18 +26,18 @@ class ProvisioningService:
 
         for item in items:
 
-            logger.info(
-                f"--------------------------------------------Processing item: {str(item)} --- {type(item)}"
-            )
+            # logger.info(
+            #     f"--------------------------------------------Processing item: {str(item)} --- {type(item)}"
+            # )
             sku_id = item.get("sku_id", None)
             if not sku_id:
                 continue
             sku = SKU.objects.select_related("item").get(pk=sku_id)
             sellable_item_type = sku.item.item_type
 
-            logger.info(
-                f"--------------------------------------------item id : {sku.item.external_id} - {sku.code} - {sku.item.item_type} - {sku.item.title} - {sku.item.is_active}"
-            )
+            # logger.info(
+            #     f"--------------------------------------------item id : {sku.item.external_id} - {sku.code} - {sku.item.item_type} - {sku.item.title} - {sku.item.is_active}"
+            # )
 
             if sellable_item_type == ItemType.SUBSCRIPTION_PALN:
 
@@ -72,7 +72,7 @@ class ProvisioningService:
                     ProvisioningTask.objects.create(
                         user=order.user,
                         order=order,
-                        farm_id=getattr(order.farm, "farm_uuid", None),
+                        farm_id=getattr(order.farm, "pk", None),
                         task_type=ProvisioningType.DEVICE,
                         status=ProvisioningStaus.PENDING,
                         metadata={
@@ -124,7 +124,7 @@ class ProvisioningService:
         plan_id = task.metadata.get("plan_uuid")
         duration_days = task.metadata.get("duration_days", 365)
 
-        farm = FarmHub.objects.select_for_update().filter(farm_uuid=farm_id).first()
+        farm = FarmHub.objects.select_for_update().filter(pk=farm_id).first()
         plan = SubscriptionPlan.objects.filter(uuid=plan_id).first()
 
         farm.subscription_plan = plan
@@ -132,4 +132,7 @@ class ProvisioningService:
             days=duration_days
         )
         build_farm_access_profile(farm=farm)
+
+        logger.info(f"{farm.subscription_expiry} -- {farm.farm_uuid}")
+
         farm.save(update_fields=["subscription_plan", "subscription_expiry"])
