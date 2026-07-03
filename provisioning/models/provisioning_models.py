@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 import uuid
-from order.models import Orderd
+from order.models import Order
 
 user = get_user_model()
 
@@ -39,8 +39,8 @@ class ProvisioningTask(models.Model):
     )
     metadata = models.JSONField(default=dict, blank=True)
 
-    ctreated_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.task_type} - {self.status} for user {self.user.email}"

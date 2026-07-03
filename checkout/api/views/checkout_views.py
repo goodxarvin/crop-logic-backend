@@ -1,6 +1,7 @@
 from rest_framework import viewsets, views, response, status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from payment.services import PaymentService
+from provisioning.tasks import create_and_run_pending_tasks
 from ..serializers import CheckoutSessionSerializer, InitiateCheckoutSerializer
 from ...services import CheckoutService
 from ..paginations import SessionPagination
@@ -38,6 +39,9 @@ class InitiateCheckoutAPIView(views.APIView):
             wallet_pay=wallet_pay,
         )
 
+        if wallet_pay:
+            create_and_run_pending_tasks.delay(order_uuid=order_uuid)
+
         return response.Response(
             result,
             status=status.HTTP_200_OK,
@@ -64,6 +68,7 @@ class VerifyCheckoutAPIView(views.APIView):
                     order_uuid=order_uuid,
                     authority=authority,
                 )
+                create_and_run_pending_tasks.delay(order_uuid=order_uuid)
                 return response.Response(
                     result,
                     status=status.HTTP_200_OK,

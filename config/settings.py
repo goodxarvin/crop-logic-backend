@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "checkout.apps.CheckoutConfig",
     "order.apps.OrderConfig",
     "payment.apps.PaymentConfig",
+    "provisioning.apps.ProvisioningConfig",
 ]
 
 MIDDLEWARE = [

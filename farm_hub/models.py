@@ -5,7 +5,9 @@ from django.db import models
 
 
 class FarmType(models.Model):
-    uuid = models.UUIDField(default=uuid_lib.uuid4, unique=True, editable=False, db_index=True)
+    uuid = models.UUIDField(
+        default=uuid_lib.uuid4, unique=True, editable=False, db_index=True
+    )
     name = models.CharField(max_length=255, unique=True, db_index=True)
     description = models.TextField(blank=True, default="")
     metadata = models.JSONField(default=dict, blank=True)
@@ -21,7 +23,9 @@ class FarmType(models.Model):
 
 
 class Product(models.Model):
-    uuid = models.UUIDField(default=uuid_lib.uuid4, unique=True, editable=False, db_index=True)
+    uuid = models.UUIDField(
+        default=uuid_lib.uuid4, unique=True, editable=False, db_index=True
+    )
     farm_type = models.ForeignKey(
         FarmType,
         on_delete=models.CASCADE,
@@ -30,17 +34,39 @@ class Product(models.Model):
     name = models.CharField(max_length=255, db_index=True)
     description = models.TextField(blank=True, default="")
     metadata = models.JSONField(default=dict, blank=True)
-    light = models.CharField(max_length=255, blank=True, default="", help_text="نور مورد نیاز")
-    watering = models.CharField(max_length=255, blank=True, default="", help_text="آبیاری")
-    soil = models.CharField(max_length=255, blank=True, default="", help_text="خاک مناسب")
-    temperature = models.CharField(max_length=255, blank=True, default="", help_text="دمای مناسب")
-    growth_stage = models.CharField(max_length=255, blank=True, default="", help_text="مرحله رشد فعلی")
-    growth_stages = models.JSONField(blank=True, default=list, help_text="فهرست مراحل رشد محصول")
-    icon = models.CharField(max_length=100, blank=True, default="", help_text="آیکون محصول برای فرانت")
-    planting_season = models.CharField(max_length=255, blank=True, default="", help_text="فصل کاشت")
-    harvest_time = models.CharField(max_length=255, blank=True, default="", help_text="زمان برداشت")
-    spacing = models.CharField(max_length=255, blank=True, default="", help_text="فاصله کاشت")
-    fertilizer = models.CharField(max_length=255, blank=True, default="", help_text="کود مناسب")
+    light = models.CharField(
+        max_length=255, blank=True, default="", help_text="نور مورد نیاز"
+    )
+    watering = models.CharField(
+        max_length=255, blank=True, default="", help_text="آبیاری"
+    )
+    soil = models.CharField(
+        max_length=255, blank=True, default="", help_text="خاک مناسب"
+    )
+    temperature = models.CharField(
+        max_length=255, blank=True, default="", help_text="دمای مناسب"
+    )
+    growth_stage = models.CharField(
+        max_length=255, blank=True, default="", help_text="مرحله رشد فعلی"
+    )
+    growth_stages = models.JSONField(
+        blank=True, default=list, help_text="فهرست مراحل رشد محصول"
+    )
+    icon = models.CharField(
+        max_length=100, blank=True, default="", help_text="آیکون محصول برای فرانت"
+    )
+    planting_season = models.CharField(
+        max_length=255, blank=True, default="", help_text="فصل کاشت"
+    )
+    harvest_time = models.CharField(
+        max_length=255, blank=True, default="", help_text="زمان برداشت"
+    )
+    spacing = models.CharField(
+        max_length=255, blank=True, default="", help_text="فاصله کاشت"
+    )
+    fertilizer = models.CharField(
+        max_length=255, blank=True, default="", help_text="کود مناسب"
+    )
     health_profile = models.JSONField(
         blank=True,
         default=dict,
@@ -74,7 +100,9 @@ class Product(models.Model):
         db_table = "products"
         ordering = ["name"]
         constraints = [
-            models.UniqueConstraint(fields=["farm_type", "name"], name="unique_product_per_farm_type"),
+            models.UniqueConstraint(
+                fields=["farm_type", "name"], name="unique_product_per_farm_type"
+            ),
         ]
 
     def __str__(self):
@@ -82,7 +110,9 @@ class Product(models.Model):
 
 
 class FarmHub(models.Model):
-    farm_uuid = models.UUIDField(default=uuid_lib.uuid4, unique=True, editable=False, db_index=True)
+    farm_uuid = models.UUIDField(
+        default=uuid_lib.uuid4, unique=True, editable=False, db_index=True
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -100,6 +130,7 @@ class FarmHub(models.Model):
         null=True,
         blank=True,
     )
+    subscription_expiry = models.DateTimeField(null=True, blank=True)
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
     irrigation_method_id = models.IntegerField(null=True, blank=True)
