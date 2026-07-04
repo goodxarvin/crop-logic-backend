@@ -92,7 +92,7 @@ class PricingService:
         ):
             return discount_sellable_item_rel
 
-        return None
+        return Decimal("0.00")
 
     @classmethod
     def calculate_final_sku_price(cls, sku, quantity: int, farm=None) -> dict:

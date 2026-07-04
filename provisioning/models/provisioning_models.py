@@ -15,6 +15,7 @@ class ProvisioningStaus(models.TextChoices):
 
 class ProvisioningType(models.TextChoices):
     SUBSCRIPTION = "subscription", "Subscription"
+    INSTALLATION_SERVICE = "installation_service", "Installation Service"
     DEVICE = "device", "Device"
 
 
@@ -27,6 +28,7 @@ class ProvisioningTask(models.Model):
     order = models.ForeignKey(
         "order.Order", on_delete=models.PROTECT, related_name="provisioning_tasks"
     )
+    item = models.JSONField(default=dict, null=True, blank=True)
     farm_id = models.PositiveIntegerField(null=True, blank=True)
     task_type = models.CharField(
         max_length=21,
