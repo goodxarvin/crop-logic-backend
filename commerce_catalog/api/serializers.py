@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from pricing.services import PricingService
 
 from ..models import (
     SellableItem,
@@ -13,7 +14,7 @@ from ..models import (
 )
 
 
-class SellableItemSerializer(serializers.ModelSerializer):
+class SellableItemAdminSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SellableItem
@@ -38,7 +39,91 @@ class SellableItemSerializer(serializers.ModelSerializer):
         return value
 
 
+class SellableItemListSerializer(serializers.ModelSerializer):
+
+    price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SellableItem
+        fields = [
+            "id",
+            "item_type",
+            "title",
+            "description",
+            "short_description",
+            "price",
+            "is_active",
+            "is_installable",
+            "requires_shipping_address",
+            "requires_farm_address",
+            "image",
+            "tax_class",
+            "external_source",
+            "external_id",
+            "metadata",
+            "price",
+        ]
+
+    def get_price(self, obj):
+        return PricingService.calculate_final_sku_price(
+            obj.skus.filter(is_default=True, is_active=True).first(), 1
+        ).get("total_base_price", 0.00)
+
+
+class sellableItemDetailSerializer(serializers.ModelSerializer):
+    variants = serializers.SerializerMethodField()
+    skus = serializers.SerializerMethodField()
+    addons = serializers.SerializerMethodField()
+    bundles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SellableItem
+        fields = [
+            "id",
+            "item_type",
+            "title",
+            "description",
+            "short_description",
+            "is_active",
+            "is_installable",
+            "requires_shipping_address",
+            "requires_farm_address",
+            "image",
+            "tax_class",
+            "external_source",
+            "external_id",
+            "metadata",
+            "variants",
+            "skus",
+            "addons",
+            "bundles",
+        ]
+
+    def get_variants(self, obj):
+        variants = obj.variants.filter(is_active=True)
+        return ProductVariantSerializer(variants, many=True).data
+
+    def get_skus(self, obj):
+        skus = obj.skus.filter(is_active=True)
+        return SKUseralizer(skus, many=True).data
+
+    def get_addons(self, obj):
+        addon_assignments = obj.addon_assignments.filter(add_on__is_active=True)
+        return ProductAddOnSerializer(addon_assignments, many=True).data
+
+    def get_bundles(self, obj):
+        sku_ids = obj.skus.filter(is_active=True).values_list("id", flat=True)
+        bundles = ProductBundle.objects.filter(
+            sku_items__sku_id__in=sku_ids,
+            is_active=True,
+        ).distinct()
+
+        return ProductBundleSerializer(bundles, many=True).data
+
+
 class ProductVariantSerializer(serializers.ModelSerializer):
+
+    values = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductVariant
@@ -46,6 +131,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
             "item",
             "name",
             "is_active",
+            "values",
             "metadata",
         ]
         read_only_fields = [
@@ -56,6 +142,10 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         if not value:
             return {}
         return value
+
+    def get_values(self, obj):
+        values = obj.attribute_values.filter(is_active=True)
+        return ProductAttributeValueSerializer(values, many=True).data
 
 
 class ProductAttributeValueSerializer(serializers.ModelSerializer):
