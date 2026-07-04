@@ -11,7 +11,12 @@ from pricing.api.views import (
 app_name = "api-urls"
 
 router = DefaultRouter()
-router.register("sellable-items", views.SellableItemViewSet, basename="sellable-items")
+router.register(
+    "get-sellable-items", views.SellableItemViewSet, basename="get-sellable-items"
+)
+router.register(
+    "sellable-items", views.SellableItemAdminViewSet, basename="sellable-items"
+)
 router.register("tax-classes", views.TaxClassViewSet, basename="tax-classes")
 router.register(
     "product-add-ons", views.ProductAddOnViewSet, basename="product-add-ons"

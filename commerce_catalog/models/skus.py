@@ -3,7 +3,7 @@ from django.db import models
 
 class SKU(models.Model):
     item = models.ForeignKey(
-        "commerce_catalog.SellableItem", on_delete=models.CASCADE, related_name="sku"
+        "commerce_catalog.SellableItem", on_delete=models.CASCADE, related_name="skus"
     )
     code = models.CharField(max_length=150, unique=True)
     title = models.CharField(max_length=51, blank=True)
@@ -23,7 +23,11 @@ class SKU(models.Model):
                 fields=["item"],
                 condition=models.Q(is_default=True),
                 name="unique_default_sku_per_item",
-            )
+            ),
+            # models.UniqueConstraint(
+            #     fields=["is_active", "is_default", "item"],
+            #     name="unique_default_sku_per_item_active",
+            # ),
         ]
 
     def __str__(self):

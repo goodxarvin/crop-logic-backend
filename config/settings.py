@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     "order.apps.OrderConfig",
     "payment.apps.PaymentConfig",
     "provisioning.apps.ProvisioningConfig",
+    "fullfilment.apps.FullfilmentConfig",
 ]
 
 MIDDLEWARE = [

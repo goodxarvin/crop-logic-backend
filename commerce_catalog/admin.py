@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models.sellable_items import SellableItem
+from .models.skus import SKU
 
 
 class SellableItemAdmin(admin.ModelAdmin):
@@ -30,4 +31,21 @@ class SellableItemAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("title",)}
 
 
+class SKUAdmin(admin.ModelAdmin):
+    list_display = (
+        "code",
+        "title",
+        "item",
+        "base_price",
+        "is_default",
+        "is_active",
+        "created_at",
+        "updated_at",
+    )
+    search_fields = ("code", "title", "barcode", "item__title")
+    list_filter = ("is_default", "is_active")
+    readonly_fields = ("created_at", "updated_at")
+
+
 admin.site.register(SellableItem, SellableItemAdmin)
+admin.site.register(SKU, SKUAdmin)

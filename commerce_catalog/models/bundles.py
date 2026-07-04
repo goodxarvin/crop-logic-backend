@@ -3,7 +3,9 @@ from django.db import models
 
 class ProductBundle(models.Model):
     name = models.CharField(max_length=51)
-    bundle_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    bundle_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
     metadata = models.JSONField(default=dict, blank=True)
@@ -15,16 +17,17 @@ class ProductBundle(models.Model):
 
 
 class ProductBundleItem(models.Model):
-    bundle = models.ForeignKey("ProductBundle", on_delete=models.CASCADE, related_name="sku_item")
-    sku = models.ForeignKey("commerce_catalog.SKU", on_delete=models.CASCADE, related_name="bundle_item")
+    bundle = models.ForeignKey(
+        "ProductBundle", on_delete=models.CASCADE, related_name="sku_items"
+    )
+    sku = models.ForeignKey(
+        "commerce_catalog.SKU", on_delete=models.CASCADE, related_name="bundle_items"
+    )
     quantity = models.PositiveIntegerField()
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=["bundle", "sku"],
-                name="unique_bundle_sku"
-            )
+            models.UniqueConstraint(fields=["bundle", "sku"], name="unique_bundle_sku")
         ]
 
     def __str__(self):
