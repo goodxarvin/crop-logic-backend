@@ -1,7 +1,6 @@
 from django.db import models
 from django.conf import settings
 from uuid import uuid4
-from decimal import Decimal
 from pricing.services import PricingService
 
 
@@ -58,10 +57,17 @@ class CartItem(models.Model):
                 quantity=self.quantity,
                 farm=self.farm,
             )
-            return sku_price_details
+            if sku_price_details:
+                return sku_price_details
 
         except Exception as e:
             print("-------------------------", str(e))
+
+        return {
+            "total_base_price": 0,
+            "total_discount_amount": 0,
+            "total_final_price": 0,
+        }
 
     @property
     def total_sku_base_price(self):

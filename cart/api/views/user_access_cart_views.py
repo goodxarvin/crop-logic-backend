@@ -19,6 +19,11 @@ class CartItemViewSet(viewsets.ModelViewSet):
 
         return CartItem.objects.filter(cart__user=self.request.user)
 
+    # def get_serializer_class(self, *args, **kwargs):
+    #     if self.action in ["create", "update", "destroy"]:
+    #         return CartSerializer
+    #     return CartItemSerializer
+
     def _get_user_cart_response(self):
         cart = Cart.objects.get(user=self.request.user)
         serializer = CartSerializer(cart)
@@ -28,7 +33,7 @@ class CartItemViewSet(viewsets.ModelViewSet):
         return self._get_user_cart_response()
 
     def create(self, request, *args, **kwargs):
-        cart = Cart.objects.get(user=self.request.user)
+        cart = self.request.user.cart
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -49,10 +54,12 @@ class CartItemViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         super().update(request, *args, **kwargs)
+        self.serializer_class = CartSerializer
         return self._get_user_cart_response()
 
     def destroy(self, request, *args, **kwargs):
         super().destroy(request, *args, **kwargs)
+        self.serializer_class = CartSerializer
         return self._get_user_cart_response()
 
     def retrieve(self, request, *args, **kwargs):

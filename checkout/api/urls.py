@@ -1,8 +1,23 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
-from .views import CheckoutViewset
+from . import views
+
+app_name = "checkout-apis"
 
 router = DefaultRouter()
-router.register("checkouts", CheckoutViewset, basename="checkouts")
+router.register("checkouts", views.CheckoutViewset, basename="checkouts")
 
+urlpatterns = [
+    path(
+        "initiate/",
+        views.InitiateCheckoutAPIView.as_view(),
+        name="checkout-initiate",
+    ),
+    path(
+        "callback/",
+        views.VerifyCheckoutAPIView.as_view(),
+        name="checkout-callback",
+    ),
+]
 
-urlpatterns = router.urls
+urlpatterns += router.urls
