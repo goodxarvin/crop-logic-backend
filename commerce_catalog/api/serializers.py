@@ -46,7 +46,7 @@ class SellableItemListSerializer(serializers.ModelSerializer):
     class Meta:
         model = SellableItem
         fields = [
-            "id",
+            "uuid",
             "item_type",
             "title",
             "description",
@@ -79,7 +79,7 @@ class sellableItemDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = SellableItem
         fields = [
-            "id",
+            "uuid",
             "item_type",
             "title",
             "description",

@@ -92,13 +92,17 @@ class PricingService:
         ):
             return discount_sellable_item_rel
 
-        return Decimal("0.00")
+        return None
 
     @classmethod
     def calculate_final_sku_price(cls, sku, quantity: int, farm=None) -> dict:
 
         currency, unit_price = cls.get_sku_price_unit(sku=sku, quantity=quantity)
-        available_discount = cls.get_active_discount(sku=sku).discount
+        available_discount = (
+            cls.get_active_discount(sku=sku).discount
+            if cls.get_active_discount(sku=sku)
+            else Decimal("0.00")
+        )
 
         discount_amount_per_unit = Decimal("0.00")
         if available_discount:

@@ -3,7 +3,7 @@ from rest_framework.response import Response
 
 
 class SellableItemPagination(PageNumberPagination):
-    page_size = 2
+    page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100000
 
@@ -38,6 +38,7 @@ class ProductVariantPagination(PageNumberPagination):
                 "results": data,
             }
         )
+
 
 class ProductAttributeValuePaginnation(PageNumberPagination):
     page_size = 10
@@ -76,6 +77,7 @@ class TaxClassPaginnation(PageNumberPagination):
             }
         )
 
+
 class SKUPagination(PageNumberPagination):
     page_size = 5
     page_size_query_param = "page_size"
@@ -93,6 +95,7 @@ class SKUPagination(PageNumberPagination):
                 "results": data,
             }
         )
+
 
 class ProductAddOnPagination(PageNumberPagination):
     page_size = 5
@@ -112,6 +115,7 @@ class ProductAddOnPagination(PageNumberPagination):
             }
         )
 
+
 class AddOnAssignmentPagination(PageNumberPagination):
     page_size = 5
     page_size_query_param = "page_size"
@@ -130,6 +134,7 @@ class AddOnAssignmentPagination(PageNumberPagination):
             }
         )
 
+
 class ProductBundlePagination(PageNumberPagination):
     page_size = 5
     page_size_query_param = "page_size"
@@ -147,6 +152,7 @@ class ProductBundlePagination(PageNumberPagination):
                 "results": data,
             }
         )
+
 
 class ProductBundleItemPagination(PageNumberPagination):
     page_size = 5
