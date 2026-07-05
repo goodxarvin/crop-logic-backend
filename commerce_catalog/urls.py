@@ -1,5 +1,5 @@
 from django.urls import path, include
 
-urlpatterns = [
-    path("", include("commerce_catalog.api.urls"))
-]
+app_name = "commerce-catalog"
+
+urlpatterns = [path("", include("commerce_catalog.api.urls"))]
