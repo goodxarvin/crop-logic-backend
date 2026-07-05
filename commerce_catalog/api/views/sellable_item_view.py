@@ -53,8 +53,9 @@ class SellableItemViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [
         IsAuthenticated,
     ]
-    # serializer_class = SellableItemListSerializer
     queryset = SellableItem.objects.filter(is_active=True)
+    lookup_field = "uuid"
+    lookup_url_kwarg = "uuid"
     pagination_class = SellableItemPagination
     filter_backends = [
         SearchFilter,

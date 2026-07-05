@@ -1,4 +1,5 @@
 from django.db import models
+import uuid
 from django.utils.text import slugify
 
 
@@ -13,6 +14,7 @@ class ItemType(models.TextChoices):
 
 
 class SellableItem(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     item_type = models.CharField(
         max_length=32, choices=ItemType.choices, default=ItemType.PHYSICAL_SUPPLY
     )
