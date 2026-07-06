@@ -89,6 +89,6 @@ class WithdrawalRequestFactory(factory.django.DjangoModelFactory):
 
     wallet = factory.SubFactory(WalletFactory)
     amount = 100_000
-    shiba_number = "test_shiba_number"
+    shiba_number = "IR_test_shiba_number000000"
     account_holder_name = "test_account_holder"
     status = WithdrawalStatus.PENDING
