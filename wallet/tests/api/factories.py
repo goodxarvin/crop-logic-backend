@@ -2,6 +2,7 @@ import factory
 from factory.fuzzy import FuzzyChoice
 from django.contrib.auth import get_user_model
 from pricing.models import Currency
+from ledger.models import LedgerAccount, AccountType
 from ...models import (
     Wallet,
     WalletStatus,
@@ -57,3 +58,37 @@ class TransactionFactory(factory.django.DjangoModelFactory):
     direction_type = FuzzyChoice(DirectionType.values)
     status_type = FuzzyChoice(StatusType.values)
     amount = 10_000_000.00
+
+
+class TopupTransactionFactory(factory.django.DjangoModelFactory):
+
+    class Meta:
+        model = Transaction
+
+    wallet = factory.SubFactory(WalletFactory)
+    authority = "S00000000000000000000000000000n8jggj"
+    transaction_type = TransactionType.TOPUP
+    direction_type = DirectionType.CREDIT
+    status_type = StatusType.PENDING
+    amount = 10_000_000.00
+
+
+class BankLedgerFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = LedgerAccount
+
+    name = "zarinpal ledger account"
+    account_type = AccountType.ASSET
+    code = "zarinpal_1001"
+
+
+class WithdrawalRequestFactory(factory.django.DjangoModelFactory):
+
+    class Meta:
+        model = WithdrawalRequest
+
+    wallet = factory.SubFactory(WalletFactory)
+    amount = 100_000
+    shiba_number = "test_shiba_number"
+    account_holder_name = "test_account_holder"
+    status = WithdrawalStatus.PENDING
