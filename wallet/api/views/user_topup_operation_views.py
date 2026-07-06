@@ -9,7 +9,9 @@ from ...models import Wallet, Transaction, StatusType
 
 
 class WalletTopupAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated,
+    ]
 
     def post(self, request):
         user = request.user
@@ -61,7 +63,7 @@ class WalletTopupAPIView(APIView):
 
                 return Response(
                     {
-                        "mesaage": "transaction created successfully guide the user to complete the payment",
+                        "message": "transaction created successfully guide the user to complete the payment",
                         "payment_link": payment_link,
                         "transaction_uuid": str(txn.uuid),
                     },

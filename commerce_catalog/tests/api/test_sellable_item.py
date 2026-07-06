@@ -2,8 +2,6 @@ import pytest
 import logging
 from django.urls import reverse
 from commerce_catalog.tests.api.factories import (
-    SellableItemFactory,
-    SKUFactory,
     BasePriceFactory,
 )
 
