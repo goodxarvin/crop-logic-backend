@@ -30,6 +30,19 @@ class CartItemSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def get_fields(self):
+        fields = super().get_fields()
+        view = self.context.get("view")
+        if view and view.action in [
+            "add_one_item_quantity",
+            "subtract_one_item_quantity",
+            "remove_item",
+        ]:
+            fields["quantity"].required = False
+            fields["quantity"].read_only = True
+
+        return fields
+
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(
