@@ -66,5 +66,5 @@ class Address(models.Model):
 
     def get_absolute_relative_url(self):
         return reverse(
-            "addresses:address-api-urls:address-viewset-detail", kwargs={"pk": self.pk}
+            "address:api-urls:address-viewset-detail", kwargs={"pk": self.pk}
         )

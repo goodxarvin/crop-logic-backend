@@ -12,44 +12,62 @@ def api_client():
 
 
 @pytest.fixture
-def auth_admin_client(db):
+def test_admin_user(db):
+    admin_user, created = User.objects.get_or_create(
+        username="test_wallet_features_admin",
+        defaults={
+            "email": "wallet@featurecrop.admin",
+            "phone_number": "12129348",
+        },
+    )
+
+    if created:
+        admin_user.set_password("qazwsx123890")
+        admin_user.is_staff = True
+        admin_user.is_superuser = True
+        admin_user.save()
+
+    return admin_user
+
+
+@pytest.fixture
+def auth_admin_client(test_admin_user):
 
     client = APIClient()
 
-    user = User.objects.create_user(
-        username="test_wallet_features_admin",
-        email="wallet@featurecrop.admin",
-        phone_number="12129348",
-        password="qazwsx123890",
-    )
+    client.force_authenticate(user=test_admin_user)
 
-    user.is_staff = True
-    user.is_superuser = True
-    user.save()
-
-    client.force_authenticate(user=user)
-
-    refresh = RefreshToken.for_user(user=user)
+    refresh = RefreshToken.for_user(user=test_admin_user)
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
 
     return client
 
 
 @pytest.fixture
-def auth_client(db):
+def test_user(db):
+
+    user, created = User.objects.get_or_create(
+        username="test_wallet_features",
+        defaults={
+            "email": "wallet@feature.crop",
+            "phone_number": "123485890",
+            "is_active": True,
+        },
+    )
+    if created:
+        user.set_password("qazwsx123890")
+        user.save()
+    return user
+
+
+@pytest.fixture
+def auth_client(test_user):
 
     client = APIClient()
 
-    user = User.objects.create_user(
-        username="test_wallet_features",
-        email="wallet@feature.crop",
-        phone_number="123485890",
-        password="qazwsx123890",
-    )
+    client.force_authenticate(user=test_user)
 
-    client.force_authenticate(user=user)
-
-    refresh = RefreshToken.for_user(user=user)
+    refresh = RefreshToken.for_user(user=test_user)
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
 
     return client
