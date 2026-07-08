@@ -14,6 +14,14 @@ class Command(BaseCommand):
             code="IRR",
             symbol="rial",
             is_base=True,
+            is_active=True,
+            defaults={
+                "code": "IRR",
+                "symbol": "rial",
+                "exchange_rate": 1.000000,
+                "is_base": True,
+                "is_active": True,
+            },
         )
 
         self.stdout.write(self.style.SUCCESS("currency created successfully..."))

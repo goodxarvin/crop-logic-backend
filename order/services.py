@@ -43,8 +43,8 @@ class OrderService:
     @transaction.atomic
     def freeze_and_finilize_order(cls, order: Order, **kwargs) -> Order:
 
-        # if order.status != OrderStatusType.PENDING:
-        #     raise ValidationError("order status type must be pending.")
+        if order.status != OrderStatusType.PENDING:
+            raise ValidationError("order status type must be pending.")
 
         requirements = order.get_requirements
 
