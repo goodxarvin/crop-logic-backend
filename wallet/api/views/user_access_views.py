@@ -31,3 +31,5 @@ class UserTransactionViewset(viewsets.ReadOnlyModelViewSet):
         user = self.request.user
         queryset = Transaction.objects.filter(wallet__user=user).order_by("-created_at")
         return queryset
+    
+    

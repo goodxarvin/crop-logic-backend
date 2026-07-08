@@ -15,13 +15,13 @@ class Command(BaseCommand):
         print("creating zarinpal and wallet pay ledger model instance...")
 
         LedgerAccount.objects.get_or_create(
-            name="zarinpal ledger aacount",
+            name="zarinpal ledger account",
             account_type=AccountType.ASSET,
             code="zarinpal_1001",
         )
 
         LedgerAccount.objects.get_or_create(
-            name="direct wallet ledger aacount",
+            name="direct wallet ledger account",
             account_type=AccountType.ASSET,
             code="direct_wallet_pay_1002",
         )

@@ -2,7 +2,8 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 from . import views
 
-app_name = "checkout-apis"
+app_name = "api-urls"
+
 
 router = DefaultRouter()
 router.register("checkouts", views.CheckoutViewset, basename="checkouts")

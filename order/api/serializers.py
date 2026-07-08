@@ -51,3 +51,14 @@ class OrderSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        view = self.context.get("view")
+
+        if view and view.action == "finilize":
+            for field in fields.values():
+                field.read_only = True
+
+        return fields
+

@@ -11,12 +11,17 @@ def create_user_wallet(sender, instance, created, **kwargs):
     if created:
         try:
             IRR_currency, _ = Currency.objects.get_or_create(
-                (Q(code="IRR") | Q(symbol="rial")),
+                code="IRR",
+                symbol="rial",
                 is_base=True,
                 is_active=True,
                 defaults={
                     "code": "IRR",
                     "symbol": "rial",
+                    "exchange_rate": 1.000000,
+                    "is_base": True,
+                    "is_active": True,
+
                 },
             )
             Wallet.objects.create(
