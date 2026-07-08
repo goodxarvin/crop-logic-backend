@@ -2,7 +2,6 @@ import pytest
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
-
 User = get_user_model()
 
 
@@ -68,6 +67,7 @@ def auth_client(test_user):
     client.force_authenticate(user=test_user)
 
     refresh = RefreshToken.for_user(user=test_user)
+
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
 
     return client

@@ -41,6 +41,7 @@ class CartItemViewSet(viewsets.GenericViewSet):
     def add_item(self, request, *args, **kwargs):
         cart = self.get_object()
 
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -70,7 +71,6 @@ class CartItemViewSet(viewsets.GenericViewSet):
         cart = self.get_object()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         sku = serializer.validated_data["sku"]
         farm = serializer.validated_data.get("farm", None)
 

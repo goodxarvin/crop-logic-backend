@@ -4,6 +4,7 @@ from . import views
 
 app_name = "api-urls"
 
+
 router = DefaultRouter()
 router.register("checkouts", views.CheckoutViewset, basename="checkouts")
 

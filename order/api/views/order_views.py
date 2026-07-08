@@ -32,6 +32,7 @@ class OrderViewset(
             shipping_address=serializer.validated_data.get("shipping_address"),
             farm_address=serializer.validated_data.get("farm_address"),
             customer_notes=serializer.validated_data.get("customer_notes"),
+
         )
 
         serializer.instance = order

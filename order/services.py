@@ -22,6 +22,7 @@ class OrderService:
         **kwargs,
     ):
         customer_notes = kwargs.get("customer_notes", None)
+    def create_order(cls, user, farm=None):
         cart = user.cart
         available_cart_items = cart.cart_items.exists()
         if not available_cart_items:

@@ -1,6 +1,7 @@
 from django.db.models.signals import post_save
 from django.conf import settings
 from django.dispatch import receiver
+from django.db.models import Q
 from .models import Wallet
 from pricing.models import Currency
 
@@ -20,6 +21,7 @@ def create_user_wallet(sender, instance, created, **kwargs):
                     "exchange_rate": 1.000000,
                     "is_base": True,
                     "is_active": True,
+
                 },
             )
             Wallet.objects.create(
