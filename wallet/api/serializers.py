@@ -102,6 +102,8 @@ class WithdrawalRequestSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "uuid",
+            "wallet",
+            "transaction",
             "status",
             "rejection_reason",
             "bank_tracking_code",

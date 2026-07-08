@@ -11,8 +11,6 @@ from ...services import OrderService
 class OrderViewset(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
     permission_classes = [
@@ -31,6 +29,9 @@ class OrderViewset(
         order = OrderService.create_order(
             user=self.request.user,
             farm=serializer.validated_data.get("farm"),
+            shipping_address=serializer.validated_data.get("shipping_address"),
+            farm_address=serializer.validated_data.get("farm_address"),
+            customer_notes=serializer.validated_data.get("customer_notes"),
         )
 
         serializer.instance = order

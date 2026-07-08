@@ -9,7 +9,9 @@ from ...models import Wallet, Transaction, StatusType
 
 
 class WalletTopupAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated,
+    ]
 
     def post(self, request):
         user = request.user
@@ -61,7 +63,7 @@ class WalletTopupAPIView(APIView):
 
                 return Response(
                     {
-                        "mesaage": "transaction created successfully guide the user to complete the payment",
+                        "message": "transaction created successfully guide the user to complete the payment",
                         "payment_link": payment_link,
                         "transaction_uuid": str(txn.uuid),
                     },
@@ -92,9 +94,9 @@ class WalletTopupCallbackAPIView(APIView):
     def get(self, request):
         bank_authority = request.query_params.get("Authority")
         bank_status = request.query_params.get("Status")
-        txn_uudi = request.query_params.get("txn_id")
+        txn_uuid = request.query_params.get("txn_id")
 
-        if not bank_authority or not txn_uudi:
+        if not bank_authority or not txn_uuid:
             return Response(
                 {
                     "faulty query params from the bank",
@@ -103,7 +105,7 @@ class WalletTopupCallbackAPIView(APIView):
             )
 
         try:
-            txn = Transaction.objects.get(uuid=txn_uudi, authority=bank_authority)
+            txn = Transaction.objects.get(uuid=txn_uuid, authority=bank_authority)
         except Transaction.DoesNotExist:
             return Response(
                 {

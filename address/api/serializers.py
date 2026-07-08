@@ -25,7 +25,9 @@ class AddressSerializer(serializers.ModelSerializer):
     absolute_url = serializers.SerializerMethodField(
         method_name="get_absolute_url", read_only=True
     )
-    relative_url = serializers.URLField(source="get_absolute_relative_url")
+    relative_url = serializers.URLField(
+        source="get_absolute_relative_url", read_only=True
+    )
 
     class Meta:
         model = Address

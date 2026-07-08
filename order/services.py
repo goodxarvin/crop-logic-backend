@@ -13,8 +13,15 @@ class OrderService:
 
     @classmethod
     @transaction.atomic
-    def create_order(cls, user, farm=None):
-
+    def create_order(
+        cls,
+        user,
+        farm=None,
+        shipping_address=None,
+        farm_address=None,
+        **kwargs,
+    ):
+        customer_notes = kwargs.get("customer_notes", None)
         cart = user.cart
         available_cart_items = cart.cart_items.exists()
         if not available_cart_items:
@@ -24,17 +31,20 @@ class OrderService:
             user=user,
             cart=cart,
             farm=farm,
+            shipping_address=shipping_address,
+            farm_address=farm_address,
             status=OrderStatusType.PENDING,
             total_amount=cart.total_items_price,
+            customer_notes=customer_notes,
         )
         return order
 
     @classmethod
     @transaction.atomic
-    def freeze_and_finilize_order(cls, order: Order) -> tuple:
+    def freeze_and_finilize_order(cls, order: Order, **kwargs) -> Order:
 
-        # if order.status != OrderStatusType.PENDING:
-        #     raise ValidationError("order status type must be pending.")
+        if order.status != OrderStatusType.PENDING:
+            raise ValidationError("order status type must be pending.")
 
         requirements = order.get_requirements
 
