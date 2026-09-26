@@ -3,7 +3,6 @@ from django.contrib import admin
 from .models.sellable_items import SellableItem
 from .models.skus import SKU
 
-
 class SellableItemAdmin(admin.ModelAdmin):
     list_display = (
         "title",
